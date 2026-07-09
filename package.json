@@ -1,40 +1,18 @@
 {
-  "name": "shogatsu-pedidos-online",
+  "name": "shogatsu-pedidos",
   "version": "2.0.0",
-  "description": "Sistema de Pedidos Online Shogatsu Sushi",
-  "private": true,
+  "description": "Sistema Profissional de Pedidos Online Shogatsu",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "node server.js"
   },
-  "keywords": [
-    "delivery",
-    "restaurante",
-    "sushi",
-    "pedidos",
-    "whatsapp",
-    "cozinha",
-    "pwa"
-  ],
-  "author": "Shogatsu",
-  "license": "MIT",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "body-parser": "^1.20.3",
-    "cors": "^2.8.5",
     "express": "^4.21.2",
-    "express-fileupload": "^1.5.1",
-    "fs-extra": "^11.3.0",
-    "multer": "^2.0.2",
-    "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
-    "uuid": "^11.1.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.10"
+    "multer": "^2.0.2"
   }
 }
