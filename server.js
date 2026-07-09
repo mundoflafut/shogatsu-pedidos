@@ -1,378 +1,1032 @@
-// ═══════════════════════════════════════════════════════════
-// SHOGATSU · Servidor de Pedidos Online
-// Node.js puro (sem dependências) — http, fs, crypto
-// ═══════════════════════════════════════════════════════════
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const url = require('url');
+/**
+ * =====================================================
+ * SHOGATSU DELIVERY V2
+ * Server.js
+ * Parte 1
+ * =====================================================
+ */
 
-const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
-const PUBLIC_DIR = path.join(__dirname, 'public');
-const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const express = require("express");
+const http = require("http");
+const socketIO = require("socket.io");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const fs = require("fs-extra");
+const path = require("path");
+const multer = require("multer");
+const fileUpload = require("express-fileupload");
+const { v4: uuid } = require("uuid");
 
-// ─── Config / Menu padrão (usados só na primeira execução) ───
-const DEFAULT_CFG = {
-  whats: '5522988683755', storePhone: '', fee: 8, min: 60,
-  time: '40–60 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costazul · Rio das Ostras',
-  hours: '18h30–23h', open: 1,
-  adminPass: 'shogatsu2026',
-  masterPass: 'shogatsuMaster2026',
-  logoUrl: '',
-  pixKey: '', pixName: 'Shogatsu Culinaria Oriental', pixCity: 'RIO DAS OSTRAS'
-};
-const DEFAULT_MENU = require('./default-menu.json');
+const app = express();
+const server = http.createServer(app);
 
-// ─── Bootstrap dos arquivos de dados ───
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-if (!fs.existsSync(CONFIG_FILE)) {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ cfg: DEFAULT_CFG, menu: DEFAULT_MENU }, null, 2));
-}
-if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
-
-function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-function writeJSON(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-
-// ─── Sessões admin (em memória) ───
-const sessions = new Map(); // token -> expiresAt
-function newSession() {
-  const token = crypto.randomBytes(24).toString('hex');
-  sessions.set(token, Date.now() + 1000 * 60 * 60 * 12); // 12h
-  return token;
-}
-function checkAuth(token) {
-  if (!token) return false;
-  const exp = sessions.get(token);
-  if (!exp || exp < Date.now()) { sessions.delete(token); return false; }
-  return true;
-}
-
-// ─── Clientes conectados via SSE (painel da cozinha) ───
-const sseClients = new Set();
-function broadcast(event, data) {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of sseClients) { try { res.write(payload); } catch (e) {} }
-}
-
-// ─── PIX — geração do payload BR Code (copia-e-cola) ───
-function crc16(payload) {
-  let crc = 0xFFFF;
-  for (let i = 0; i < payload.length; i++) {
-    crc ^= payload.charCodeAt(i) << 8;
-    for (let b = 0; b < 8; b++) {
-      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
-      crc &= 0xFFFF;
+const io = socketIO(server,{
+    cors:{
+        origin:"*",
+        methods:["GET","POST"]
     }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
-}
-function tlv(id, value) {
-  const len = value.length.toString().padStart(2, '0');
-  return `${id}${len}${value}`;
-}
-function sanitizePix(str, max) {
-  return (str || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .replace(/[^A-Za-z0-9 ]/g, '')
-    .toUpperCase().slice(0, max) || 'NA';
-}
-function buildPixPayload({ pixKey, merchantName, merchantCity, amount, txid }) {
-  if (!pixKey) return null;
-  const gui = tlv('00', 'br.gov.bcb.pix');
-  const key = tlv('01', pixKey.trim());
-  const merchantAccount = tlv('26', gui + key);
-  const mcc = tlv('52', '0000');
-  const currency = tlv('53', '986');
-  const value = amount != null ? tlv('54', Number(amount).toFixed(2)) : '';
-  const country = tlv('58', 'BR');
-  const name = tlv('59', sanitizePix(merchantName, 25));
-  const city = tlv('60', sanitizePix(merchantCity, 15));
-  const ref = tlv('05', sanitizePix(txid || 'PEDIDO', 25));
-  const addData = tlv('62', ref);
-  let payload = tlv('00', '01') + merchantAccount + mcc + currency + value + country + name + city + addData + '6304';
-  return payload + crc16(payload);
-}
-
-// ─── Helpers HTTP ───
-function sendJSON(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS'
-  });
-  res.end(body);
-}
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let chunks = '';
-    req.on('data', c => { chunks += c; if (chunks.length > 8e6) req.destroy(); });
-    req.on('end', () => { try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { reject(e); } });
-    req.on('error', reject);
-  });
-}
-function getToken(req, query) {
-  const h = req.headers['authorization'];
-  if (h && h.startsWith('Bearer ')) return h.slice(7);
-  return query.token || null;
-}
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon'
-};
-
-function serveStatic(req, res, pathname) {
-  let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
-  if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
-  fs.readFile(filePath, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('Not found'); }
-    const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(data);
-  });
-}
-
-// ═══════════════════════════════════════════════════════════
-// SERVIDOR
-// ═══════════════════════════════════════════════════════════
-const server = http.createServer(async (req, res) => {
-  const parsed = url.parse(req.url, true);
-  const pathname = parsed.pathname;
-  const query = parsed.query;
-
-  if (req.method === 'OPTIONS') { return sendJSON(res, 204, {}); }
-
-  // ── GET /api/config — dados públicos do cardápio/config ──
-  if (pathname === '/api/config' && req.method === 'GET') {
-    const { cfg, menu } = readJSON(CONFIG_FILE);
-    const { adminPass, masterPass, ...publicCfg } = cfg; // nunca vaza as senhas
-    return sendJSON(res, 200, { cfg: publicCfg, menu });
-  }
-
-  // ── POST /api/config — admin salva config/cardápio ──
-  if (pathname === '/api/config' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const body = await readBody(req);
-      const current = readJSON(CONFIG_FILE);
-      const merged = {
-        cfg: { ...current.cfg, ...body.cfg, adminPass: current.cfg.adminPass, masterPass: current.cfg.masterPass },
-        menu: body.menu || current.menu
-      };
-      writeJSON(CONFIG_FILE, merged);
-      broadcast('config-updated', {});
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
-  if (pathname === '/api/change-password' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { which, current: curPass, next } = await readBody(req);
-      const field = which === 'master' ? 'masterPass' : 'adminPass';
-      const data = readJSON(CONFIG_FILE);
-      if (curPass !== data.cfg[field]) return sendJSON(res, 403, { error: 'senha atual incorreta' });
-      if (!next || next.length < 4) return sendJSON(res, 400, { error: 'nova senha muito curta (mín. 4 caracteres)' });
-      data.cfg[field] = next;
-      writeJSON(CONFIG_FILE, data);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/upload — envia foto de um produto (admin) ──
-  if (pathname === '/api/upload' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { dataUrl } = await readBody(req);
-      const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
-      if (!m) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG ou WEBP.' });
-      const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
-      const buffer = Buffer.from(m[2], 'base64');
-      if (buffer.length > 4 * 1024 * 1024) return sendJSON(res, 400, { error: 'Imagem muito grande (máx. 4MB).' });
-      const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
-      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
-      return sendJSON(res, 200, { url: '/uploads/' + filename });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/orders/purge — apaga pedidos antigos (exige senha master) ──
-  if (pathname === '/api/orders/purge' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { masterPass, beforeDate } = await readBody(req);
-      const data = readJSON(CONFIG_FILE);
-      if (masterPass !== data.cfg.masterPass) return sendJSON(res, 403, { error: 'Senha master incorreta.' });
-      if (!beforeDate) return sendJSON(res, 400, { error: 'Informe a data limite.' });
-      const cutoff = new Date(beforeDate).getTime();
-      let orders = readJSON(ORDERS_FILE);
-      const before = orders.length;
-      orders = orders.filter(o => new Date(o.createdAt).getTime() >= cutoff);
-      writeJSON(ORDERS_FILE, orders);
-      return sendJSON(res, 200, { ok: true, deleted: before - orders.length });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── GET /api/reports — relatório de vendas (admin) ──
-  if (pathname === '/api/reports' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const orders = readJSON(ORDERS_FILE);
-    const from = query.from ? new Date(query.from + 'T00:00:00').getTime() : 0;
-    const to = query.to ? new Date(query.to + 'T23:59:59').getTime() : Infinity;
-    const filtered = orders.filter(o => {
-      const t = new Date(o.createdAt).getTime();
-      return t >= from && t <= to && o.status !== 'cancelado';
-    });
-    const totalOrders = filtered.length;
-    const totalRevenue = filtered.reduce((s, o) => s + Number(o.total || 0), 0);
-    const avgTicket = totalOrders ? totalRevenue / totalOrders : 0;
-    const byPayMethod = {}, byDayMap = {}, itemsMap = {};
-    filtered.forEach(o => {
-      byPayMethod[o.payMethod] = (byPayMethod[o.payMethod] || 0) + Number(o.total || 0);
-      const day = o.createdAt.slice(0, 10);
-      if (!byDayMap[day]) byDayMap[day] = { date: day, revenue: 0, orders: 0 };
-      byDayMap[day].revenue += Number(o.total || 0);
-      byDayMap[day].orders++;
-      (o.items || []).forEach(i => {
-        if (!itemsMap[i.name]) itemsMap[i.name] = { name: i.name, qty: 0, revenue: 0 };
-        itemsMap[i.name].qty += i.qty;
-        itemsMap[i.name].revenue += i.price * i.qty;
-      });
-    });
-    const topItems = Object.values(itemsMap).sort((a, b) => b.qty - a.qty).slice(0, 15);
-    const byDay = Object.values(byDayMap).sort((a, b) => a.date.localeCompare(b.date));
-    return sendJSON(res, 200, { totalOrders, totalRevenue, avgTicket, byPayMethod, byDay, topItems });
-  }
-
-  // ── POST /api/login — autenticação do painel ──
-  if (pathname === '/api/login' && req.method === 'POST') {
-    try {
-      const { password } = await readBody(req);
-      const { cfg } = readJSON(CONFIG_FILE);
-      if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession() });
-      return sendJSON(res, 401, { error: 'senha incorreta' });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/pix — gera o copia-e-cola para um valor ──
-  if (pathname === '/api/pix' && req.method === 'POST') {
-    try {
-      const { amount, txid } = await readBody(req);
-      const { cfg } = readJSON(CONFIG_FILE);
-      if (!cfg.pixKey) return sendJSON(res, 400, { error: 'PIX não configurado pelo restaurante' });
-      const payload = buildPixPayload({
-        pixKey: cfg.pixKey, merchantName: cfg.pixName, merchantCity: cfg.pixCity, amount, txid
-      });
-      const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
-      return sendJSON(res, 200, { payload, qrImg });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/orders — cria um novo pedido (cliente) ──
-  if (pathname === '/api/orders' && req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const { cfg } = readJSON(CONFIG_FILE);
-      if (!Number(cfg.open)) return sendJSON(res, 400, { error: 'Restaurante fechado no momento.' });
-      if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
-
-      const orders = readJSON(ORDERS_FILE);
-      const order = {
-        id: 'SG' + Date.now().toString(36).toUpperCase(),
-        createdAt: new Date().toISOString(),
-        status: 'novo',
-        mode: body.mode === 'retirada' ? 'retirada' : 'delivery',
-        name: String(body.name || '').slice(0, 80),
-        phone: String(body.phone || '').slice(0, 30),
-        address: String(body.address || '').slice(0, 200),
-        items: (body.items || []).slice(0, 60).map(i => ({
-          name: String(i.name || '').slice(0, 80),
-          qty: Math.max(1, parseInt(i.qty) || 1),
-          price: Number(i.price) || 0
-        })),
-        obs: String(body.obs || '').slice(0, 300),
-        payMethod: String(body.payMethod || '').slice(0, 20),
-        troco: String(body.troco || '').slice(0, 20),
-        subtotal: Number(body.subtotal) || 0,
-        fee: Number(body.fee) || 0,
-        total: Number(body.total) || 0
-      };
-      orders.unshift(order);
-      writeJSON(ORDERS_FILE, orders);
-      broadcast('new-order', order);
-      return sendJSON(res, 201, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── GET /api/orders — lista pedidos (painel, requer auth) ──
-  if (pathname === '/api/orders' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    return sendJSON(res, 200, readJSON(ORDERS_FILE));
-  }
-
-  // ── PATCH /api/orders/:id — atualiza status (painel) ──
-  if (pathname.startsWith('/api/orders/') && req.method === 'PATCH') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const id = pathname.split('/').pop();
-    try {
-      const { status, fee } = await readBody(req);
-      const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
-      if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
-      const orders = readJSON(ORDERS_FILE);
-      const order = orders.find(o => o.id === id);
-      if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
-      order.status = status;
-      if (fee !== undefined && fee !== null && fee !== '') {
-        order.fee = Number(fee) || 0;
-        order.total = Number(order.subtotal || 0) + order.fee;
-      }
-      writeJSON(ORDERS_FILE, orders);
-      broadcast('order-updated', order);
-      return sendJSON(res, 200, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
-  if (pathname.startsWith('/api/track/') && req.method === 'GET') {
-    const id = pathname.split('/').pop();
-    const orders = readJSON(ORDERS_FILE);
-    const order = orders.find(o => o.id === id);
-    if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
-    const { name, phone, address, ...rest } = order;
-    return sendJSON(res, 200, rest); // não expõe dados pessoais de novo, só status/itens/valores
-  }
-
-  // ── GET /api/stream — Server-Sent Events (painel em tempo real) ──
-  if (pathname === '/api/stream' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) { res.writeHead(401); return res.end(); }
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
-    });
-    res.write(': connected\n\n');
-    sseClients.add(res);
-    const keepAlive = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
-    req.on('close', () => { clearInterval(keepAlive); sseClients.delete(res); });
-    return;
-  }
-
-  // ── Arquivos estáticos (site do cliente + painel) ──
-  if (req.method === 'GET') return serveStatic(req, res, pathname);
-
-  res.writeHead(404); res.end('Not found');
 });
 
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+
+app.use(bodyParser.json({
+    limit:"20mb"
+}));
+
+app.use(bodyParser.urlencoded({
+    extended:true
+}));
+
+app.use(fileUpload());
+
+app.use(express.static(path.join(__dirname,"public")));
+
+const DATA_DIR = path.join(__dirname,"data");
+
+fs.ensureDirSync(DATA_DIR);
+
+const FILES={
+
+    pedidos:path.join(DATA_DIR,"pedidos.json"),
+
+    produtos:path.join(DATA_DIR,"produtos.json"),
+
+    clientes:path.join(DATA_DIR,"clientes.json"),
+
+    config:path.join(DATA_DIR,"config.json")
+
+};
+
+const DEFAULT_CONFIG={
+
+    empresa:"Shogatsu",
+
+    pedidoInicial:500,
+
+    ultimoPedido:500,
+
+    tempoEntrega:40,
+
+    impressaoAutomatica:false,
+
+    imprimirCliente:true,
+
+    imprimirCozinha:true,
+
+    imprimirEntrega:true,
+
+    viasExtras:0,
+
+    logo:"/uploads/logo.png",
+
+    larguraLogo:180,
+
+    posicaoLogo:"center",
+
+    som:true
+
+};
+
+function createIfNotExists(file,data){
+
+    if(!fs.existsSync(file)){
+
+        fs.writeJsonSync(file,data,{spaces:4});
+
+    }
+
+}
+
+createIfNotExists(FILES.config,DEFAULT_CONFIG);
+
+createIfNotExists(FILES.pedidos,[]);
+
+createIfNotExists(FILES.produtos,[]);
+
+createIfNotExists(FILES.clientes,[]);
+
+function read(file){
+
+    return fs.readJsonSync(file);
+
+}
+
+function save(file,data){
+
+    fs.writeJsonSync(file,data,{spaces:4});
+
+}
+
+let CONFIG=read(FILES.config);
+
+let PEDIDOS=read(FILES.pedidos);
+
+let PRODUTOS=read(FILES.produtos);
+
+let CLIENTES=read(FILES.clientes);
+
+function atualizarArquivos(){
+
+    save(FILES.config,CONFIG);
+
+    save(FILES.pedidos,PEDIDOS);
+
+    save(FILES.produtos,PRODUTOS);
+
+    save(FILES.clientes,CLIENTES);
+
+}
+
+function novoNumeroPedido(){
+
+    CONFIG.ultimoPedido++;
+
+    atualizarArquivos();
+
+    return CONFIG.ultimoPedido;
+
+}
+
+function agora(){
+
+    return new Date().toISOString();
+
+}
+
+function emitirAtualizacao(){
+
+    io.emit("pedidos",PEDIDOS);
+
+    io.emit("dashboard",dashboard());
+
+}
+
+function dashboard(){
+
+    let faturamento=0;
+
+    let preparando=0;
+
+    let entregues=0;
+
+    PEDIDOS.forEach(p=>{
+
+        faturamento+=Number(p.total||0);
+
+        if(p.status==="PREPARANDO") preparando++;
+
+        if(p.status==="ENTREGUE") entregues++;
+
+    });
+
+    return{
+
+        pedidos:PEDIDOS.length,
+
+        faturamento,
+
+        ticket:
+
+            PEDIDOS.length>0
+
+            ?faturamento/PEDIDOS.length
+
+            :0,
+
+        preparando,
+
+        entregues
+
+    };
+
+}
+/* ======================================================
+   API CONFIGURAÇÕES
+====================================================== */
+
+app.get("/api/config", (req, res) => {
+
+    res.json(CONFIG);
+
+});
+
+app.post("/api/config", (req, res) => {
+
+    CONFIG = {
+
+        ...CONFIG,
+
+        ...req.body
+
+    };
+
+    atualizarArquivos();
+
+    io.emit("config", CONFIG);
+
+    res.json({
+
+        sucesso: true
+
+    });
+
+});
+
+
+/* ======================================================
+   DASHBOARD
+====================================================== */
+
+app.get("/api/dashboard", (req, res) => {
+
+    res.json(
+
+        dashboard()
+
+    );
+
+});
+
+
+/* ======================================================
+   LISTAR PEDIDOS
+====================================================== */
+
+app.get("/api/pedidos", (req, res) => {
+
+    res.json(PEDIDOS);
+
+});
+
+
+/* ======================================================
+   BUSCAR PEDIDO
+====================================================== */
+
+app.get("/api/pedidos/:numero", (req, res) => {
+
+    const numero = Number(req.params.numero);
+
+    const pedido = PEDIDOS.find(
+
+        p => p.numero === numero
+
+    );
+
+    if (!pedido) {
+
+        return res.status(404).json({
+
+            erro: "Pedido não encontrado"
+
+        });
+
+    }
+
+    res.json(pedido);
+
+});
+
+
+/* ======================================================
+   NOVO PEDIDO
+====================================================== */
+
+app.post("/api/pedidos", (req, res) => {
+
+    const pedido = {
+
+        id: uuid(),
+
+        numero: novoNumeroPedido(),
+
+        data: agora(),
+
+        cliente: req.body.cliente || {},
+
+        itens: req.body.itens || [],
+
+        pagamento: req.body.pagamento || "",
+
+        observacao: req.body.observacao || "",
+
+        entrega: req.body.entrega || "",
+
+        telefone: req.body.telefone || "",
+
+        endereco: req.body.endereco || "",
+
+        total: Number(req.body.total || 0),
+
+        status: "NOVO",
+
+        inicio: Date.now(),
+
+        tempoEntrega: CONFIG.tempoEntrega
+
+    };
+
+    PEDIDOS.unshift(pedido);
+
+    atualizarArquivos();
+
+    emitirAtualizacao();
+
+    io.emit(
+
+        "novo-pedido",
+
+        pedido
+
+    );
+
+    res.json({
+
+        sucesso: true,
+
+        pedido
+
+    });
+
+});
+
+
+/* ======================================================
+   ALTERAR STATUS
+====================================================== */
+
+app.put("/api/pedidos/:numero/status", (req, res) => {
+
+    const numero = Number(
+
+        req.params.numero
+
+    );
+
+    const pedido = PEDIDOS.find(
+
+        p => p.numero === numero
+
+    );
+
+    if (!pedido) {
+
+        return res.status(404).json({
+
+            erro: "Pedido não encontrado"
+
+        });
+
+    }
+
+    pedido.status = req.body.status;
+
+    pedido.atualizado = agora();
+
+    atualizarArquivos();
+
+    emitirAtualizacao();
+
+    io.emit(
+
+        "status",
+
+        pedido
+
+    );
+
+    res.json({
+
+        sucesso: true
+
+    });
+
+});
+
+
+/* ======================================================
+   REMOVER PEDIDO
+====================================================== */
+
+app.delete("/api/pedidos/:numero", (req, res) => {
+
+    const numero = Number(
+
+        req.params.numero
+
+    );
+
+    PEDIDOS = PEDIDOS.filter(
+
+        p => p.numero !== numero
+
+    );
+
+    atualizarArquivos();
+
+    emitirAtualizacao();
+
+    res.json({
+
+        sucesso: true
+
+    });
+
+});
+/* ======================================================
+   PRODUTOS
+====================================================== */
+
+app.get("/api/produtos", (req, res) => {
+
+    res.json(PRODUTOS);
+
+});
+
+app.get("/api/produtos/:id", (req, res) => {
+
+    const produto = PRODUTOS.find(
+
+        p => p.id === req.params.id
+
+    );
+
+    if (!produto) {
+
+        return res.status(404).json({
+
+            erro: "Produto não encontrado"
+
+        });
+
+    }
+
+    res.json(produto);
+
+});
+
+app.post("/api/produtos", (req, res) => {
+
+    const produto = {
+
+        id: uuid(),
+
+        nome: req.body.nome || "",
+
+        descricao: req.body.descricao || "",
+
+        categoria: req.body.categoria || "",
+
+        preco: Number(req.body.preco || 0),
+
+        foto: req.body.foto || "",
+
+        disponivel: true
+
+    };
+
+    PRODUTOS.push(produto);
+
+    atualizarArquivos();
+
+    io.emit("produtos", PRODUTOS);
+
+    res.json(produto);
+
+});
+
+app.put("/api/produtos/:id", (req, res) => {
+
+    const produto = PRODUTOS.find(
+
+        p => p.id === req.params.id
+
+    );
+
+    if (!produto) {
+
+        return res.status(404).json({
+
+            erro: "Produto não encontrado"
+
+        });
+
+    }
+
+    Object.assign(produto, req.body);
+
+    atualizarArquivos();
+
+    io.emit("produtos", PRODUTOS);
+
+    res.json(produto);
+
+});
+
+app.delete("/api/produtos/:id", (req, res) => {
+
+    PRODUTOS = PRODUTOS.filter(
+
+        p => p.id !== req.params.id
+
+    );
+
+    atualizarArquivos();
+
+    io.emit("produtos", PRODUTOS);
+
+    res.json({
+
+        sucesso: true
+
+    });
+
+});
+
+
+/* ======================================================
+   CLIENTES
+====================================================== */
+
+app.get("/api/clientes", (req, res) => {
+
+    res.json(CLIENTES);
+
+});
+
+app.post("/api/clientes", (req, res) => {
+
+    const cliente = {
+
+        id: uuid(),
+
+        nome: req.body.nome,
+
+        telefone: req.body.telefone,
+
+        endereco: req.body.endereco,
+
+        criado: agora()
+
+    };
+
+    CLIENTES.push(cliente);
+
+    atualizarArquivos();
+
+    res.json(cliente);
+
+});
+
+
+/* ======================================================
+   UPLOAD LOGOTIPO
+====================================================== */
+
+const uploadDir = path.join(
+
+    __dirname,
+
+    "public",
+
+    "uploads"
+
+);
+
+fs.ensureDirSync(uploadDir);
+
+const storage = multer.diskStorage({
+
+    destination(req,file,cb){
+
+        cb(null,uploadDir);
+
+    },
+
+    filename(req,file,cb){
+
+        cb(
+
+            null,
+
+            "logo"+path.extname(file.originalname)
+
+        );
+
+    }
+
+});
+
+const upload = multer({
+
+    storage
+
+});
+
+app.post(
+
+    "/api/logo",
+
+    upload.single("logo"),
+
+    (req,res)=>{
+
+        CONFIG.logo="/uploads/"+req.file.filename;
+
+        atualizarArquivos();
+
+        io.emit("config",CONFIG);
+
+        res.json({
+
+            sucesso:true,
+
+            logo:CONFIG.logo
+
+        });
+
+    }
+
+);
+
+
+/* ======================================================
+   IMPRESSÃO
+====================================================== */
+
+app.get(
+
+    "/api/imprimir/:numero",
+
+    (req,res)=>{
+
+        const numero=Number(
+
+            req.params.numero
+
+        );
+
+        const pedido=PEDIDOS.find(
+
+            p=>p.numero===numero
+
+        );
+
+        if(!pedido){
+
+            return res.status(404).json({
+
+                erro:true
+
+            });
+
+        }
+
+        res.json({
+
+            imprimir:true,
+
+            pedido
+
+        });
+
+    }
+
+);
+
+
+/* ======================================================
+   BACKUP
+====================================================== */
+
+app.get(
+
+    "/api/backup",
+
+    (req,res)=>{
+
+        res.json({
+
+            config:CONFIG,
+
+            pedidos:PEDIDOS,
+
+            produtos:PRODUTOS,
+
+            clientes:CLIENTES
+
+        });
+
+    }
+
+);
+
+app.post(
+
+    "/api/restore",
+
+    (req,res)=>{
+
+        CONFIG=req.body.config;
+
+        PEDIDOS=req.body.pedidos;
+
+        PRODUTOS=req.body.produtos;
+
+        CLIENTES=req.body.clientes;
+
+        atualizarArquivos();
+
+        emitirAtualizacao();
+
+        res.json({
+
+            sucesso:true
+
+        });
+
+    }
+
+);
+/* ======================================================
+   WHATSAPP
+====================================================== */
+
+function gerarLinkWhatsApp(pedido, mensagem) {
+
+    if (!pedido.telefone) return "";
+
+    const numero = String(pedido.telefone)
+        .replace(/\D/g, "");
+
+    const texto = encodeURIComponent(mensagem);
+
+    return `https://wa.me/55${numero}?text=${texto}`;
+
+}
+
+app.get("/api/whatsapp/:numero/:tipo", (req, res) => {
+
+    const numeroPedido = Number(req.params.numero);
+
+    const tipo = req.params.tipo;
+
+    const pedido = PEDIDOS.find(p => p.numero === numeroPedido);
+
+    if (!pedido) {
+
+        return res.status(404).json({
+            erro: true
+        });
+
+    }
+
+    let mensagem = "";
+
+    switch (tipo) {
+
+        case "recebido":
+            mensagem = `Olá ${pedido.cliente?.nome || ""}, seu pedido #${pedido.numero} foi recebido.`;
+            break;
+
+        case "preparo":
+            mensagem = `Seu pedido #${pedido.numero} está em preparo.`;
+            break;
+
+        case "saida":
+            mensagem = `Seu pedido #${pedido.numero} saiu para entrega.`;
+            break;
+
+        case "entregue":
+            mensagem = `Seu pedido #${pedido.numero} foi entregue. Obrigado pela preferência.`;
+            break;
+
+        default:
+            mensagem = `Pedido #${pedido.numero}`;
+    }
+
+    res.json({
+
+        url: gerarLinkWhatsApp(
+
+            pedido,
+
+            mensagem
+
+        )
+
+    });
+
+});
+
+
+/* ======================================================
+   CRONÔMETRO
+====================================================== */
+
+setInterval(() => {
+
+    const agora = Date.now();
+
+    PEDIDOS.forEach(pedido => {
+
+        if (pedido.status === "ENTREGUE") return;
+
+        const minutos = Math.floor(
+
+            (agora - pedido.inicio) / 60000
+
+        );
+
+        pedido.minutos = minutos;
+
+        if (minutos >= pedido.tempoEntrega) {
+
+            pedido.atrasado = true;
+
+        } else {
+
+            pedido.atrasado = false;
+
+        }
+
+    });
+
+    io.emit("cronometro", PEDIDOS);
+
+}, 10000);
+
+
+/* ======================================================
+   SOCKET.IO
+====================================================== */
+
+io.on("connection", socket => {
+
+    console.log(
+
+        "Cliente conectado:",
+
+        socket.id
+
+    );
+
+    socket.emit(
+
+        "pedidos",
+
+        PEDIDOS
+
+    );
+
+    socket.emit(
+
+        "dashboard",
+
+        dashboard()
+
+    );
+
+    socket.emit(
+
+        "produtos",
+
+        PRODUTOS
+
+    );
+
+    socket.emit(
+
+        "config",
+
+        CONFIG
+
+    );
+
+    socket.on("disconnect", () => {
+
+        console.log(
+
+            "Cliente desconectado"
+
+        );
+
+    });
+
+});
+
+
+/* ======================================================
+   HEALTH CHECK
+====================================================== */
+
+app.get("/api/status", (req, res) => {
+
+    res.json({
+
+        sistema: "online",
+
+        empresa: CONFIG.empresa,
+
+        pedidos: PEDIDOS.length,
+
+        produtos: PRODUTOS.length,
+
+        clientes: CLIENTES.length,
+
+        versao: "2.0.0",
+
+        servidor: agora()
+
+    });
+
+});
+
+
+/* ======================================================
+   ROTA PADRÃO
+====================================================== */
+
+app.get("*", (req, res) => {
+
+    res.sendFile(
+
+        path.join(
+
+            __dirname,
+
+            "public",
+
+            "index.html"
+
+        )
+
+    );
+
+});
+
+
+/* ======================================================
+   INICIAR SERVIDOR
+====================================================== */
+
 server.listen(PORT, () => {
-  console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-  console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+
+    console.log("");
+
+    console.log("===================================");
+
+    console.log(" SHOGATSU DELIVERY V2 ");
+
+    console.log("===================================");
+
+    console.log("Servidor iniciado");
+
+    console.log("Porta:", PORT);
+
+    console.log("Painel:");
+
+    console.log(`http://localhost:${PORT}/painel.html`);
+
+    console.log("Cozinha:");
+
+    console.log(`http://localhost:${PORT}/cozinha.html`);
+
+    console.log("Dashboard:");
+
+    console.log(`http://localhost:${PORT}/dashboard.html`);
+
+    console.log("===================================");
+
+});
+
+
+/* ======================================================
+   TRATAMENTO DE ERROS
+====================================================== */
+
+process.on("uncaughtException", erro => {
+
+    console.error(
+
+        "Erro:",
+
+        erro
+
+    );
+
+});
+
+process.on("unhandledRejection", erro => {
+
+    console.error(
+
+        "Promise:",
+
+        erro
+
+    );
+
 });
