@@ -1,13 +1,48 @@
 {
-  "name": "shogatsu-pedidos",
-  "version": "1.0.0",
-  "description": "Sistema de pedidos online do Shogatsu (cardápio + painel da cozinha em tempo real)",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {}
+  "products": [
+    {
+      "id": "1",
+      "name": "Osechi Ryori Premium",
+      "description": "Caixa tradicional de Ano Novo com iguarias selecionadas que simbolizam saúde e prosperidade.",
+      "price": 25000,
+      "category": "Osechi",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    },
+    {
+      "id": "2",
+      "name": "Kagami Mochi Decorativo",
+      "description": "Decoração tradicional de arroz para trazer sorte e bênçãos para o novo ano.",
+      "price": 1800,
+      "category": "Decorations",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    },
+    {
+      "id": "3",
+      "name": "Mochi de Morango (Ichigo Daifuku)",
+      "description": "Sweets tradicionais macios recheados com morango fresco e pasta de feijão doce.",
+      "price": 1200,
+      "category": "Sweets",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    }
+  ],
+  "orders": [],
+  "customers": [],
+  "settings": {
+    "id": "1",
+    "store_name": "Shogatsu",
+    "logo_url": "",
+    "phone": "",
+    "delivery_mode": "cep",
+    "delivery_rates_by_distance": [
+      { "min_km": 0, "max_km": 5, "fee": 500 },
+      { "min_km": 5, "max_km": 10, "fee": 800 },
+      { "min_km": 10, "max_km": 20, "fee": 1200 },
+      { "min_km": 20, "max_km": 9999, "fee": 2000 }
+    ],
+    "delivery_rates_by_cep": [
+      { "cep_inicio": "28000000", "cep_fim": "28099999", "fee": 500, "label": "Região Central" },
+      { "cep_inicio": "28100000", "cep_fim": "28199999", "fee": 800, "label": "Região Norte" },
+      { "cep_inicio": "28200000", "cep_fim": "28299999", "fee": 1200, "label": "Região Sul" }
+    ]
+  }
 }
