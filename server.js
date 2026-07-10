@@ -3,6 +3,7 @@
 // Node.js puro (sem dependências) — http, fs, crypto
 // ═══════════════════════════════════════════════════════════
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -22,14 +23,20 @@ const DEFAULT_CFG = {
   hours: '18h30–23h', open: 1,
   adminPass: 'shogatsu2026',
   masterPass: 'shogatsuMaster2026',
-  logoUrl: '', logoSize: 40, logoPosition: 'left',
+  logoUrl: '',
   pixKey: '', pixName: 'Shogatsu Culinaria Oriental', pixCity: 'RIO DAS OSTRAS',
-  printMode: 'manual', printWidth: '80mm',
-  printVias: { cliente: true, cozinha: true, entrega: false },
-  printExtraCopies: 0,
-  nextOrderNumber: 1,
-  deliveryTimeMinutes: 45,
-  alertSound: 'ding'
+  // ── Impressão do comprovante do pedido ──
+  printFont: 'monospace',      // 'monospace' | 'sans-serif' | 'serif'
+  printSize: 14,                // tamanho da fonte em px
+  printColor: '#000000',        // cor do texto
+  // ── Taxa de entrega por distância ──
+  feeMode: 'fixo',            // 'fixo' (taxa única) ou 'distancia' (calculada por km)
+  storeLat: null, storeLng: null, // coordenadas do restaurante (preenchidas pelo painel)
+  feeBaseKm: 2,                // km inclusos na taxa base
+  feeBaseValue: 8,             // R$ da taxa até feeBaseKm
+  feePerKm: 2.5,                // R$ por km excedente
+  feeMaxKm: 12,                 // raio máximo de entrega (0 = sem limite)
+  feeRound: 0.5                 // arredonda a taxa para múltiplos disso
 };
 const DEFAULT_MENU = require('./default-menu.json');
 
@@ -63,6 +70,65 @@ const sseClients = new Set();
 function broadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) { try { res.write(payload); } catch (e) {} }
+}
+
+// ─── Geolocalização / taxa por distância ───
+// Faz um GET https e retorna o corpo já parseado como JSON, com timeout.
+function httpsGetJSON(urlStr, headers = {}, timeoutMs = 6000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(urlStr, { headers }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error('HTTP ' + res.statusCode));
+        }
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error('timeout')); });
+  });
+}
+
+// CEP (só dígitos) → endereço aproximado via ViaCEP (gratuito, sem chave)
+async function lookupCEP(cep) {
+  const clean = String(cep || '').replace(/\D/g, '');
+  if (clean.length !== 8) return null;
+  const data = await httpsGetJSON(`https://viacep.com.br/ws/${clean}/json/`);
+  if (!data || data.erro) return null;
+  return { street: data.logradouro || '', hood: data.bairro || '', city: data.localidade || '', uf: data.uf || '' };
+}
+
+// Endereço em texto → { lat, lng } via Nominatim/OpenStreetMap (gratuito, sem chave)
+async function geocodeAddress(addressText) {
+  const q = encodeURIComponent(addressText);
+  const data = await httpsGetJSON(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${q}`,
+    { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' }
+  );
+  if (!Array.isArray(data) || !data.length) return null;
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+}
+
+// Distância em linha reta entre dois pontos (km)
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Aplica a fórmula de taxa (base + excedente por km, arredondada)
+function calcFeeByDistance(cfg, distanceKm) {
+  const baseKm = Number(cfg.feeBaseKm) || 0;
+  const extraKm = Math.max(0, distanceKm - baseKm);
+  let fee = (Number(cfg.feeBaseValue) || 0) + extraKm * (Number(cfg.feePerKm) || 0);
+  const round = Number(cfg.feeRound) || 0;
+  if (round > 0) fee = Math.ceil(fee / round) * round;
+  return Math.round(fee * 100) / 100;
 }
 
 // ─── PIX — geração do payload BR Code (copia-e-cola) ───
@@ -282,6 +348,78 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
+  // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada pela distância ──
+  if (pathname === '/api/delivery-fee' && req.method === 'POST') {
+    try {
+      const { cep, street, hood, city, uf } = await readBody(req);
+      const { cfg } = readJSON(CONFIG_FILE);
+
+      // Se o restaurante não usa taxa por distância (ou ainda não configurou as
+      // coordenadas da loja), devolve a taxa padrão direto — sem chamar nada externo.
+      if (cfg.feeMode !== 'distancia' || !cfg.storeLat || !cfg.storeLng) {
+        return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo', distanceKm: null });
+      }
+
+      try {
+        let addrStreet = String(street || '').trim();
+        let addrHood = String(hood || '').trim();
+        let addrCity = String(city || '').trim();
+        let addrUf = String(uf || '').trim();
+
+        // Se veio CEP, usa ele para completar/confirmar bairro-cidade-UF (mais preciso)
+        if (cep) {
+          const viacep = await lookupCEP(cep);
+          if (viacep) {
+            addrHood = addrHood || viacep.hood;
+            addrCity = addrCity || viacep.city;
+            addrUf = addrUf || viacep.uf;
+            if (!addrStreet) addrStreet = viacep.street;
+          }
+        }
+
+        const queryText = [addrStreet, addrHood, addrCity, addrUf, 'Brasil'].filter(Boolean).join(', ');
+        if (!queryText || (!addrStreet && !addrHood && !cep)) {
+          return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
+        }
+
+        const geo = await geocodeAddress(queryText);
+        if (!geo) {
+          return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
+        }
+
+        const distanceKm = haversineKm(Number(cfg.storeLat), Number(cfg.storeLng), geo.lat, geo.lng);
+        const maxKm = Number(cfg.feeMaxKm) || 0;
+        if (maxKm > 0 && distanceKm > maxKm) {
+          return sendJSON(res, 200, { error: 'fora_area', distanceKm: Math.round(distanceKm * 10) / 10, maxKm });
+        }
+
+        const fee = calcFeeByDistance(cfg, distanceKm);
+        return sendJSON(res, 200, { fee, mode: 'distancia', distanceKm: Math.round(distanceKm * 10) / 10 });
+      } catch (geoErr) {
+        // Qualquer falha nas APIs externas (fora do ar, CEP não encontrado, etc.)
+        // não pode travar o pedido — cai para a taxa padrão configurada.
+        return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
+      }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── POST /api/admin/geocode-store — painel localiza e salva as coordenadas da loja ──
+  if (pathname === '/api/admin/geocode-store' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const body = await readBody(req);
+      const data = readJSON(CONFIG_FILE);
+      const address = String(body.address || data.cfg.addr || '').trim();
+      if (!address) return sendJSON(res, 400, { error: 'Informe o endereço do restaurante.' });
+      const geo = await geocodeAddress(address + ', Brasil');
+      if (!geo) return sendJSON(res, 404, { error: 'Não conseguimos localizar esse endereço. Tente descrevê-lo de outro jeito (ex: rua, número, bairro, cidade).' });
+      data.cfg.storeLat = geo.lat;
+      data.cfg.storeLng = geo.lng;
+      writeJSON(CONFIG_FILE, data);
+      return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
+    } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
+  }
+
   // ── POST /api/orders — cria um novo pedido (cliente) ──
   if (pathname === '/api/orders' && req.method === 'POST') {
     try {
@@ -291,14 +429,8 @@ const server = http.createServer(async (req, res) => {
       if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
 
       const orders = readJSON(ORDERS_FILE);
-      const configData = readJSON(CONFIG_FILE);
-      const orderNumber = Number(configData.cfg.nextOrderNumber) || 1;
-      configData.cfg.nextOrderNumber = orderNumber + 1;
-      writeJSON(CONFIG_FILE, configData);
-
       const order = {
         id: 'SG' + Date.now().toString(36).toUpperCase(),
-        number: orderNumber,
         createdAt: new Date().toISOString(),
         status: 'novo',
         mode: body.mode === 'retirada' ? 'retirada' : 'delivery',
@@ -315,8 +447,7 @@ const server = http.createServer(async (req, res) => {
         troco: String(body.troco || '').slice(0, 20),
         subtotal: Number(body.subtotal) || 0,
         fee: Number(body.fee) || 0,
-        total: Number(body.total) || 0,
-        deadlineMinutes: Number(cfg.deliveryTimeMinutes) || 45
+        total: Number(body.total) || 0
       };
       orders.unshift(order);
       writeJSON(ORDERS_FILE, orders);
@@ -336,7 +467,7 @@ const server = http.createServer(async (req, res) => {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const id = pathname.split('/').pop();
     try {
-      const { status, fee, extendMinutes } = await readBody(req);
+      const { status, fee } = await readBody(req);
       const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
       if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
       const orders = readJSON(ORDERS_FILE);
@@ -346,9 +477,6 @@ const server = http.createServer(async (req, res) => {
       if (fee !== undefined && fee !== null && fee !== '') {
         order.fee = Number(fee) || 0;
         order.total = Number(order.subtotal || 0) + order.fee;
-      }
-      if (extendMinutes) {
-        order.deadlineMinutes = Number(order.deadlineMinutes || 45) + Number(extendMinutes);
       }
       writeJSON(ORDERS_FILE, orders);
       broadcast('order-updated', order);
