@@ -53,6 +53,37 @@ recebimento deve ser conferido manualmente pelo restaurante — o que já é com
 a maioria das lanchonetes locais funciona hoje. Se quiser, dá para evoluir
 depois para confirmação automática.
 
+## Taxa de entrega automática por distância
+
+Na aba "Cardápio & Config" → "Taxa de Entrega", dá pra escolher entre:
+
+- **Taxa única (fixa)** — como era antes, o mesmo valor para qualquer endereço.
+- **Automática por distância (km)** — o sistema calcula a distância entre a loja
+  e o endereço que o cliente digitar (CEP, rua e bairro) na tela de checkout, e
+  aplica a fórmula: **taxa base** (até X km) + **R$ por km** excedente,
+  arredondada para o valor que você definir. Também dá pra configurar um
+  **raio máximo de entrega** — endereços além dele ficam bloqueados no
+  checkout, com uma mensagem pedindo para falar pelo WhatsApp.
+
+Para ativar o modo por distância:
+1. Preencha o campo "Endereço" da loja (na mesma aba, mais acima) corretamente.
+2. Clique em "📍 Localizar pelo endereço acima" para o sistema achar as
+   coordenadas da loja automaticamente (usa OpenStreetMap, sem custo).
+3. Ajuste os campos de km incluso, valor base, R$/km extra e raio máximo.
+4. Salve.
+
+O cálculo usa dois serviços públicos e gratuitos (ViaCEP para CEP → endereço,
+e OpenStreetMap/Nominatim para endereço → coordenadas). Se o CEP for
+inválido, o endereço não for encontrado, ou esses serviços estiverem fora do
+ar, o sistema cai automaticamente para a **taxa padrão** configurada (o mesmo
+campo "Taxa de entrega" de antes) — o pedido nunca fica travado por causa
+disso, e você ainda pode ajustar o valor manualmente ao aceitar o pedido no
+painel, como já era possível.
+
+⚠️ Como esses serviços são gratuitos, evite trocar de endereço repetidamente
+em sequência muito rápida (o app já espera meio segundo depois que o cliente
+para de digitar antes de calcular, pra não sobrecarregar).
+
 ## Fotos dos produtos
 
 Na aba "Cardápio & Config" do painel, cada item tem um quadrado "+ foto" — clique,
