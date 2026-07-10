@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#c0392b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shogatsu">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<title>Shogatsu · Peça Agora</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --black:#0a0a0a;--panel:#161412;--card:#1e1a16;--border:#2a2420;
+  --red:#c0392b;--red-lt:#e05a4a;--red-dk:#8a1f15;
+  --gold:#c9a84c;--cream:#f5ede0;--muted:#7a6a60;--white:#f0e8e0;
+  --green:#27ae60;--green-lt:#2ecc71;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;}
+a{text-decoration:none;color:inherit;}
+button{cursor:pointer;font-family:'Jost',sans-serif;}
+
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:200;}
+.header-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px;}
+.header-brand{display:flex;align-items:center;gap:10px;}
+.header-logo{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;color:var(--white);}
+.header-logo span{color:var(--red-lt);}
+.header-status{font-size:10px;letter-spacing:2px;color:var(--green-lt);display:flex;align-items:center;gap:5px;}
+.header-status::before{content:'';width:6px;height:6px;background:var(--green-lt);border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.cart-btn{background:var(--red);border:none;border-radius:50px;padding:8px 16px;color:#fff;font-size:12px;font-weight:600;letter-spacing:1px;display:flex;align-items:center;gap:8px;transition:background .2s;}
+.cart-btn:hover{background:var(--red-lt);}
+.cart-count{background:#fff;color:var(--red);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+
+.hero-strip{background:linear-gradient(135deg,#1a0e0a 0%,#2a1008 100%);border-bottom:1px solid var(--border);padding:20px 16px;}
+.hero-strip-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.hero-info h2{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,5vw,28px);font-weight:400;color:var(--cream);margin-bottom:4px;}
+.hero-info p{font-size:12px;color:var(--muted);letter-spacing:1px;}
+.hero-chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.chip span{color:var(--white);}
+
+.mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:sticky;top:60px;z-index:190;}
+.mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:8px;align-items:center;}
+.mode-btn{flex:1;background:none;border:1px solid var(--border);border-radius:4px;padding:10px;color:var(--muted);font-size:12px;font-weight:500;letter-spacing:1px;transition:all .2s;max-width:180px;}
+.mode-btn.active{background:var(--red);border-color:var(--red);color:#fff;}
+
+.cat-nav{background:var(--black);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:108px;z-index:180;}
+.cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;}
+.cat-nav-inner::-webkit-scrollbar{display:none;}
+.cat-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;padding:12px 14px;white-space:nowrap;transition:all .2s;}
+.cat-btn.active,.cat-btn:hover{color:var(--red-lt);border-bottom-color:var(--red);}
+
+.main{max-width:800px;margin:0 auto;padding:24px 16px 120px;}
+
+.menu-section{margin-bottom:40px;}
+.menu-section-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;color:var(--red-lt);letter-spacing:3px;margin-bottom:4px;}
+.menu-section-note{font-size:11px;color:var(--muted);letter-spacing:1px;font-style:italic;margin-bottom:16px;}
+
+.item-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:14px;transition:border-color .2s;}
+.item-card:hover{border-color:var(--red-dk);}
+.item-img{width:80px;height:80px;border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
+.item-body{flex:1;}
+.item-name{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--white);margin-bottom:3px;line-height:1.2;}
+.item-desc{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;}
+.item-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.item-price{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--red-lt);}
+.item-badge{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--red-lt);border:1px solid var(--red-dk);padding:2px 8px;border-radius:20px;margin-bottom:6px;display:inline-block;}
+
+.add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .1s;}
+.add-btn:hover{background:var(--red-lt);}
+.add-btn:active{transform:scale(.92);}
+.qty-ctrl{display:flex;align-items:center;gap:0;border:1px solid var(--red-dk);border-radius:50px;overflow:hidden;flex-shrink:0;}
+.qty-ctrl button{background:none;border:none;color:var(--white);width:32px;height:32px;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.qty-ctrl button:hover{background:var(--red-dk);}
+.qty-ctrl span{min-width:28px;text-align:center;font-size:14px;font-weight:600;}
+
+.cart-float{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:300;width:calc(100% - 32px);max-width:500px;display:none;}
+.cart-float.visible{display:block;}
+.cart-float-btn{background:var(--red);border:none;border-radius:12px;padding:16px 24px;color:#fff;width:100%;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;letter-spacing:1px;box-shadow:0 8px 32px rgba(192,57,43,.5);transition:background .2s;}
+.cart-float-btn:hover{background:var(--red-lt);}
+.cart-float-left{display:flex;align-items:center;gap:10px;}
+.cart-float-badge{background:rgba(255,255,255,.2);border-radius:50px;padding:2px 10px;font-size:13px;}
+.cart-float-total{font-family:'Cormorant Garamond',serif;font-size:20px;}
+
+.drawer-overlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.7);display:none;backdrop-filter:blur(4px);}
+.drawer-overlay.open{display:block;}
+.drawer{position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--panel);border-radius:16px 16px 0 0;max-height:90vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);}
+.drawer.open{transform:translateY(0);}
+.drawer-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0;}
+.drawer-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.drawer-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--white);letter-spacing:2px;}
+.drawer-close{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:16px;display:flex;align-items:center;justify-content:center;}
+.drawer-body{padding:16px 20px;}
+.cart-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.cart-item-name{flex:1;font-size:14px;color:var(--white);}
+.cart-item-price{font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--red-lt);min-width:70px;text-align:right;}
+.cart-empty{text-align:center;padding:40px;color:var(--muted);font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;}
+
+.cart-summary{background:var(--card);border-radius:8px;padding:16px;margin-top:16px;}
+.summary-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;}
+.summary-row.total{color:var(--white);font-size:16px;font-weight:600;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.summary-row.total span:last-child{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--red-lt);}
+
+.obs-field{margin-top:12px;}
+.obs-field label{font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:6px;}
+.obs-field textarea{width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);font-family:'Jost',sans-serif;font-size:13px;padding:10px;border-radius:4px;resize:none;height:70px;outline:none;}
+.obs-field textarea:focus{border-color:var(--red-dk);}
+
+.checkout-btn{width:100%;background:var(--red);border:none;border-radius:8px;padding:16px;color:#fff;font-size:14px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:16px;transition:background .2s;}
+.checkout-btn:hover{background:var(--red-lt);}
+.checkout-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
+
+.screen{display:none;position:fixed;inset:0;z-index:600;background:var(--black);overflow-y:auto;}
+.screen.open{display:block;}
+.screen-header{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;}
+.back-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;width:36px;height:36px;font-size:18px;display:flex;align-items:center;justify-content:center;}
+.screen-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--white);letter-spacing:2px;}
+.screen-body{max-width:600px;margin:0 auto;padding:24px 20px 100px;}
+
+.form-section{margin-bottom:28px;}
+.form-section-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--red-lt);margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+.form-group{margin-bottom:14px;}
+.form-group label{display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.form-group input,.form-group select,.form-group textarea{width:100%;background:var(--card);border:1px solid var(--border);color:var(--white);font-family:'Jost',sans-serif;font-size:14px;padding:12px;border-radius:4px;outline:none;transition:border-color .2s;}
+.form-group input:focus,.form-group select:focus{border-color:var(--red-dk);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+.payment-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.pay-opt{background:var(--card);border:2px solid var(--border);border-radius:6px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;}
+.pay-opt:hover{border-color:var(--red-dk);}
+.pay-opt.selected{border-color:var(--red);background:rgba(192,57,43,.1);}
+.pay-opt-icon{font-size:24px;margin-bottom:6px;}
+.pay-opt-label{font-size:11px;letter-spacing:1px;color:var(--muted);}
+.pay-opt.selected .pay-opt-label{color:var(--white);}
+
+.order-summary-mini{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:20px;}
+.order-summary-mini .summary-row{font-size:12px;}
+
+.place-btn{width:100%;background:var(--green);border:none;border-radius:8px;padding:18px;color:#fff;font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s;position:sticky;bottom:20px;box-shadow:0 4px 20px rgba(39,174,96,.4);}
+.place-btn:hover{background:var(--green-lt);}
+.place-btn:disabled{background:var(--border);color:var(--muted);box-shadow:none;cursor:not-allowed;}
+
+/* PIX */
+.pix-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:center;margin-bottom:20px;}
+.pix-box img{width:200px;height:200px;border-radius:6px;background:#fff;padding:8px;margin-bottom:14px;}
+.pix-code{background:var(--black);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:11px;word-break:break-all;color:var(--muted);margin-bottom:10px;text-align:left;}
+.pix-copy-btn{background:var(--red);border:none;border-radius:6px;padding:10px 20px;color:#fff;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+.pix-copy-btn.done{background:var(--green);}
+
+.success-screen{display:none;position:fixed;inset:0;z-index:700;background:var(--black);align-items:center;justify-content:center;text-align:center;padding:40px;overflow-y:auto;}
+.success-screen.open{display:flex;flex-direction:column;}
+.success-icon{font-size:72px;margin-bottom:20px;animation:bounceIn .6s;}
+@keyframes bounceIn{0%{transform:scale(0);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
+.success-title{font-family:'Cormorant Garamond',serif;font-size:32px;color:var(--green-lt);margin-bottom:8px;}
+.success-sub{font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.7;}
+.success-id{font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:24px;}
+.success-id span{color:var(--gold);font-weight:600;}
+.status-track{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;width:100%;max-width:360px;margin-bottom:24px;}
+.status-steps{display:flex;justify-content:space-between;position:relative;margin-top:10px;}
+.status-step{flex:1;text-align:center;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;position:relative;}
+.status-step .dot{width:14px;height:14px;border-radius:50%;background:var(--border);margin:0 auto 6px;transition:background .3s;}
+.status-step.active .dot{background:var(--green-lt);box-shadow:0 0 0 4px rgba(46,204,113,.2);}
+.status-step.active{color:var(--white);}
+.success-wa-btn{background:var(--green);border:none;border-radius:8px;padding:16px 32px;color:#fff;font-size:14px;font-weight:600;letter-spacing:2px;display:flex;align-items:center;gap:10px;margin:0 auto 12px;}
+.success-new-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:14px 32px;color:var(--muted);font-size:12px;letter-spacing:2px;}
+.closed-banner{background:rgba(192,57,43,.15);border:1px solid var(--red-dk);color:var(--red-lt);text-align:center;padding:10px;font-size:12px;letter-spacing:1px;}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo" id="header-logo">SHOG<span>ATSU</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="header-status" id="store-status-badge">Aberto</div>
+      <button class="cart-btn" onclick="openCart()">
+        🛒 <span id="cart-count-header" class="cart-count" style="display:none">0</span>
+        Carrinho
+      </button>
+    </div>
+  </div>
+</header>
+
+<div id="closed-banner-wrap"></div>
+
+<div class="hero-strip">
+  <div class="hero-strip-inner">
+    <div class="hero-info">
+      <h2>Culinária Oriental Autêntica</h2>
+      <p id="hero-address">—</p>
+    </div>
+    <div class="hero-chips">
+      <div class="chip">🕐 <span id="chip-hours">—</span></div>
+      <div class="chip">⏱ <span id="chip-time">—</span></div>
+      <div class="chip">🛵 taxa <span id="chip-fee">—</span></div>
+      <div class="chip">📦 mín. <span id="chip-min">—</span></div>
+      <div class="chip" id="chip-phone-wrap" style="display:none">📞 <span id="chip-phone">—</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="mode-bar">
+  <div class="mode-bar-inner">
+    <button class="mode-btn active" id="btn-delivery" onclick="setMode('delivery')">🛵 Delivery</button>
+    <button class="mode-btn" id="btn-retirada" onclick="setMode('retirada')">🏪 Retirada</button>
+  </div>
+</div>
+
+<div class="cat-nav">
+  <div class="cat-nav-inner" id="cat-nav-inner"></div>
+</div>
+
+<div class="main" id="menu-main"></div>
+
+<div class="cart-float" id="cart-float">
+  <button class="cart-float-btn" onclick="openCart()">
+    <div class="cart-float-left">
+      🛒 <span class="cart-float-badge" id="cf-count">0</span>
+      <span>Ver carrinho</span>
+    </div>
+    <span class="cart-float-total" id="cf-total">R$ 0</span>
+  </button>
+</div>
+
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeCart()"></div>
+<div class="drawer" id="cart-drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <span class="drawer-title">🛒 Seu Pedido</span>
+    <button class="drawer-close" onclick="closeCart()">✕</button>
+  </div>
+  <div class="drawer-body" id="cart-body"></div>
+</div>
+
+<div class="screen" id="checkout-screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeCheckout()">←</button>
+    <span class="screen-title">Finalizar Pedido</span>
+  </div>
+  <div class="screen-body">
+    <div class="order-summary-mini" id="checkout-summary"></div>
+
+    <div class="form-section" id="delivery-section">
+      <div class="form-section-title">📍 Endereço de Entrega</div>
+      <div class="form-group"><label>Nome completo *</label><input type="text" id="f-name" placeholder="Seu nome"/></div>
+      <div class="form-group"><label>WhatsApp / Telefone *</label><input type="tel" id="f-phone" placeholder="(22) 99999-9999"/></div>
+      <div class="form-group"><label>CEP</label><input type="text" inputmode="numeric" id="f-cep" placeholder="28890-000" maxlength="9" oninput="maskCEP(this)" onblur="onAddressChanged()"/></div>
+      <div class="form-group"><label>Rua e número *</label><input type="text" id="f-street" placeholder="Rua das Flores, 123" onblur="onAddressChanged()"/></div>
+      <div class="form-row">
+        <div class="form-group"><label>Bairro *</label><input type="text" id="f-hood" placeholder="Costazul" onblur="onAddressChanged()"/></div>
+        <div class="form-group"><label>Complemento</label><input type="text" id="f-comp" placeholder="Apto 12, Bloco B"/></div>
+      </div>
+      <div class="form-group"><label>Ponto de referência</label><input type="text" id="f-ref" placeholder="Próximo ao mercado"/></div>
+      <p class="hint" id="fee-calc-status" style="font-size:12px;color:var(--muted);margin-top:4px;"></p>
+    </div>
+
+    <div class="form-section" id="retirada-section" style="display:none;">
+      <div class="form-section-title">🏪 Retirada no Restaurante</div>
+      <div class="form-group"><label>Nome para retirada *</label><input type="text" id="f-name-r" placeholder="Seu nome"/></div>
+      <div class="form-group"><label>WhatsApp / Telefone *</label><input type="tel" id="f-phone-r" placeholder="(22) 99999-9999"/></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="retirada-addr-note"></p>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">💳 Forma de Pagamento</div>
+      <div class="payment-grid">
+        <div class="pay-opt" onclick="selectPay('pix')" id="pay-pix"><div class="pay-opt-icon">📱</div><div class="pay-opt-label">PIX</div></div>
+        <div class="pay-opt" onclick="selectPay('credito')" id="pay-credito"><div class="pay-opt-icon">💳</div><div class="pay-opt-label">Crédito</div></div>
+        <div class="pay-opt" onclick="selectPay('debito')" id="pay-debito"><div class="pay-opt-icon">💳</div><div class="pay-opt-label">Débito</div></div>
+        <div class="pay-opt" onclick="selectPay('dinheiro')" id="pay-dinheiro"><div class="pay-opt-icon">💵</div><div class="pay-opt-label">Dinheiro</div></div>
+      </div>
+      <div id="troco-wrap" style="display:none;margin-top:12px;">
+        <div class="form-group"><label>Troco para quanto?</label><input type="number" id="f-troco" placeholder="ex: 100"/></div>
+      </div>
+    </div>
+
+    <button class="place-btn" id="place-btn" onclick="placeOrder()">✅ Confirmar Pedido</button>
+  </div>
+</div>
+
+<div class="success-screen" id="success-screen">
+  <div class="success-icon">🎉</div>
+  <div class="success-title">Pedido enviado!</div>
+  <div class="success-sub" id="success-msg">Seu pedido chegou direto na cozinha do restaurante.</div>
+  <div class="success-id" id="success-order-id"></div>
+
+  <div id="pix-panel"></div>
+
+  <div class="status-track" id="status-track" style="display:none">
+    <div style="font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Acompanhe seu pedido</div>
+    <div class="status-steps" id="status-steps"></div>
+  </div>
+
+  <button class="success-wa-btn" id="success-wa-btn">💬 Falar pelo WhatsApp</button>
+  <button class="success-new-btn" onclick="newOrder()">Fazer novo pedido</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let cfg = {}, menu = [];
+let cart = {};
+let mode = 'delivery';
+let payMethod = '';
+let currentOrderId = null;
+let trackTimer = null;
+
+// ── Taxa de entrega por distância ──
+let deliveryFee = null;      // taxa calculada (ou padrão) para o endereço atual
+let deliveryDistanceKm = null;
+let feeCalcBusy = false;
+let feeCalcTimer = null;
+let deliveryBlocked = false; // true quando o endereço está fora da área de entrega
+
+// Retorna a taxa atual a usar (calculada por distância, se já disponível; senão a padrão)
+function getFee() {
+  if (mode !== 'delivery') return 0;
+  return Number(deliveryFee ?? cfg.fee ?? 0);
+}
+
+function maskCEP(input) {
+  let v = input.value.replace(/\D/g, '').slice(0, 8);
+  if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
+  input.value = v;
+}
+
+// Dispara o recálculo da taxa (com debounce) sempre que CEP/rua/bairro mudam
+function onAddressChanged() {
+  clearTimeout(feeCalcTimer);
+  feeCalcTimer = setTimeout(calcDeliveryFee, 400);
+}
+
+async function calcDeliveryFee() {
+  if (mode !== 'delivery') return;
+  const cep = document.getElementById('f-cep')?.value.replace(/\D/g, '') || '';
+  const street = document.getElementById('f-street')?.value.trim() || '';
+  const hood = document.getElementById('f-hood')?.value.trim() || '';
+  const statusEl = document.getElementById('fee-calc-status');
+
+  if (!cep && !street && !hood) return; // nada preenchido ainda
+
+  feeCalcBusy = true;
+  deliveryBlocked = false;
+  if (statusEl) statusEl.textContent = '🔎 Calculando taxa de entrega...';
+
+  try {
+    const r = await fetch('/api/delivery-fee', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cep, street, hood })
+    });
+    const data = await r.json();
+
+    if (data.error === 'fora_area') {
+      deliveryBlocked = true;
+      deliveryFee = null;
+      if (statusEl) statusEl.textContent = `⚠️ Esse endereço fica a ${data.distanceKm} km — fora da nossa área de entrega (máx. ${data.maxKm} km). Fale com a gente pelo WhatsApp.`;
+    } else if (typeof data.fee === 'number') {
+      deliveryFee = data.fee;
+      deliveryDistanceKm = data.distanceKm;
+      if (data.mode === 'distancia') {
+        if (statusEl) statusEl.textContent = `✅ Taxa calculada: R$ ${data.fee.toFixed(2).replace('.', ',')} (${data.distanceKm} km até você)`;
+      } else if (data.mode === 'fixo_fallback') {
+        if (statusEl) statusEl.textContent = `ℹ️ Não conseguimos calcular a distância exata — aplicamos a taxa padrão de R$ ${data.fee.toFixed(2).replace('.', ',')}.`;
+      } else {
+        if (statusEl) statusEl.textContent = '';
+      }
+    }
+  } catch (e) {
+    // Falha de rede: mantém a taxa padrão e segue o fluxo normalmente
+    deliveryFee = Number(cfg.fee || 0);
+    if (statusEl) statusEl.textContent = '';
+  }
+  feeCalcBusy = false;
+  updateCartUI();
+  refreshCheckoutSummary();
+}
+
+// Atualiza o resumo da tela de checkout, se estiver aberta, sem reconstruir tudo
+function refreshCheckoutSummary() {
+  if (document.getElementById('checkout-screen').classList.contains('open')) openCheckout(true);
+}
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    cfg = data.cfg; menu = data.menu;
+  } catch (e) {
+    document.getElementById('menu-main').innerHTML = '<p style="text-align:center;color:var(--muted);padding:40px;">Não foi possível carregar o cardápio. Verifique se o servidor está rodando.</p>';
+    return;
+  }
+  renderMenu();
+  updateCartUI();
+}
+
+// ═══════════════════════════════════════════
+// RENDER MENU
+// ═══════════════════════════════════════════
+function renderMenu() {
+  document.getElementById('hero-address').textContent = cfg.addr;
+  document.getElementById('chip-hours').textContent = cfg.hours;
+  document.getElementById('chip-time').textContent = cfg.time;
+  document.getElementById('chip-fee').textContent = (cfg.feeMode === 'distancia' ? 'a partir de R$ ' : 'R$ ') + Number(cfg.fee).toFixed(2).replace('.', ',');
+  document.getElementById('chip-min').textContent = 'R$ ' + Number(cfg.min).toFixed(2).replace('.', ',');
+  document.getElementById('retirada-addr-note').textContent = '📍 ' + cfg.addr;
+
+  const logoEl = document.getElementById('header-logo');
+  if (cfg.logoUrl) {
+    logoEl.innerHTML = `<img src="${cfg.logoUrl}" alt="Logo" style="height:36px;max-width:160px;object-fit:contain;">`;
+  } else {
+    logoEl.innerHTML = 'SHOG<span>ATSU</span>';
+  }
+  const phoneWrap = document.getElementById('chip-phone-wrap');
+  if (cfg.storePhone) {
+    document.getElementById('chip-phone').textContent = cfg.storePhone;
+    phoneWrap.style.display = 'flex';
+  } else {
+    phoneWrap.style.display = 'none';
+  }
+
+  const badge = document.getElementById('store-status-badge');
+  const banner = document.getElementById('closed-banner-wrap');
+  if (Number(cfg.open)) {
+    badge.textContent = '● Aberto'; badge.style.color = 'var(--green-lt)';
+    banner.innerHTML = '';
+  } else {
+    badge.textContent = '● Fechado'; badge.style.color = 'var(--red-lt)';
+    banner.innerHTML = '<div class="closed-banner">O restaurante está fechado no momento. Você pode montar o pedido, mas o envio só será possível quando reabrirmos.</div>';
+  }
+
+  const nav = document.getElementById('cat-nav-inner');
+  nav.innerHTML = menu.map(s => `<button class="cat-btn" onclick="scrollCat('${s.id}')">${s.icon} ${s.title}</button>`).join('');
+
+  const main = document.getElementById('menu-main');
+  main.innerHTML = menu.map(sec => `
+    <div class="menu-section" id="sec-${sec.id}">
+      <div class="menu-section-title">${sec.icon} ${sec.title}</div>
+      ${sec.note ? `<div class="menu-section-note">${sec.note}</div>` : ''}
+      ${sec.items.map((item, ii) => {
+        const key = sec.id + '-' + ii;
+        const inCart = cart[key];
+        return `
+        <div class="item-card" id="card-${key}">
+          <div class="item-img">${item.img ? `<img src="${item.img}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;">` : sec.icon}</div>
+          <div class="item-body">
+            ${item.badge ? `<div class="item-badge">${item.badge}</div>` : ''}
+            <div class="item-name">${item.name}</div>
+            <div class="item-desc">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
+            <div class="item-footer">
+              <span class="item-price">R$ ${item.price.toFixed(2).replace('.', ',')}</span>
+              ${inCart
+                ? `<div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${inCart.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>`
+                : `<button class="add-btn" onclick="addToCart('${key}')" data-key="${key}">+</button>`
+              }
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════
+// CART
+// ═══════════════════════════════════════════
+function getItemByKey(key) {
+  const idx = key.lastIndexOf('-');
+  const secId = key.slice(0, idx), ii = key.slice(idx + 1);
+  const sec = menu.find(s => s.id === secId);
+  return sec ? sec.items[parseInt(ii)] : null;
+}
+function addToCart(key) {
+  const item = getItemByKey(key);
+  if (!item) return;
+  if (!cart[key]) cart[key] = { item, qty: 0 };
+  cart[key].qty++;
+  updateCartUI(); renderMenu(); animateAdd(key);
+}
+function changeQty(key, delta) {
+  if (!cart[key]) return;
+  cart[key].qty += delta;
+  if (cart[key].qty <= 0) delete cart[key];
+  updateCartUI(); renderMenu();
+}
+function animateAdd(key) {
+  const btn = document.querySelector(`[data-key="${key}"]`);
+  if (btn) { btn.textContent = '✓'; setTimeout(() => btn.textContent = '+', 600); }
+}
+function cartTotal() { return Object.values(cart).reduce((s, c) => s + c.item.price * c.qty, 0); }
+function cartCount() { return Object.values(cart).reduce((s, c) => s + c.qty, 0); }
+
+function updateCartUI() {
+  const count = cartCount(), total = cartTotal();
+  const fee = getFee();
+  const hb = document.getElementById('cart-count-header');
+  hb.textContent = count; hb.style.display = count > 0 ? 'flex' : 'none';
+  const fl = document.getElementById('cart-float');
+  fl.classList.toggle('visible', count > 0);
+  document.getElementById('cf-count').textContent = count;
+  document.getElementById('cf-total').textContent = 'R$ ' + (total + fee).toFixed(2).replace('.', ',');
+}
+
+function openCart() {
+  const body = document.getElementById('cart-body');
+  const items = Object.entries(cart);
+  const fee = getFee();
+  const total = cartTotal();
+  if (items.length === 0) {
+    body.innerHTML = '<div class="cart-empty">🍽️ Seu carrinho está vazio</div>';
+  } else {
+    body.innerHTML = `
+      ${items.map(([key, c]) => `
+        <div class="cart-item">
+          <div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${c.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>
+          <div class="cart-item-name">${c.item.name}</div>
+          <div class="cart-item-price">R$ ${(c.item.price * c.qty).toFixed(2).replace('.', ',')}</div>
+        </div>`).join('')}
+      <div class="cart-summary">
+        <div class="summary-row"><span>Subtotal</span><span>R$ ${total.toFixed(2).replace('.', ',')}</span></div>
+        ${mode === 'delivery' ? `<div class="summary-row"><span>Taxa de entrega</span><span>R$ ${fee.toFixed(2).replace('.', ',')}</span></div>` : ''}
+        <div class="summary-row total"><span>Total</span><span>R$ ${(total + fee).toFixed(2).replace('.', ',')}</span></div>
+      </div>
+      <div class="obs-field"><label>Observações do pedido</label><textarea id="cart-obs" placeholder="Alergias, restrições, preferências..."></textarea></div>
+      <button class="checkout-btn" ${(total < Number(cfg.min) && mode === 'delivery') ? 'disabled' : ''} onclick="openCheckout()">
+        ${(total < Number(cfg.min) && mode === 'delivery') ? `Mínimo R$ ${Number(cfg.min).toFixed(2).replace('.', ',')} (falta R$ ${(Number(cfg.min) - total).toFixed(2).replace('.', ',')})` : 'Ir para o pagamento →'}
+      </button>`;
+  }
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('cart-drawer').classList.add('open');
+}
+function closeCart() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('cart-drawer').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
+// CHECKOUT
+// ═══════════════════════════════════════════
+function openCheckout(silent) {
+  if (!silent) closeCart();
+  const fee = getFee();
+  const total = cartTotal();
+  const items = Object.values(cart);
+  document.getElementById('delivery-section').style.display = mode === 'delivery' ? 'block' : 'none';
+  document.getElementById('retirada-section').style.display = mode === 'retirada' ? 'block' : 'none';
+  document.getElementById('checkout-summary').innerHTML = `
+    <div style="font-size:11px;letter-spacing:2px;color:var(--red-lt);text-transform:uppercase;margin-bottom:12px;">📋 Resumo</div>
+    ${items.map(c => `<div class="summary-row"><span>${c.qty}x ${c.item.name}</span><span>R$ ${(c.item.price * c.qty).toFixed(2).replace('.', ',')}</span></div>`).join('')}
+    ${mode === 'delivery' ? `<div class="summary-row"><span>Taxa de entrega</span><span>R$ ${fee.toFixed(2).replace('.', ',')}</span></div>` : ''}
+    <div class="summary-row total"><span>Total</span><span>R$ ${(total + fee).toFixed(2).replace('.', ',')}</span></div>`;
+  const placeBtn = document.getElementById('place-btn');
+  if (placeBtn) {
+    placeBtn.disabled = mode === 'delivery' && deliveryBlocked;
+    if (placeBtn.disabled) placeBtn.textContent = 'Endereço fora da área de entrega';
+    else if (!feeCalcBusy) placeBtn.textContent = '✅ Confirmar Pedido';
+  }
+  if (!silent) {
+    document.getElementById('checkout-screen').classList.add('open');
+    if (mode === 'delivery') calcDeliveryFee(); // recalcula caso o cliente volte pra editar
+  }
+}
+function closeCheckout() { document.getElementById('checkout-screen').classList.remove('open'); }
+
+function selectPay(method) {
+  payMethod = method;
+  document.querySelectorAll('.pay-opt').forEach(el => el.classList.remove('selected'));
+  document.getElementById('pay-' + method).classList.add('selected');
+  document.getElementById('troco-wrap').style.display = method === 'dinheiro' ? 'block' : 'none';
+}
+
+async function placeOrder() {
+  if (!Number(cfg.open)) { alert('O restaurante está fechado no momento. Tente novamente durante o horário de funcionamento: ' + cfg.hours); return; }
+
+  let name = '', phone = '', address = '';
+  if (mode === 'delivery') {
+    name = document.getElementById('f-name').value.trim();
+    phone = document.getElementById('f-phone').value.trim();
+    const street = document.getElementById('f-street').value.trim();
+    const hood = document.getElementById('f-hood').value.trim();
+    const comp = document.getElementById('f-comp').value.trim();
+    const ref = document.getElementById('f-ref').value.trim();
+    if (!name || !phone || !street || !hood) { alert('Preencha nome, telefone, rua e bairro.'); return; }
+    if (feeCalcBusy) { alert('Aguarde só um instante, ainda estamos calculando a taxa de entrega.'); return; }
+    if (deliveryBlocked) { alert('Esse endereço está fora da nossa área de entrega. Fale com a gente pelo WhatsApp para verificar.'); return; }
+    address = street + ', ' + hood + (comp ? ' - ' + comp : '') + (ref ? ' (' + ref + ')' : '');
+  } else {
+    name = document.getElementById('f-name-r').value.trim();
+    phone = document.getElementById('f-phone-r').value.trim();
+    if (!name || !phone) { alert('Preencha nome e telefone.'); return; }
+    address = 'RETIRADA NO RESTAURANTE';
+  }
+  if (!payMethod) { alert('Escolha a forma de pagamento.'); return; }
+
+  const fee = getFee();
+  const subtotal = cartTotal();
+  const total = subtotal + fee;
+  const items = Object.values(cart).map(c => ({ name: c.item.name, qty: c.qty, price: c.item.price }));
+  const obs = document.getElementById('cart-obs')?.value || '';
+  const troco = payMethod === 'dinheiro' ? (document.getElementById('f-troco').value || '') : '';
+
+  const placeBtn = document.getElementById('place-btn');
+  placeBtn.disabled = true; placeBtn.textContent = 'Enviando...';
+
+  let order;
+  try {
+    const r = await fetch('/api/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, name, phone, address, items, obs, payMethod, troco, subtotal, fee, total })
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.error || 'Não foi possível enviar o pedido.'); placeBtn.disabled = false; placeBtn.textContent = '✅ Confirmar Pedido'; return; }
+    order = data.order;
+  } catch (e) {
+    alert('Erro de conexão. Verifique sua internet e tente novamente.');
+    placeBtn.disabled = false; placeBtn.textContent = '✅ Confirmar Pedido';
+    return;
+  }
+
+  currentOrderId = order.id;
+  document.getElementById('checkout-screen').classList.remove('open');
+  document.getElementById('success-screen').classList.add('open');
+  document.getElementById('success-order-id').innerHTML = 'Pedido <span>#' + order.id + '</span>';
+
+  const payLabels = { pix: 'PIX', credito: 'Cartão de Crédito', debito: 'Cartão de Débito', dinheiro: 'Dinheiro' };
+  const succ = mode === 'delivery'
+    ? `Seu pedido chegou na cozinha e será entregue em <strong>${address}</strong>. Pagamento: ${payLabels[payMethod]}.`
+    : `Seu pedido chegou na cozinha para retirada no restaurante. Pagamento: ${payLabels[payMethod]}.`;
+  document.getElementById('success-msg').innerHTML = succ;
+
+  // WhatsApp de apoio (opcional, além do pedido já registrado no painel)
+  let msg = `🍣 *PEDIDO #${order.id} — SHOGATSU*\n━━━━━━━━━━━━━━━━━━━━\n\n👤 *${name}*\n📞 ${phone}\n📍 ${address}\n\n🛒 *ITENS:*\n`;
+  items.forEach(i => { msg += `• ${i.qty}x ${i.name} — R$ ${(i.price * i.qty).toFixed(2).replace('.', ',')}\n`; });
+  if (obs) msg += `\n📝 Obs: ${obs}\n`;
+  msg += `\n💰 *TOTAL: R$ ${total.toFixed(2).replace('.', ',')}*\n💳 Pagamento: ${payLabels[payMethod]}`;
+  if (troco) msg += ` (troco p/ R$ ${troco})`;
+  const waUrl = `https://wa.me/${cfg.whats}?text=${encodeURIComponent(msg)}`;
+  document.getElementById('success-wa-btn').onclick = () => window.open(waUrl, '_blank');
+
+  // PIX
+  const pixPanel = document.getElementById('pix-panel');
+  if (payMethod === 'pix') {
+    pixPanel.innerHTML = '<p style="color:var(--muted);font-size:12px;margin-bottom:16px;">Carregando PIX...</p>';
+    try {
+      const pr = await fetch('/api/pix', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: total, txid: order.id })
+      });
+      const pd = await pr.json();
+      if (pr.ok) {
+        pixPanel.innerHTML = `
+          <div class="pix-box">
+            <img src="${pd.qrImg}" alt="QR Code PIX"/>
+            <div class="pix-code" id="pix-code-text">${pd.payload}</div>
+            <button class="pix-copy-btn" id="pix-copy-btn" onclick="copyPix()">Copiar código PIX</button>
+          </div>`;
+      } else {
+        pixPanel.innerHTML = `<p style="color:var(--muted);font-size:12px;margin-bottom:16px;">${pd.error || 'PIX indisponível no momento. Combine o pagamento pelo WhatsApp.'}</p>`;
+      }
+    } catch (e) {
+      pixPanel.innerHTML = '<p style="color:var(--muted);font-size:12px;margin-bottom:16px;">Não foi possível gerar o PIX. Combine o pagamento pelo WhatsApp.</p>';
+    }
+  } else {
+    pixPanel.innerHTML = '';
+  }
+
+  // Acompanhamento do status
+  document.getElementById('status-track').style.display = 'block';
+  startTracking(order.id);
+}
+
+function copyPix() {
+  const text = document.getElementById('pix-code-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('pix-copy-btn');
+    btn.textContent = '✓ Copiado!'; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = 'Copiar código PIX'; btn.classList.remove('done'); }, 2500);
+  });
+}
+
+const STATUS_FLOW = [
+  { key: 'novo', label: 'Recebido' },
+  { key: 'preparando', label: 'Preparando' },
+  { key: 'saiu', label: 'A caminho' },
+  { key: 'entregue', label: 'Concluído' }
+];
+function renderStatus(status) {
+  const idx = STATUS_FLOW.findIndex(s => s.key === status);
+  const el = document.getElementById('status-steps');
+  el.innerHTML = STATUS_FLOW.map((s, i) => `
+    <div class="status-step ${i <= idx ? 'active' : ''}"><div class="dot"></div>${s.label}</div>
+  `).join('');
+}
+function startTracking(id) {
+  renderStatus('novo');
+  if (trackTimer) clearInterval(trackTimer);
+  trackTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/track/' + id);
+      if (!r.ok) return;
+      const data = await r.json();
+      renderStatus(data.status);
+      if (data.status === 'entregue' || data.status === 'cancelado') clearInterval(trackTimer);
+    } catch (e) {}
+  }, 5000);
+}
+
+function newOrder() {
+  cart = {}; payMethod = ''; currentOrderId = null;
+  if (trackTimer) clearInterval(trackTimer);
+  document.getElementById('success-screen').classList.remove('open');
+  document.querySelectorAll('.pay-opt').forEach(el => el.classList.remove('selected'));
+  ['f-name', 'f-phone', 'f-street', 'f-hood', 'f-comp', 'f-ref', 'f-name-r', 'f-phone-r', 'f-troco'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  updateCartUI(); renderMenu();
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-delivery').classList.toggle('active', m === 'delivery');
+  document.getElementById('btn-retirada').classList.toggle('active', m === 'retirada');
+  if (m === 'delivery') { onAddressChanged(); } else { deliveryBlocked = false; }
+  updateCartUI();
+}
+function scrollCat(id) {
+  const el = document.getElementById('sec-' + id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.addEventListener('scroll', () => {
+  if (!menu.length) return;
+  let cur = menu[0].id;
+  menu.forEach(s => {
+    const el = document.getElementById('sec-' + s.id);
+    if (el && window.scrollY >= el.offsetTop - 160) cur = s.id;
+  });
+  document.querySelectorAll('.cat-btn').forEach((b, i) => {
+    b.classList.toggle('active', menu[i] && menu[i].id === cur);
+  });
+});
+
+loadConfig();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
