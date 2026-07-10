@@ -1,18 +1,13 @@
 {
-  "name": "shogatsu-pedidos",
-  "version": "2.0.0",
-  "description": "Sistema Profissional de Pedidos Online Shogatsu",
+  "name": "shogatsu-api",
+  "version": "1.0.0",
+  "description": "API para o Shogatsu Order Flow",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "socket.io": "^4.8.1",
-    "multer": "^2.0.2"
+    "cors": "^2.8.5",
+    "json-server": "^0.17.4"
   }
 }

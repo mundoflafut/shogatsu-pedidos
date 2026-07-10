@@ -1,0 +1,29 @@
+{
+  "products": [
+    {
+      "id": "1",
+      "name": "Osechi Ryori Premium",
+      "description": "Caixa tradicional de Ano Novo com iguarias selecionadas que simbolizam saúde e prosperidade.",
+      "price": 25000,
+      "category": "Osechi",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    },
+    {
+      "id": "2",
+      "name": "Kagami Mochi Decorativo",
+      "description": "Decoração tradicional de arroz para trazer sorte e bênçãos para o novo ano.",
+      "price": 1800,
+      "category": "Decorations",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    },
+    {
+      "id": "3",
+      "name": "Mochi de Morango (Ichigo Daifuku)",
+      "description": "Sweets tradicionais macios recheados com morango fresco e pasta de feijão doce.",
+      "price": 1200,
+      "category": "Sweets",
+      "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
+    }
+  ],
+  "orders": []
+}
