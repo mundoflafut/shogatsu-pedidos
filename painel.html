@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shogatsu · Painel do Restaurante</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --black:#0a0a0a;--panel:#161412;--card:#1e1a16;--border:#2a2420;
+  --red:#c0392b;--red-lt:#e05a4a;--red-dk:#8a1f15;
+  --gold:#c9a84c;--cream:#f5ede0;--muted:#7a6a60;--white:#f0e8e0;
+  --green:#27ae60;--green-lt:#2ecc71;--blue:#2980b9;--blue-lt:#3498db;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;min-height:100vh;}
+button{cursor:pointer;font-family:'Jost',sans-serif;}
+input,select,textarea{font-family:'Jost',sans-serif;}
+
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-box{background:#181210;border:1px solid var(--red-dk);border-radius:8px;padding:40px 32px;width:100%;max-width:320px;text-align:center;}
+.login-title{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--red-lt);margin-bottom:20px;letter-spacing:2px;}
+.login-input{width:100%;background:#111;border:1px solid var(--border);color:var(--white);font-size:18px;padding:12px;border-radius:4px;outline:none;text-align:center;letter-spacing:4px;margin-bottom:14px;}
+.login-btn{width:100%;background:var(--red);color:#fff;border:none;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:12px;border-radius:4px;}
+.login-err{color:var(--red-lt);font-size:12px;margin-top:8px;display:none;}
+
+#app{display:none;}
+.topbar{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-title{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:2px;color:var(--red-lt);}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--green-lt);display:inline-block;margin-right:6px;}
+.conn-dot.off{background:var(--red-lt);}
+.tabs{display:flex;gap:0;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:99;}
+.tab-btn{flex:1;background:none;border:none;color:var(--muted);padding:12px;font-size:11px;letter-spacing:2px;text-transform:uppercase;border-bottom:2px solid transparent;}
+.tab-btn.active{color:var(--red-lt);border-bottom-color:var(--red);}
+.container{max-width:1000px;margin:0 auto;padding:20px;}
+
+.order-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+.col-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;}
+.order-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:12px;animation:slideIn .3s;}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.order-card.new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+.order-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.order-id{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--gold);}
+.order-time{font-size:10px;color:var(--muted);}
+.order-mode{font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:20px;border:1px solid var(--border);color:var(--muted);}
+.order-customer{font-size:13px;margin-bottom:4px;}
+.order-addr{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.order-items{font-size:12px;color:var(--white);margin-bottom:8px;line-height:1.6;}
+.order-items span{color:var(--muted);}
+.order-obs{font-size:11px;color:var(--gold);font-style:italic;margin-bottom:8px;}
+.order-total{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--red-lt);margin-bottom:10px;display:flex;justify-content:space-between;}
+.order-pay{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.order-actions{display:flex;gap:6px;margin-top:10px;}
+.order-actions button{flex:1;border:none;border-radius:4px;padding:8px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#fff;}
+.btn-advance{background:var(--green);}
+.btn-cancel{background:none;border:1px solid var(--red-dk)!important;color:var(--red-lt)!important;}
+.btn-print{background:none;border:1px solid var(--border)!important;color:var(--muted)!important;flex:0 0 auto!important;padding:8px 10px!important;font-size:13px!important;}
+.empty-col{color:var(--muted);font-size:12px;font-style:italic;padding:12px 0;}
+
+.settings-box{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:16px;margin-bottom:12px;}
+.admin-sec-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--red-lt);margin:24px 0 12px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+.admin-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.admin-field{flex:1;min-width:140px;}
+.admin-field label{display:block;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.admin-field input,.admin-field textarea,.admin-field select{width:100%;background:#111;border:1px solid var(--border);color:var(--white);font-size:13px;padding:8px;border-radius:3px;outline:none;}
+.admin-field textarea{resize:vertical;min-height:56px;}
+.admin-item-box{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:8px;}
+.btn-del{background:none;border:none;color:#553;font-size:12px;padding:2px 8px;}
+.btn-del:hover{color:var(--red-lt);}
+.btn-add-item{background:none;border:1px dashed var(--border);color:var(--muted);font-size:11px;letter-spacing:2px;padding:10px;width:100%;border-radius:3px;margin-top:4px;}
+.btn-save{background:var(--green);color:#fff;border:none;font-size:12px;letter-spacing:2px;text-transform:uppercase;padding:14px 28px;border-radius:4px;width:100%;margin-top:16px;}
+.hint{font-size:11px;color:var(--muted);line-height:1.6;margin-top:6px;}
+.photo-thumb{width:70px;height:70px;border:1px dashed var(--border);border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;}
+.photo-thumb span{font-size:9px;color:var(--muted);text-align:center;padding:4px;}
+.report-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+.report-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center;}
+.report-card .value{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--gold);}
+.report-card .label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+.report-table{width:100%;border-collapse:collapse;font-size:12px;}
+.report-table th{text-align:left;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:8px;border-bottom:1px solid var(--border);}
+.report-table td{padding:8px;border-bottom:1px solid var(--border);}
+.danger-box{background:rgba(192,57,43,.08);border:1px solid var(--red-dk);border-radius:6px;padding:16px;}
+.btn-danger{background:var(--red);color:#fff;border:none;font-size:12px;letter-spacing:1px;padding:10px 18px;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <p class="login-title">🍣 Painel Shogatsu</p>
+    <input class="login-input" type="password" id="login-input" placeholder="senha" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <p class="login-err" id="login-err">Senha incorreta</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <span class="topbar-title">⚙️ Painel · Shogatsu</span>
+    <span style="font-size:11px;color:var(--muted);"><span class="conn-dot" id="conn-dot"></span><span id="conn-label">conectado</span></span>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-pedidos" onclick="switchTab('pedidos')">📋 Pedidos</button>
+    <button class="tab-btn" id="tab-config" onclick="switchTab('config')">🍱 Cardápio & Config</button>
+    <button class="tab-btn" id="tab-relatorios" onclick="switchTab('relatorios')">📊 Relatórios</button>
+  </div>
+
+  <div class="container" id="view-pedidos"></div>
+  <div class="container" id="view-config" style="display:none"></div>
+  <div class="container" id="view-relatorios" style="display:none"></div>
+</div>
+
+<script>
+function playDing() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.25, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.6);
+  } catch (e) {}
+}
+
+let token = localStorage.getItem('shog_admin_token') || null;
+let orders = [];
+let cfg = {}, menu = [];
+let currentTab = 'pedidos';
+let es = null;
+
+async function doLogin() {
+  const password = document.getElementById('login-input').value;
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const data = await r.json();
+    if (r.ok) {
+      token = data.token;
+      localStorage.setItem('shog_admin_token', token);
+      boot();
+    } else {
+      const err = document.getElementById('login-err');
+      err.style.display = 'block'; setTimeout(() => err.style.display = 'none', 2000);
+    }
+  } catch (e) { alert('Erro de conexão com o servidor.'); }
+}
+
+async function boot() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  await loadOrders();
+  await loadConfig();
+  renderOrders();
+  connectStream();
+}
+
+async function loadOrders() {
+  const r = await fetch('/api/orders', { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) return logout();
+  orders = await r.json();
+}
+async function loadConfig() {
+  const r = await fetch('/api/config');
+  const data = await r.json();
+  cfg = data.cfg; menu = data.menu;
+  renderConfig();
+}
+function logout() {
+  token = null; localStorage.removeItem('shog_admin_token');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function connectStream() {
+  if (es) es.close();
+  es = new EventSource('/api/stream?token=' + encodeURIComponent(token));
+  es.onopen = () => { document.getElementById('conn-dot').classList.remove('off'); document.getElementById('conn-label').textContent = 'conectado'; };
+  es.onerror = () => { document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-label').textContent = 'reconectando...'; };
+  es.addEventListener('new-order', e => {
+    const order = JSON.parse(e.data);
+    orders.unshift(order);
+    order._isNew = true;
+    renderOrders();
+    playDing();
+    if (Notification && Notification.permission === 'granted') new Notification('Novo pedido #' + order.id);
+  });
+  es.addEventListener('order-updated', e => {
+    const upd = JSON.parse(e.data);
+    const i = orders.findIndex(o => o.id === upd.id);
+    if (i > -1) orders[i] = upd;
+    renderOrders();
+  });
+  es.addEventListener('config-updated', () => loadConfig());
+}
+if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-pedidos').classList.toggle('active', tab === 'pedidos');
+  document.getElementById('tab-config').classList.toggle('active', tab === 'config');
+  document.getElementById('tab-relatorios').classList.toggle('active', tab === 'relatorios');
+  document.getElementById('view-pedidos').style.display = tab === 'pedidos' ? 'block' : 'none';
+  document.getElementById('view-config').style.display = tab === 'config' ? 'block' : 'none';
+  document.getElementById('view-relatorios').style.display = tab === 'relatorios' ? 'block' : 'none';
+  if (tab === 'relatorios') loadReports();
+}
+
+// ═══════════════════════════════════════════
+// PEDIDOS
+// ═══════════════════════════════════════════
+const COLS = [
+  { key: 'novo', label: '🆕 Novos', next: 'preparando', nextLabel: 'Iniciar preparo →' },
+  { key: 'preparando', label: '👨‍🍳 Preparando', next: 'saiu', nextLabel: 'Saiu p/ entrega →' },
+  { key: 'saiu', label: '🛵 A caminho', next: 'entregue', nextLabel: 'Concluir →' },
+  { key: 'entregue', label: '✅ Concluídos', next: null, nextLabel: '' }
+];
+function fmtMoney(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
+function fmtTime(iso) { const d = new Date(iso); return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+
+function renderOrders() {
+  const wrap = document.getElementById('view-pedidos');
+  wrap.innerHTML = `<div class="order-cols">${COLS.map(col => {
+    const list = orders.filter(o => o.status === col.key && o.status !== 'cancelado').slice(0, 30);
+    return `
+      <div>
+        <div class="col-title"><span>${col.label}</span><span>${list.length}</span></div>
+        ${list.length === 0 ? '<div class="empty-col">Nenhum pedido</div>' : list.map(o => orderCardHTML(o, col)).join('')}
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function orderCardHTML(o, col) {
+  const payLabels = { pix: 'PIX', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro' };
+  return `
+    <div class="order-card ${o._isNew ? 'new' : ''}">
+      <div class="order-head">
+        <div><div class="order-id">#${o.id}</div><div class="order-time">${fmtTime(o.createdAt)}</div></div>
+        <div class="order-mode">${o.mode === 'delivery' ? '🛵 Delivery' : '🏪 Retirada'}</div>
+      </div>
+      <div class="order-customer">👤 ${o.name} · 📞 ${o.phone}</div>
+      <div class="order-addr">📍 ${o.address}</div>
+      <div class="order-items">${o.items.map(i => `${i.qty}x ${i.name} <span>(${fmtMoney(i.price * i.qty)})</span>`).join('<br>')}</div>
+      ${o.obs ? `<div class="order-obs">📝 ${o.obs}</div>` : ''}
+      <div class="order-total"><span class="order-pay">${payLabels[o.payMethod] || o.payMethod}${o.troco ? ' (troco p/ ' + fmtMoney(o.troco) + ')' : ''}</span><span>${fmtMoney(o.total)}</span></div>
+      <div class="order-actions">
+        <button class="btn-print" onclick="printOrder('${o.id}')" title="Imprimir comprovante">🖨️</button>
+        ${col.next ? `<button class="btn-advance" onclick="advance('${o.id}','${col.next}')">${col.nextLabel}</button>` : ''}
+        ${col.key !== 'entregue' ? `<button class="btn-cancel" onclick="cancelOrder('${o.id}')">✕</button>` : ''}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+// IMPRESSÃO DO COMPROVANTE
+// ═══════════════════════════════════════════
+function receiptHTML(o) {
+  const payLabels = { pix: 'PIX', credito: 'Cartão Crédito', debito: 'Cartão Débito', dinheiro: 'Dinheiro' };
+  const font = cfg.printFont || 'monospace';
+  const size = cfg.printSize || 14;
+  const color = cfg.printColor || '#000000';
+  const line = '-'.repeat(32);
+  return `
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Pedido #${o.id}</title>
+      <style>
+        @page { margin: 6mm; }
+        body{ font-family: ${font}; font-size: ${size}px; color: ${color}; width: 280px; margin: 0 auto; line-height: 1.45; }
+        .center{ text-align:center; }
+        .b{ font-weight:bold; }
+        .line{ border-top: 1px dashed ${color}; margin: 6px 0; }
+        .row{ display:flex; justify-content:space-between; gap:8px; }
+      </style>
+    </head>
+    <body>
+      <div class="center b" style="font-size:${size + 4}px;">🍣 SHOGATSU</div>
+      <div class="center">${o.mode === 'delivery' ? '🛵 DELIVERY' : '🏪 RETIRADA'}</div>
+      <div class="line"></div>
+      <div class="row"><span>Pedido</span><span class="b">#${o.id}</span></div>
+      <div class="row"><span>Hora</span><span>${fmtTime(o.createdAt)}</span></div>
+      <div class="line"></div>
+      <div class="b">${o.name}</div>
+      <div>${o.phone}</div>
+      ${o.mode === 'delivery' ? `<div>${o.address}</div>` : ''}
+      <div class="line"></div>
+      ${o.items.map(i => `<div class="row"><span>${i.qty}x ${i.name}</span><span>${fmtMoney(i.price * i.qty)}</span></div>`).join('')}
+      ${o.obs ? `<div class="line"></div><div>Obs: ${o.obs}</div>` : ''}
+      <div class="line"></div>
+      ${o.mode === 'delivery' ? `<div class="row"><span>Subtotal</span><span>${fmtMoney(o.subtotal)}</span></div><div class="row"><span>Entrega</span><span>${fmtMoney(o.fee)}</span></div>` : ''}
+      <div class="row b" style="font-size:${size + 2}px;"><span>TOTAL</span><span>${fmtMoney(o.total)}</span></div>
+      <div class="row"><span>Pagamento</span><span>${payLabels[o.payMethod] || o.payMethod}${o.troco ? ' (troco p/ ' + fmtMoney(o.troco) + ')' : ''}</span></div>
+      <div class="line"></div>
+      <div class="center">Obrigado pela preferência!</div>
+    </body>
+    </html>`;
+}
+
+function printOrder(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const win = window.open('', '_blank', 'width=380,height=600');
+  win.document.write(receiptHTML(o));
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
+function previewPrintSettings() {
+  cfg.printFont = document.getElementById('cfg-printfont').value;
+  cfg.printSize = parseInt(document.getElementById('cfg-printsize').value) || 14;
+  cfg.printColor = document.getElementById('cfg-printcolor').value;
+  const fakeOrder = {
+    id: 'SGEXEMPLO', createdAt: new Date().toISOString(), mode: 'delivery',
+    name: 'Cliente Exemplo', phone: '(22) 99999-0000', address: 'Rua das Flores, 123 - Costazul',
+    items: [{ name: 'Sunomono', qty: 1, price: 21.9 }, { name: 'Sashimi Morno', qty: 2, price: 41.9 }],
+    obs: 'Sem cebola', subtotal: 105.7, fee: 8, total: 113.7, payMethod: 'pix', troco: ''
+  };
+  const win = window.open('', '_blank', 'width=380,height=600');
+  win.document.write(receiptHTML(fakeOrder));
+  win.document.close();
+}
+
+async function advance(id, status) {
+  const o = orders.find(x => x.id === id);
+  let body = { status };
+  // Ao aceitar o pedido (novo → preparando), permite ajustar a taxa de entrega antes de confirmar
+  if (status === 'preparando' && o && o.mode === 'delivery') {
+    const input = prompt(`Confirmar taxa de entrega para este pedido (R$):`, Number(o.fee || 0).toFixed(2));
+    if (input === null) return; // cancelou
+    const fee = parseFloat(input.replace(',', '.'));
+    if (isNaN(fee) || fee < 0) { alert('Valor inválido.'); return; }
+    body.fee = fee;
+  }
+  const r = await fetch('/api/orders/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (o && data.order) { Object.assign(o, data.order); o._isNew = false; }
+  renderOrders();
+}
+async function cancelOrder(id) {
+  if (!confirm('Cancelar este pedido?')) return;
+  await fetch('/api/orders/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ status: 'cancelado' }) });
+  orders = orders.filter(o => o.id !== id);
+  renderOrders();
+}
+
+// ═══════════════════════════════════════════
+// CONFIG / CARDÁPIO
+// ═══════════════════════════════════════════
+function renderConfig() {
+  const wrap = document.getElementById('view-config');
+  wrap.innerHTML = `
+    <p class="admin-sec-title">⚙️ Configurações do Restaurante</p>
+    <div class="settings-box">
+      <div class="admin-row" style="align-items:flex-start;">
+        <div class="admin-field" style="max-width:110px;">
+          <label>Logotipo</label>
+          <div class="photo-thumb" style="width:90px;height:90px;" id="thumb-logo" onclick="document.getElementById('file-logo').click()">
+            ${cfg.logoUrl ? `<img src="${cfg.logoUrl}">` : '<span>+ logo</span>'}
+          </div>
+          <input type="file" accept="image/png,image/jpeg,image/webp" id="file-logo" style="display:none" onchange="uploadLogo(this)"/>
+        </div>
+        <div class="admin-field"><label>WhatsApp (com DDI, p/ pedidos)</label><input id="cfg-whats" value="${cfg.whats || ''}"/></div>
+        <div class="admin-field"><label>Telefone da loja (exibido no site)</label><input id="cfg-storephone" value="${cfg.storePhone || ''}" placeholder="(22) 3333-4444"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Pedido mínimo (R$)</label><input id="cfg-min" type="number" step="0.01" value="${cfg.min || 0}"/></div>
+        <div class="admin-field"><label>Tempo estimado</label><input id="cfg-time" value="${cfg.time || ''}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field" style="flex:2"><label>Endereço</label><input id="cfg-addr" value="${cfg.addr || ''}"/></div>
+        <div class="admin-field"><label>Horário</label><input id="cfg-hours" value="${cfg.hours || ''}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Restaurante aberto?</label>
+          <select id="cfg-open"><option value="1" ${Number(cfg.open) ? 'selected' : ''}>✅ Aberto</option><option value="0" ${!Number(cfg.open) ? 'selected' : ''}>❌ Fechado</option></select>
+        </div>
+      </div>
+    </div>
+
+    <p class="admin-sec-title">🛵 Taxa de Entrega</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field">
+          <label>Como calcular a taxa?</label>
+          <select id="cfg-feemode" onchange="renderConfig()">
+            <option value="fixo" ${cfg.feeMode !== 'distancia' ? 'selected' : ''}>Taxa única (fixa)</option>
+            <option value="distancia" ${cfg.feeMode === 'distancia' ? 'selected' : ''}>Automática por distância (km)</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Taxa ${cfg.feeMode === 'distancia' ? 'padrão / fallback' : 'de entrega'} (R$)</label><input id="cfg-fee" type="number" step="0.01" value="${cfg.fee || 0}"/></div>
+      </div>
+      ${cfg.feeMode === 'distancia' ? `
+      <p class="hint">A taxa é calculada automaticamente a partir do CEP/endereço que o cliente digitar no cadastro, com base na distância até a loja. Se não for possível calcular (CEP inválido, endereço não localizado), o sistema usa a taxa padrão/fallback acima — e você ainda pode ajustar o valor manualmente ao aceitar o pedido.</p>
+      <div class="admin-row" style="align-items:flex-end;">
+        <div class="admin-field" style="flex:2">
+          <label>Coordenadas da loja</label>
+          <input disabled value="${(cfg.storeLat && cfg.storeLng) ? `${Number(cfg.storeLat).toFixed(5)}, ${Number(cfg.storeLng).toFixed(5)} ✅` : '⚠️ ainda não localizadas'}"/>
+        </div>
+        <div class="admin-field" style="max-width:220px;">
+          <button class="btn-save" style="margin:0;padding:8px;" onclick="geocodeStore()">📍 Localizar pelo endereço acima</button>
+        </div>
+      </div>
+      <p class="hint" id="geocode-status"></p>
+      <div class="admin-row">
+        <div class="admin-field"><label>Km inclusos na taxa base</label><input id="cfg-feebasekm" type="number" step="0.1" value="${cfg.feeBaseKm ?? 2}"/></div>
+        <div class="admin-field"><label>Valor da taxa base (R$)</label><input id="cfg-feebasevalue" type="number" step="0.01" value="${cfg.feeBaseValue ?? 8}"/></div>
+        <div class="admin-field"><label>R$ por km excedente</label><input id="cfg-feeperkm" type="number" step="0.01" value="${cfg.feePerKm ?? 2.5}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Raio máximo de entrega (km, 0 = sem limite)</label><input id="cfg-feemaxkm" type="number" step="0.1" value="${cfg.feeMaxKm ?? 12}"/></div>
+        <div class="admin-field"><label>Arredondar taxa para múltiplos de (R$)</label><input id="cfg-feeround" type="number" step="0.1" value="${cfg.feeRound ?? 0.5}"/></div>
+      </div>
+      <p class="hint">Exemplo com os valores acima: até ${cfg.feeBaseKm ?? 2} km a taxa é R$ ${Number(cfg.feeBaseValue ?? 8).toFixed(2).replace('.', ',')}; cada km além disso soma R$ ${Number(cfg.feePerKm ?? 2.5).toFixed(2).replace('.', ',')}.</p>
+      ` : `
+      <p class="hint">Essa é a taxa única cobrada em todo pedido de delivery. Você ainda pode ajustar o valor manualmente ao aceitar cada pedido no painel (útil quando a taxa varia por bairro).</p>
+      `}
+    </div>
+
+    <p class="admin-sec-title">📱 Recebimento de PIX (copia-e-cola automático)</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>Sua chave PIX</label><input id="cfg-pixkey" value="${cfg.pixKey || ''}" placeholder="CPF, e-mail, telefone ou chave aleatória"/></div>
+        <div class="admin-field"><label>Nome do recebedor</label><input id="cfg-pixname" value="${cfg.pixName || ''}" placeholder="max 25 letras"/></div>
+        <div class="admin-field"><label>Cidade</label><input id="cfg-pixcity" value="${cfg.pixCity || ''}" placeholder="ex: RIO DAS OSTRAS"/></div>
+      </div>
+      <p class="hint">O QR/código já sai com o valor exato do pedido. O pagamento ainda precisa ser conferido manualmente no seu banco (isso não confirma automaticamente — para confirmação automática seria necessário integrar um gateway como Mercado Pago ou Asaas).</p>
+    </div>
+
+    <p class="admin-sec-title">🔒 Senhas</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>Senha atual do painel</label><input type="password" id="pw-admin-cur"/></div>
+        <div class="admin-field"><label>Nova senha do painel</label><input type="password" id="pw-admin-new"/></div>
+        <div class="admin-field" style="max-width:120px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:8px;" onclick="changePassword('admin')">Trocar</button></div>
+      </div>
+      <p class="hint">A "senha master" é separada da senha do painel: ela só é pedida na hora de apagar pedidos antigos, como uma segunda trava de segurança.</p>
+      <div class="admin-row">
+        <div class="admin-field"><label>Senha master atual</label><input type="password" id="pw-master-cur"/></div>
+        <div class="admin-field"><label>Nova senha master</label><input type="password" id="pw-master-new"/></div>
+        <div class="admin-field" style="max-width:120px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:8px;" onclick="changePassword('master')">Trocar</button></div>
+      </div>
+    </div>
+
+    <p class="admin-sec-title">🖨️ Impressão do Comprovante</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field">
+          <label>Tipo de letra</label>
+          <select id="cfg-printfont">
+            <option value="monospace" ${cfg.printFont === 'monospace' || !cfg.printFont ? 'selected' : ''}>Monoespaçada (estilo cupom fiscal)</option>
+            <option value="sans-serif" ${cfg.printFont === 'sans-serif' ? 'selected' : ''}>Sem serifa (mais limpa)</option>
+            <option value="serif" ${cfg.printFont === 'serif' ? 'selected' : ''}>Serifada (mais formal)</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Tamanho da fonte (px)</label><input id="cfg-printsize" type="number" min="8" max="32" step="1" value="${cfg.printSize || 14}"/></div>
+        <div class="admin-field"><label>Cor do texto</label><input id="cfg-printcolor" type="color" value="${cfg.printColor || '#000000'}" style="height:38px;padding:2px;"/></div>
+      </div>
+      <p class="hint">Vale para o comprovante impresso na aba "Pedidos" (botão 🖨️ em cada pedido). Use o botão abaixo para conferir como fica antes de salvar.</p>
+      <button class="btn-save" style="margin:0;padding:8px 16px;background:var(--border);" onclick="previewPrintSettings()">👁️ Pré-visualizar</button>
+    </div>
+
+    <p class="admin-sec-title">🍱 Cardápio</p>
+    <div id="admin-menu-content">${menu.map((sec, si) => `
+      <p style="font-size:13px;color:var(--gold);margin:16px 0 8px;">${sec.icon} ${sec.title}</p>
+      <div class="settings-box" style="margin-bottom:4px;">
+        <div class="admin-field"><label>Observação da seção</label>
+          <input value="${sec.note || ''}" onchange="menu[${si}].note=this.value"/></div>
+      </div>
+      ${sec.items.map((item, ii) => adminItemHTML(si, ii, item)).join('')}
+      <button class="btn-add-item" onclick="adminAddItem(${si})">+ Adicionar item em ${sec.title}</button>
+    `).join('')}</div>
+
+    <button class="btn-save" onclick="saveConfig()">💾 Salvar tudo</button>
+  `;
+}
+
+function adminItemHTML(si, ii, item) {
+  return `<div class="admin-item-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:10px;color:var(--muted);">ITEM ${ii + 1}</span>
+      <button class="btn-del" onclick="adminDelItem(${si},${ii})">🗑 Remover</button>
+    </div>
+    <div class="admin-row" style="align-items:flex-start;">
+      <div class="admin-field" style="max-width:90px;">
+        <label>Foto</label>
+        <div class="photo-thumb" id="thumb-${si}-${ii}" onclick="document.getElementById('file-${si}-${ii}').click()">
+          ${item.img ? `<img src="${item.img}">` : '<span>+ foto</span>'}
+        </div>
+        <input type="file" accept="image/png,image/jpeg,image/webp" id="file-${si}-${ii}" style="display:none" onchange="uploadPhoto(${si},${ii},this)"/>
+      </div>
+      <div class="admin-field" style="flex:2"><label>Nome</label><input value="${item.name}" onchange="menu[${si}].items[${ii}].name=this.value"/></div>
+      <div class="admin-field"><label>Preço</label><input type="number" step="0.01" value="${item.price}" onchange="menu[${si}].items[${ii}].price=parseFloat(this.value)||0"/></div>
+      <div class="admin-field"><label>Porção</label><input value="${item.qty || ''}" onchange="menu[${si}].items[${ii}].qty=this.value"/></div>
+    </div>
+    <div class="admin-row">
+      <div class="admin-field" style="flex:2"><label>Descrição</label><textarea onchange="menu[${si}].items[${ii}].desc=this.value">${item.desc}</textarea></div>
+      <div class="admin-field"><label>Badge</label><input value="${item.badge || ''}" onchange="menu[${si}].items[${ii}].badge=this.value"/></div>
+    </div>
+  </div>`;
+}
+async function uploadPhoto(si, ii, input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('Imagem muito grande (máx. 4MB).'); return; }
+  const thumb = document.getElementById(`thumb-${si}-${ii}`);
+  thumb.innerHTML = '<span>enviando...</span>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      const data = await r.json();
+      if (r.ok) {
+        menu[si].items[ii].img = data.url;
+        thumb.innerHTML = `<img src="${data.url}">`;
+      } else { alert(data.error || 'Erro ao enviar imagem.'); thumb.innerHTML = '<span>+ foto</span>'; }
+    } catch (e) { alert('Erro de conexão ao enviar imagem.'); thumb.innerHTML = '<span>+ foto</span>'; }
+  };
+  reader.readAsDataURL(file);
+}
+function adminAddItem(si) { menu[si].items.push({ name: 'Novo prato', desc: 'Descrição.', price: 0, qty: '', badge: '' }); renderConfig(); }
+function adminDelItem(si, ii) { if (confirm(`Remover "${menu[si].items[ii].name}"?`)) { menu[si].items.splice(ii, 1); renderConfig(); } }
+
+async function saveConfig() {
+  cfg.whats = document.getElementById('cfg-whats').value.trim();
+  cfg.storePhone = document.getElementById('cfg-storephone').value.trim();
+  cfg.fee = parseFloat(document.getElementById('cfg-fee').value) || 0;
+  cfg.min = parseFloat(document.getElementById('cfg-min').value) || 0;
+  cfg.time = document.getElementById('cfg-time').value.trim();
+  cfg.addr = document.getElementById('cfg-addr').value.trim();
+  cfg.hours = document.getElementById('cfg-hours').value.trim();
+  cfg.open = parseInt(document.getElementById('cfg-open').value);
+  cfg.pixKey = document.getElementById('cfg-pixkey').value.trim();
+  cfg.pixName = document.getElementById('cfg-pixname').value.trim();
+  cfg.pixCity = document.getElementById('cfg-pixcity').value.trim();
+  cfg.printFont = document.getElementById('cfg-printfont').value;
+  cfg.printSize = parseInt(document.getElementById('cfg-printsize').value) || 14;
+  cfg.printColor = document.getElementById('cfg-printcolor').value;
+  cfg.feeMode = document.getElementById('cfg-feemode').value;
+  if (cfg.feeMode === 'distancia') {
+    cfg.feeBaseKm = parseFloat(document.getElementById('cfg-feebasekm').value) || 0;
+    cfg.feeBaseValue = parseFloat(document.getElementById('cfg-feebasevalue').value) || 0;
+    cfg.feePerKm = parseFloat(document.getElementById('cfg-feeperkm').value) || 0;
+    cfg.feeMaxKm = parseFloat(document.getElementById('cfg-feemaxkm').value) || 0;
+    cfg.feeRound = parseFloat(document.getElementById('cfg-feeround').value) || 0;
+  }
+
+  const r = await fetch('/api/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ cfg, menu })
+  });
+  if (r.ok) { alert('✅ Salvo com sucesso!'); } else { alert('Erro ao salvar. Faça login novamente.'); logout(); }
+}
+
+async function geocodeStore() {
+  const status = document.getElementById('geocode-status');
+  const addr = document.getElementById('cfg-addr').value.trim();
+  if (!addr) { alert('Preencha o endereço da loja no campo "Endereço" acima primeiro.'); return; }
+  status.textContent = '🔎 Localizando...';
+  try {
+    const r = await fetch('/api/admin/geocode-store', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ address: addr })
+    });
+    const data = await r.json();
+    if (!r.ok) { status.textContent = '❌ ' + (data.error || 'não foi possível localizar.'); return; }
+    cfg.storeLat = data.lat; cfg.storeLng = data.lng;
+    status.textContent = '✅ Localizado! Endereço encontrado: ' + (data.label || '');
+    renderConfig();
+  } catch (e) { status.textContent = '❌ Erro de conexão ao localizar.'; }
+}
+
+async function uploadLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('Imagem muito grande (máx. 4MB).'); return; }
+  const thumb = document.getElementById('thumb-logo');
+  thumb.innerHTML = '<span>enviando...</span>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      const data = await r.json();
+      if (r.ok) { cfg.logoUrl = data.url; thumb.innerHTML = `<img src="${data.url}">`; }
+      else { alert(data.error || 'Erro ao enviar imagem.'); thumb.innerHTML = '<span>+ logo</span>'; }
+    } catch (e) { alert('Erro de conexão ao enviar imagem.'); thumb.innerHTML = '<span>+ logo</span>'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function changePassword(which) {
+  const cur = document.getElementById(`pw-${which}-cur`).value;
+  const next = document.getElementById(`pw-${which}-new`).value;
+  if (!cur || !next) { alert('Preencha os dois campos.'); return; }
+  const r = await fetch('/api/change-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ which, current: cur, next })
+  });
+  const data = await r.json();
+  if (r.ok) { alert('✅ Senha atualizada!'); document.getElementById(`pw-${which}-cur`).value = ''; document.getElementById(`pw-${which}-new`).value = ''; }
+  else alert(data.error || 'Erro ao trocar senha.');
+}
+
+// ═══════════════════════════════════════════
+// RELATÓRIOS
+// ═══════════════════════════════════════════
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
+async function loadReports() {
+  const wrap = document.getElementById('view-relatorios');
+  if (!wrap.dataset.init) {
+    wrap.dataset.init = '1';
+    wrap.innerHTML = `
+      <div class="admin-row" style="margin-bottom:16px;">
+        <div class="admin-field"><label>De</label><input type="date" id="rep-from" value="${daysAgoISO(30)}"/></div>
+        <div class="admin-field"><label>Até</label><input type="date" id="rep-to" value="${todayISO()}"/></div>
+        <div class="admin-field" style="max-width:140px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:10px;" onclick="loadReports()">Filtrar</button></div>
+      </div>
+      <div id="rep-content"></div>
+      <p class="admin-sec-title">🗑 Excluir pedidos antigos</p>
+      <div class="danger-box">
+        <p class="hint" style="margin-top:0;">Apaga permanentemente do histórico todos os pedidos criados antes da data escolhida. Essa ação não pode ser desfeita e exige a senha master.</p>
+        <div class="admin-row" style="margin-top:10px;">
+          <div class="admin-field"><label>Excluir pedidos antes de</label><input type="date" id="purge-before" value="${daysAgoISO(90)}"/></div>
+          <div class="admin-field"><label>Senha master</label><input type="password" id="purge-pass"/></div>
+          <div class="admin-field" style="max-width:140px;display:flex;align-items:flex-end;"><button class="btn-danger" onclick="purgeOrders()">Excluir</button></div>
+        </div>
+      </div>`;
+  }
+  const from = document.getElementById('rep-from').value;
+  const to = document.getElementById('rep-to').value;
+  const r = await fetch(`/api/reports?from=${from}&to=${to}`, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) return logout();
+  const d = await r.json();
+  const payLabels = { pix: 'PIX', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro' };
+  document.getElementById('rep-content').innerHTML = `
+    <div class="report-cards">
+      <div class="report-card"><div class="value">${d.totalOrders}</div><div class="label">Pedidos</div></div>
+      <div class="report-card"><div class="value">${fmtMoney(d.totalRevenue)}</div><div class="label">Faturamento</div></div>
+      <div class="report-card"><div class="value">${fmtMoney(d.avgTicket)}</div><div class="label">Ticket médio</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin-bottom:8px;">MAIS VENDIDOS</p>
+        <table class="report-table"><tr><th>Item</th><th>Qtd</th><th>Receita</th></tr>
+          ${d.topItems.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${fmtMoney(i.revenue)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+      </div>
+      <div>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin-bottom:8px;">POR PAGAMENTO</p>
+        <table class="report-table"><tr><th>Forma</th><th>Total</th></tr>
+          ${Object.entries(d.byPayMethod).map(([k, v]) => `<tr><td>${payLabels[k] || k}</td><td>${fmtMoney(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin:16px 0 8px;">POR DIA</p>
+        <table class="report-table"><tr><th>Data</th><th>Pedidos</th><th>Receita</th></tr>
+          ${d.byDay.map(x => `<tr><td>${x.date.split('-').reverse().join('/')}</td><td>${x.orders}</td><td>${fmtMoney(x.revenue)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+      </div>
+    </div>`;
+}
+
+async function purgeOrders() {
+  const beforeDate = document.getElementById('purge-before').value;
+  const masterPass = document.getElementById('purge-pass').value;
+  if (!beforeDate || !masterPass) { alert('Preencha a data e a senha master.'); return; }
+  if (!confirm(`Tem certeza? Todos os pedidos antes de ${beforeDate.split('-').reverse().join('/')} serão apagados permanentemente.`)) return;
+  const r = await fetch('/api/orders/purge', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ beforeDate, masterPass })
+  });
+  const data = await r.json();
+  if (r.ok) { alert(`✅ ${data.deleted} pedido(s) apagado(s).`); document.getElementById('purge-pass').value = ''; loadOrders().then(renderOrders); loadReports(); }
+  else alert(data.error || 'Erro ao excluir pedidos.');
+}
+
+if (token) boot();
+</script>
+</body>
+</html>
