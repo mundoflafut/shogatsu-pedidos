@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shogatsu · Painel do Restaurante</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --black:#0a0a0a;--panel:#161412;--card:#1e1a16;--border:#2a2420;
+  --red:#c0392b;--red-lt:#e05a4a;--red-dk:#8a1f15;
+  --gold:#c9a84c;--cream:#f5ede0;--muted:#7a6a60;--white:#f0e8e0;
+  --green:#27ae60;--green-lt:#2ecc71;--blue:#2980b9;--blue-lt:#3498db;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;min-height:100vh;}
+button{cursor:pointer;font-family:'Jost',sans-serif;}
+input,select,textarea{font-family:'Jost',sans-serif;}
+
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-box{background:#181210;border:1px solid var(--red-dk);border-radius:8px;padding:40px 32px;width:100%;max-width:320px;text-align:center;}
+.login-title{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--red-lt);margin-bottom:20px;letter-spacing:2px;}
+.login-input{width:100%;background:#111;border:1px solid var(--border);color:var(--white);font-size:18px;padding:12px;border-radius:4px;outline:none;text-align:center;letter-spacing:4px;margin-bottom:14px;}
+.login-btn{width:100%;background:var(--red);color:#fff;border:none;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:12px;border-radius:4px;}
+.login-err{color:var(--red-lt);font-size:12px;margin-top:8px;display:none;}
+
+#app{display:none;}
+.topbar{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-title{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:2px;color:var(--red-lt);}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--green-lt);display:inline-block;margin-right:6px;}
+.conn-dot.off{background:var(--red-lt);}
+.tabs{display:flex;gap:0;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:99;}
+.tab-btn{flex:1;background:none;border:none;color:var(--muted);padding:12px;font-size:11px;letter-spacing:2px;text-transform:uppercase;border-bottom:2px solid transparent;}
+.tab-btn.active{color:var(--red-lt);border-bottom-color:var(--red);}
+.container{max-width:1000px;margin:0 auto;padding:20px;}
+
+.order-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+.col-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;}
+.order-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:12px;animation:slideIn .3s;}
+.order-card.cancelled{border-color:var(--red-dk);opacity:.85;}
+.cancel-warning{background:rgba(192,57,43,.15);border:1px solid var(--red-dk);color:var(--red-lt);border-radius:4px;padding:8px 10px;font-size:12px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.order-card.new{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+.order-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.order-id{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--gold);}
+.order-time{font-size:10px;color:var(--muted);}
+.order-mode{font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:20px;border:1px solid var(--border);color:var(--muted);}
+.order-customer{font-size:13px;margin-bottom:4px;}
+.order-addr{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.order-items{font-size:12px;color:var(--white);margin-bottom:8px;line-height:1.6;}
+.order-items span{color:var(--muted);}
+.order-obs{font-size:11px;color:var(--gold);font-style:italic;margin-bottom:8px;}
+.order-total{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--red-lt);margin-bottom:10px;display:flex;justify-content:space-between;}
+.order-pay{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.order-actions{display:flex;gap:6px;margin-top:10px;}
+.order-actions button{flex:1;border:none;border-radius:4px;padding:8px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#fff;}
+.btn-advance{background:var(--green);}
+.btn-cancel{background:none;border:1px solid var(--red-dk)!important;color:var(--red-lt)!important;}
+.btn-print{background:none;border:1px solid var(--border)!important;color:var(--muted)!important;flex:0 0 auto!important;padding:8px 10px!important;font-size:13px!important;}
+.print-menu{position:relative;flex:0 0 auto;}
+.print-menu summary{list-style:none;cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:8px 10px;font-size:13px;}
+.print-menu summary::-webkit-details-marker{display:none;}
+.print-menu[open] summary{border-color:var(--gold);color:var(--gold);}
+.print-menu-list{position:absolute;bottom:calc(100% + 6px);right:0;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:170px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.print-menu-list button{background:none;border:none;color:var(--white);text-align:left;padding:8px 10px;border-radius:4px;font-size:12px;text-transform:none;letter-spacing:0;}
+.print-menu-list button:hover{background:var(--card);}
+.print-menu-list .div{border-top:1px solid var(--border);margin:2px 0;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);color:var(--white);padding:10px 18px;border-radius:6px;font-size:13px;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,.5);animation:toast-in .2s ease;}
+.toast.error{border-color:var(--red-lt);}
+@keyframes toast-in{from{opacity:0;transform:translate(-50%,10px);}to{opacity:1;transform:translate(-50%,0);}}
+.item-unavailable{opacity:.5;}
+.btn-avail{background:none!important;border:1px solid var(--green)!important;color:var(--green)!important;font-size:10px!important;padding:4px 8px!important;border-radius:4px!important;letter-spacing:0!important;text-transform:none!important;}
+.btn-avail.off{border-color:var(--red-lt)!important;color:var(--red-lt)!important;}
+.station-icons{display:flex;gap:6px;margin-top:4px;}
+.station-icon-btn{width:36px;height:36px;font-size:17px;border-radius:8px;border:1px solid var(--border,#333);background:var(--card,#1a1a1a);opacity:.45;cursor:pointer;transition:all .15s;}
+.station-icon-btn.on{opacity:1;border-color:var(--gold,#c9a84c);background:rgba(201,168,76,.15);box-shadow:0 0 0 1px var(--gold,#c9a84c) inset;}
+.station-icon-btn:hover{opacity:.8;}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200;}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;width:320px;max-width:90vw;}
+.modal-title{font-size:14px;font-weight:600;color:var(--gold);margin-bottom:14px;}
+.empty-col{color:var(--muted);font-size:12px;font-style:italic;padding:12px 0;}
+
+.settings-box{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:16px;margin-bottom:12px;}
+.admin-sec-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--red-lt);margin:24px 0 12px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+.admin-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.admin-field{flex:1;min-width:140px;}
+.admin-field label{display:block;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.admin-field input,.admin-field textarea,.admin-field select{width:100%;background:#111;border:1px solid var(--border);color:var(--white);font-size:13px;padding:8px;border-radius:3px;outline:none;}
+.admin-field textarea{resize:vertical;min-height:56px;}
+.admin-item-box{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:14px;margin-bottom:8px;}
+.btn-del{background:none;border:none;color:#553;font-size:12px;padding:2px 8px;}
+.btn-del:hover{color:var(--red-lt);}
+.btn-add-item{background:none;border:1px dashed var(--border);color:var(--muted);font-size:11px;letter-spacing:2px;padding:10px;width:100%;border-radius:3px;margin-top:4px;}
+.btn-save{background:var(--green);color:#fff;border:none;font-size:12px;letter-spacing:2px;text-transform:uppercase;padding:14px 28px;border-radius:4px;width:100%;margin-top:16px;}
+.hint{font-size:11px;color:var(--muted);line-height:1.6;margin-top:6px;}
+.photo-thumb{width:70px;height:70px;border:1px dashed var(--border);border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;}
+.photo-thumb span{font-size:9px;color:var(--muted);text-align:center;padding:4px;}
+.report-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+.report-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center;}
+.report-card .value{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--gold);}
+.report-card .label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+.report-table{width:100%;border-collapse:collapse;font-size:12px;}
+.report-table th{text-align:left;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:8px;border-bottom:1px solid var(--border);}
+.report-table td{padding:8px;border-bottom:1px solid var(--border);}
+.danger-box{background:rgba(192,57,43,.08);border:1px solid var(--red-dk);border-radius:6px;padding:16px;}
+.btn-danger{background:var(--red);color:#fff;border:none;font-size:12px;letter-spacing:1px;padding:10px 18px;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <p class="login-title">🍣 Painel Shogatsu</p>
+    <input class="login-input" type="password" id="login-input" placeholder="senha" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <p class="login-err" id="login-err">Senha incorreta</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <span class="topbar-title">⚙️ Painel · Shogatsu</span>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button onclick="openFontModal()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:6px 10px;font-size:11px;">🔤 Fonte</button>
+      <span style="font-size:11px;color:var(--muted);"><span class="conn-dot" id="conn-dot"></span><span id="conn-label">conectado</span></span>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-pedidos" onclick="switchTab('pedidos')">📋 Pedidos</button>
+    <button class="tab-btn" id="tab-config" onclick="switchTab('config')">🍱 Cardápio & Config</button>
+    <button class="tab-btn" id="tab-clientes" onclick="switchTab('clientes')">👥 Clientes</button>
+    <button class="tab-btn" id="tab-relatorios" onclick="switchTab('relatorios')">📊 Relatórios</button>
+  </div>
+
+  <div class="container" id="view-pedidos"></div>
+  <div class="container" id="view-config" style="display:none"></div>
+  <div class="container" id="view-clientes" style="display:none"></div>
+  <div class="container" id="view-relatorios" style="display:none"></div>
+</div>
+
+<div id="cancel-modal-backdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this) closeCancelModal()">
+  <div class="modal-box">
+    <div class="modal-title">🔴 Cancelar pedido #<span id="cancel-order-id"></span></div>
+    <p class="hint" style="margin-top:0;">Escolha ou escreva o motivo — o cliente vai ver essa informação no acompanhamento do pedido.</p>
+    <div id="cancel-reason-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+    <div class="admin-field"><label>Motivo</label><textarea id="cancel-reason-text" rows="3" placeholder="Ex: Item em falta"></textarea></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn-danger" style="margin:0;flex:1;" onclick="confirmCancelOrder()">🔴 Confirmar cancelamento</button>
+      <button style="flex:0;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:0 16px;" onclick="closeCancelModal()">Voltar</button>
+    </div>
+  </div>
+</div>
+
+<div id="font-modal-backdrop" class="modal-backdrop" style="display:none" onclick="if(event.target===this) closeFontModal()">
+  <div class="modal-box">
+    <div class="modal-title">🔤 Fonte de impressão</div>
+    <div class="admin-field"><label>Tipo de letra</label>
+      <select id="qf-font">
+        <option value="monospace">Monoespaçada (estilo cupom fiscal)</option>
+        <option value="sans-serif">Sem serifa (mais limpa)</option>
+        <option value="serif">Serifada (mais formal)</option>
+      </select>
+    </div>
+    <div class="admin-field"><label>Tamanho (px)</label><input id="qf-size" type="number" min="8" max="32" step="1"/></div>
+    <div class="admin-field"><label>Cor</label><input id="qf-color" type="color" style="height:38px;padding:2px;"/></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn-save" style="margin:0;flex:1;" onclick="saveFontModal()">💾 Salvar</button>
+      <button style="flex:0;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:0 16px;" onclick="closeFontModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function toast(msg, isError) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+function playDing() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.25, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.6);
+  } catch (e) {}
+}
+
+let token = localStorage.getItem('shog_admin_token') || null;
+let orders = [];
+let cfg = {}, menu = [];
+let currentTab = 'pedidos';
+let es = null;
+
+async function doLogin() {
+  const password = document.getElementById('login-input').value;
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const data = await r.json();
+    if (r.ok) {
+      token = data.token;
+      localStorage.setItem('shog_admin_token', token);
+      boot();
+    } else {
+      const err = document.getElementById('login-err');
+      err.style.display = 'block'; setTimeout(() => err.style.display = 'none', 2000);
+    }
+  } catch (e) { alert('Erro de conexão com o servidor.'); }
+}
+
+async function boot() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  await loadOrders();
+  await loadConfig();
+  renderOrders();
+  connectStream();
+}
+
+async function loadOrders() {
+  const r = await fetch('/api/orders', { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) return logout();
+  orders = await r.json();
+}
+async function loadConfig() {
+  const r = await fetch('/api/config');
+  const data = await r.json();
+  cfg = data.cfg; menu = data.menu;
+  menu.forEach(sec => (sec.items || []).forEach(it => {
+    if (!Array.isArray(it.stations) || !it.stations.length) it.stations = [it.station || 'cozinha'];
+    delete it.station;
+  }));
+  applyUIFonts();
+  renderConfig();
+}
+function applyUIFonts() {
+  const f = cfg.uiFonts || {};
+  const map = { pedidos: 'view-pedidos', config: 'view-config', clientes: 'view-clientes', relatorios: 'view-relatorios' };
+  Object.entries(map).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.fontSize = (f[key] || 13) + 'px';
+  });
+}
+function logout() {
+  token = null; localStorage.removeItem('shog_admin_token');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function connectStream() {
+  if (es) es.close();
+  es = new EventSource('/api/stream?token=' + encodeURIComponent(token));
+  es.onopen = () => { document.getElementById('conn-dot').classList.remove('off'); document.getElementById('conn-label').textContent = 'conectado'; };
+  es.onerror = () => { document.getElementById('conn-dot').classList.add('off'); document.getElementById('conn-label').textContent = 'reconectando...'; };
+  es.addEventListener('new-order', e => {
+    const order = JSON.parse(e.data);
+    orders.unshift(order);
+    order._isNew = true;
+    renderOrders();
+    playDing();
+    if (Notification && Notification.permission === 'granted') new Notification('Novo pedido #' + order.id);
+  });
+  es.addEventListener('order-updated', e => {
+    const upd = JSON.parse(e.data);
+    const i = orders.findIndex(o => o.id === upd.id);
+    if (i > -1) orders[i] = upd;
+    renderOrders();
+  });
+  es.addEventListener('config-updated', () => loadConfig());
+}
+if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-pedidos').classList.toggle('active', tab === 'pedidos');
+  document.getElementById('tab-config').classList.toggle('active', tab === 'config');
+  document.getElementById('tab-clientes').classList.toggle('active', tab === 'clientes');
+  document.getElementById('tab-relatorios').classList.toggle('active', tab === 'relatorios');
+  document.getElementById('view-pedidos').style.display = tab === 'pedidos' ? 'block' : 'none';
+  document.getElementById('view-config').style.display = tab === 'config' ? 'block' : 'none';
+  document.getElementById('view-clientes').style.display = tab === 'clientes' ? 'block' : 'none';
+  document.getElementById('view-relatorios').style.display = tab === 'relatorios' ? 'block' : 'none';
+  if (tab === 'relatorios') loadReports();
+  if (tab === 'clientes') loadCustomers();
+}
+
+// ═══════════════════════════════════════════
+// PEDIDOS
+// ═══════════════════════════════════════════
+const COLS = [
+  { key: 'novo', label: '🆕 Novos', next: 'preparando', nextLabel: 'Iniciar preparo →' },
+  { key: 'preparando', label: '👨‍🍳 Preparando', next: 'saiu', nextLabel: 'Saiu p/ entrega →' },
+  { key: 'saiu', label: '🛵 A caminho', next: 'entregue', nextLabel: 'Concluir →' },
+  { key: 'entregue', label: '✅ Concluídos', next: null, nextLabel: '' },
+  { key: 'cancelado', label: '🔴 Cancelados', next: null, nextLabel: '' }
+];
+function fmtMoney(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
+function fmtTime(iso) { const d = new Date(iso); return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+
+function renderOrders() {
+  const wrap = document.getElementById('view-pedidos');
+  wrap.innerHTML = `<div class="order-cols">${COLS.map(col => {
+    const list = orders.filter(o => o.status === col.key).slice(0, 30);
+    return `
+      <div>
+        <div class="col-title"><span>${col.label}</span><span>${list.length}</span></div>
+        ${list.length === 0 ? '<div class="empty-col">Nenhum pedido</div>' : list.map(o => orderCardHTML(o, col)).join('')}
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function orderCardHTML(o, col) {
+  const payLabels = { pix: 'PIX', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro' };
+  const isCancelled = o.status === 'cancelado';
+  return `
+    <div class="order-card ${o._isNew ? 'new' : ''} ${isCancelled ? 'cancelled' : ''}">
+      <div class="order-head">
+        <div><div class="order-id">#${o.id}</div><div class="order-time">${fmtTime(o.createdAt)}</div></div>
+        <div class="order-mode">${o.mode === 'delivery' ? '🛵 Delivery' : '🏪 Retirada'}</div>
+      </div>
+      ${isCancelled ? `<div class="cancel-warning">🔴 Cancelado — ${o.cancelReason || 'motivo não informado'}</div>` : ''}
+      <div class="order-customer">👤 ${o.name} · 📞 ${o.phone}</div>
+      <div class="order-addr">📍 ${o.address}</div>
+      <div class="order-items">${o.items.map(i => `${i.qty}x ${i.name} <span>(${fmtMoney(i.price * i.qty)})</span>`).join('<br>')}</div>
+      ${o.obs ? `<div class="order-obs">📝 ${o.obs}</div>` : ''}
+      <div class="order-total"><span class="order-pay">${payLabels[o.payMethod] || o.payMethod}${o.troco ? ' (troco p/ ' + fmtMoney(o.troco) + ')' : ''}</span><span>${fmtMoney(o.total)}</span></div>
+      <div class="order-actions">
+        <details class="print-menu">
+          <summary title="Imprimir vias">🖨️</summary>
+          <div class="print-menu-list">
+            <button onclick="printVia('${o.id}','cozinha')">🍳 Via Cozinha</button>
+            <button onclick="printVia('${o.id}','sushibar')">🍣 Via Sushibar</button>
+            <button onclick="printVia('${o.id}','bar')">🍹 Via Bar</button>
+            <button onclick="printVia('${o.id}','caixa')">🧾 Via Caixa (completa)</button>
+            <div class="div"></div>
+            <button onclick="printAllVias('${o.id}')">🖨️ Imprimir todas as vias</button>
+          </div>
+        </details>
+        ${col.next ? `<button class="btn-advance" onclick="advance('${o.id}','${col.next}')">${col.nextLabel}</button>` : ''}
+        ${col.key !== 'entregue' && col.key !== 'cancelado' ? `<button class="btn-cancel" onclick="cancelOrder('${o.id}')">✕</button>` : ''}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+// IMPRESSÃO DO COMPROVANTE
+// ═══════════════════════════════════════════
+function receiptHTML(o) {
+  const payLabels = { pix: 'PIX', credito: 'Cartão Crédito', debito: 'Cartão Débito', dinheiro: 'Dinheiro' };
+  const font = cfg.printFont || 'monospace';
+  const size = cfg.printSize || 14;
+  const color = cfg.printColor || '#000000';
+  const line = '-'.repeat(32);
+  return `
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Pedido #${o.id}</title>
+      <style>
+        @page { margin: 6mm; }
+        body{ font-family: ${font}; font-size: ${size}px; color: ${color}; width: 280px; margin: 0 auto; line-height: 1.45; }
+        .center{ text-align:center; }
+        .b{ font-weight:bold; }
+        .line{ border-top: 1px dashed ${color}; margin: 6px 0; }
+        .row{ display:flex; justify-content:space-between; gap:8px; }
+      </style>
+    </head>
+    <body>
+      <div class="center b" style="font-size:${size + 4}px;">🍣 SHOGATSU</div>
+      <div class="center">${o.mode === 'delivery' ? '🛵 DELIVERY' : '🏪 RETIRADA'}</div>
+      <div class="line"></div>
+      <div class="row"><span>Pedido</span><span class="b">#${o.id}</span></div>
+      <div class="row"><span>Hora</span><span>${fmtTime(o.createdAt)}</span></div>
+      <div class="line"></div>
+      <div class="b">${o.name}</div>
+      <div>${o.phone}</div>
+      ${o.mode === 'delivery' ? `<div>${o.address}</div>` : ''}
+      <div class="line"></div>
+      ${o.items.map(i => `<div class="row"><span>${i.qty}x ${i.name}</span><span>${fmtMoney(i.price * i.qty)}</span></div>`).join('')}
+      ${o.obs ? `<div class="line"></div><div>Obs: ${o.obs}</div>` : ''}
+      <div class="line"></div>
+      ${o.mode === 'delivery' ? `<div class="row"><span>Subtotal</span><span>${fmtMoney(o.subtotal)}</span></div><div class="row"><span>Entrega</span><span>${fmtMoney(o.fee)}</span></div>` : ''}
+      <div class="row b" style="font-size:${size + 2}px;"><span>TOTAL</span><span>${fmtMoney(o.total)}</span></div>
+      <div class="row"><span>Pagamento</span><span>${payLabels[o.payMethod] || o.payMethod}${o.troco ? ' (troco p/ ' + fmtMoney(o.troco) + ')' : ''}</span></div>
+      <div class="line"></div>
+      <div class="center">Obrigado pela preferência!</div>
+    </body>
+    </html>`;
+}
+
+function stationReceiptHTML(o, station) {
+  const font = cfg.printFont || 'monospace';
+  const size = cfg.printSize || 14;
+  const color = cfg.printColor || '#000000';
+  const payLabels = { pix: 'PIX', credito: 'Cartão Crédito', debito: 'Cartão Débito', dinheiro: 'Dinheiro' };
+  const stLabels = { cozinha: '🍳 VIA COZINHA', sushibar: '🍣 VIA SUSHIBAR', bar: '🍹 VIA BAR', caixa: '🧾 COMPROVANTE' };
+  const items = station === 'caixa' ? o.items : o.items.filter(i => (i.stations || [i.station || 'cozinha']).includes(station));
+  return `
+    <html>
+    <head><meta charset="utf-8"><title>Pedido #${o.id} - ${station}</title>
+    <style>
+      @page { margin: 6mm; }
+      body{ font-family: ${font}; font-size: ${size}px; color: ${color}; width: 280px; margin: 0 auto; line-height: 1.45; }
+      .center{ text-align:center; } .b{ font-weight:bold; }
+      .line{ border-top: 1px dashed ${color}; margin: 6px 0; }
+      .row{ display:flex; justify-content:space-between; gap:8px; }
+    </style></head>
+    <body>
+      <div class="center b" style="font-size:${size + 4}px;">🍣 SHOGATSU</div>
+      <div class="center b">${stLabels[station]}</div>
+      <div class="line"></div>
+      <div class="row"><span>Pedido</span><span class="b">#${o.id}</span></div>
+      <div class="row"><span>Hora</span><span>${fmtTime(o.createdAt)}</span></div>
+      <div>${o.mode === 'delivery' ? '🛵 DELIVERY' : '🏪 RETIRADA'}</div>
+      <div class="line"></div>
+      ${items.map(i => `<div class="row"><span>${i.qty}x ${i.name}</span>${station === 'caixa' ? `<span>${fmtMoney(i.price * i.qty)}</span>` : ''}</div>`).join('')}
+      ${o.obs ? `<div class="line"></div><div>Obs: ${o.obs}</div>` : ''}
+      ${station === 'caixa' ? `
+        <div class="line"></div>
+        <div class="row"><span>Subtotal</span><span>${fmtMoney(o.subtotal)}</span></div>
+        <div class="row"><span>Entrega</span><span>${fmtMoney(o.fee)}</span></div>
+        <div class="row b" style="font-size:${size + 2}px;"><span>TOTAL</span><span>${fmtMoney(o.total)}</span></div>
+        <div class="row"><span>Pagamento</span><span>${payLabels[o.payMethod] || o.payMethod}</span></div>
+      ` : `<div class="line"></div><div>${o.name} · ${o.phone}</div>`}
+      <div class="line"></div>
+      <div class="center">Obrigado pela preferência!</div>
+    </body></html>`;
+}
+
+async function printVia(orderId, station) {
+  try {
+    const r = await fetch('/api/print', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ orderId, station })
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Erro ao imprimir.', true); return; }
+    if (data.skipped) { toast(`Nenhum item da via "${station}" nesse pedido.`); return; }
+    if (data.method === 'navegador') {
+      const win = window.open('', '_blank', 'width=380,height=600');
+      win.document.write(stationReceiptHTML(data.order, station));
+      win.document.close();
+      win.onload = () => { win.focus(); win.print(); };
+    } else {
+      toast(`✅ Impresso na impressora (${data.method}) — via ${station}.`);
+    }
+  } catch (e) { toast('Erro de conexão ao imprimir.', true); }
+}
+
+async function printAllVias(orderId) {
+  for (const st of ['cozinha', 'sushibar', 'bar', 'caixa']) {
+    await printVia(orderId, st);
+    await new Promise(r => setTimeout(r, 350)); // evita bloqueio de pop-up do navegador
+  }
+}
+
+// ═══════════════════════════════════════════
+// MODAL RÁPIDO DE FONTE
+// ═══════════════════════════════════════════
+function openFontModal() {
+  document.getElementById('qf-font').value = cfg.printFont || 'monospace';
+  document.getElementById('qf-size').value = cfg.printSize || 14;
+  document.getElementById('qf-color').value = cfg.printColor || '#000000';
+  document.getElementById('font-modal-backdrop').style.display = 'flex';
+}
+function closeFontModal() { document.getElementById('font-modal-backdrop').style.display = 'none'; }
+async function saveFontModal() {
+  cfg.printFont = document.getElementById('qf-font').value;
+  cfg.printSize = parseInt(document.getElementById('qf-size').value) || 14;
+  cfg.printColor = document.getElementById('qf-color').value;
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ cfg })
+    });
+    if (r.ok) { toast('✅ Fonte de impressão salva!'); closeFontModal(); if (document.getElementById('view-config').style.display !== 'none') renderConfig(); }
+    else toast('Erro ao salvar.', true);
+  } catch (e) { toast('Erro de conexão ao salvar.', true); }
+}
+
+function previewPrintSettings() {
+  cfg.printFont = document.getElementById('cfg-printfont').value;
+  cfg.printSize = parseInt(document.getElementById('cfg-printsize').value) || 14;
+  cfg.printColor = document.getElementById('cfg-printcolor').value;
+  const fakeOrder = {
+    id: 'SGEXEMPLO', createdAt: new Date().toISOString(), mode: 'delivery',
+    name: 'Cliente Exemplo', phone: '(22) 99999-0000', address: 'Rua das Flores, 123 - Costazul',
+    items: [{ name: 'Sunomono', qty: 1, price: 21.9 }, { name: 'Sashimi Morno', qty: 2, price: 41.9 }],
+    obs: 'Sem cebola', subtotal: 105.7, fee: 8, total: 113.7, payMethod: 'pix', troco: ''
+  };
+  const win = window.open('', '_blank', 'width=380,height=600');
+  win.document.write(receiptHTML(fakeOrder));
+  win.document.close();
+}
+
+async function advance(id, status) {
+  const o = orders.find(x => x.id === id);
+  let body = { status };
+  // Ao aceitar o pedido (novo → preparando), permite ajustar a taxa de entrega antes de confirmar
+  if (status === 'preparando' && o && o.mode === 'delivery') {
+    const input = prompt(`Confirmar taxa de entrega para este pedido (R$):`, Number(o.fee || 0).toFixed(2));
+    if (input === null) return; // cancelou
+    const fee = parseFloat(input.replace(',', '.'));
+    if (isNaN(fee) || fee < 0) { alert('Valor inválido.'); return; }
+    body.fee = fee;
+  }
+  const r = await fetch('/api/orders/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (o && data.order) { Object.assign(o, data.order); o._isNew = false; }
+  renderOrders();
+}
+let cancelTargetId = null;
+function cancelOrder(id) {
+  cancelTargetId = id;
+  document.getElementById('cancel-order-id').textContent = id;
+  document.getElementById('cancel-reason-text').value = '';
+  const chipsWrap = document.getElementById('cancel-reason-chips');
+  chipsWrap.innerHTML = (cfg.cancelReasons || []).map(r =>
+    `<button type="button" style="background:var(--card);border:1px solid var(--border);color:var(--white);border-radius:14px;padding:6px 12px;font-size:11px;" onclick="document.getElementById('cancel-reason-text').value='${r.replace(/'/g, "\\'")}'">${r}</button>`
+  ).join('');
+  document.getElementById('cancel-modal-backdrop').style.display = 'flex';
+}
+function closeCancelModal() { document.getElementById('cancel-modal-backdrop').style.display = 'none'; cancelTargetId = null; }
+async function confirmCancelOrder() {
+  const reason = document.getElementById('cancel-reason-text').value.trim() || 'Não informado';
+  if (!cancelTargetId) return;
+  await fetch('/api/orders/' + cancelTargetId, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ status: 'cancelado', cancelReason: reason })
+  });
+  const o = orders.find(x => x.id === cancelTargetId);
+  if (o) { o.status = 'cancelado'; o.cancelReason = reason; }
+  closeCancelModal();
+  renderOrders();
+  toast('Pedido cancelado e motivo registrado.');
+}
+
+// ═══════════════════════════════════════════
+// CONFIG / CARDÁPIO
+// ═══════════════════════════════════════════
+function logoPreviewStyle(c) {
+  const size = c.logoSize || 40;
+  const shape = c.logoShape || 'retangular';
+  if (shape === 'redondo') return `height:${size}px;width:${size}px;border-radius:50%;object-fit:cover;`;
+  if (shape === 'quadrado') return `height:${size}px;width:${size}px;border-radius:6px;object-fit:cover;`;
+  return `height:${size}px;width:auto;max-width:${size * 3}px;border-radius:4px;object-fit:contain;`;
+}
+function updateLogoPreview() {
+  const img = document.getElementById('logo-preview-img');
+  if (!img) return;
+  const shape = document.getElementById('cfg-logoshape').value;
+  const size = parseInt(document.getElementById('cfg-logosize').value) || 40;
+  img.style.cssText = logoPreviewStyle({ logoShape: shape, logoSize: size });
+}
+
+function renderConfig() {
+  const wrap = document.getElementById('view-config');
+  wrap.innerHTML = `
+    <p class="admin-sec-title">⚙️ Configurações do Restaurante</p>
+    <div class="settings-box">
+      <div class="admin-row" style="align-items:flex-start;">
+        <div class="admin-field" style="max-width:110px;">
+          <label>Logotipo</label>
+          <div class="photo-thumb" style="width:90px;height:90px;" id="thumb-logo" onclick="document.getElementById('file-logo').click()">
+            ${cfg.logoUrl ? `<img src="${cfg.logoUrl}">` : '<span>+ logo</span>'}
+          </div>
+          <input type="file" accept="image/png,image/jpeg,image/webp" id="file-logo" style="display:none" onchange="uploadLogo(this)"/>
+        </div>
+        <div class="admin-field"><label>Formato do logo no site</label>
+          <select id="cfg-logoshape" onchange="updateLogoPreview()">
+            <option value="redondo" ${cfg.logoShape === 'redondo' ? 'selected' : ''}>⚪ Redondo</option>
+            <option value="quadrado" ${cfg.logoShape === 'quadrado' ? 'selected' : ''}>◻️ Quadrado</option>
+            <option value="retangular" ${(cfg.logoShape === 'retangular' || !cfg.logoShape) ? 'selected' : ''}>▭ Retangular</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Tamanho no site (px)</label><input id="cfg-logosize" type="number" min="20" max="120" step="1" value="${cfg.logoSize || 40}" oninput="updateLogoPreview()"/></div>
+        <div class="admin-field" style="max-width:90px;"><label>Prévia</label>
+          <div style="width:90px;height:60px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--border);border-radius:4px;">
+            ${cfg.logoUrl ? `<img id="logo-preview-img" src="${cfg.logoUrl}" style="${logoPreviewStyle(cfg)}">` : '<span style="font-size:9px;color:var(--muted);">sem logo</span>'}
+          </div>
+        </div>
+        <div class="admin-field"><label>WhatsApp (com DDI, p/ pedidos)</label><input id="cfg-whats" value="${cfg.whats || ''}"/></div>
+        <div class="admin-field"><label>Telefone da loja (exibido no site)</label><input id="cfg-storephone" value="${cfg.storePhone || ''}" placeholder="(22) 3333-4444"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Pedido mínimo (R$)</label><input id="cfg-min" type="number" step="0.01" value="${cfg.min || 0}"/></div>
+        <div class="admin-field"><label>Tempo estimado</label><input id="cfg-time" value="${cfg.time || ''}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field" style="flex:2"><label>Endereço</label><input id="cfg-addr" value="${cfg.addr || ''}"/></div>
+        <div class="admin-field"><label>Horário</label><input id="cfg-hours" value="${cfg.hours || ''}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Restaurante aberto?</label>
+          <select id="cfg-open"><option value="1" ${Number(cfg.open) ? 'selected' : ''}>✅ Aberto</option><option value="0" ${!Number(cfg.open) ? 'selected' : ''}>❌ Fechado</option></select>
+        </div>
+      </div>
+    </div>
+
+    <p class="admin-sec-title">🛵 Taxa de Entrega</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field">
+          <label>Como calcular a taxa?</label>
+          <select id="cfg-feemode" onchange="cfg.feeMode=this.value;renderConfig()">
+            <option value="fixo" ${cfg.feeMode !== 'distancia' ? 'selected' : ''}>Taxa única (fixa)</option>
+            <option value="distancia" ${cfg.feeMode === 'distancia' ? 'selected' : ''}>Automática por distância (km)</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Taxa ${cfg.feeMode === 'distancia' ? 'padrão / fallback' : 'de entrega'} (R$)</label><input id="cfg-fee" type="number" step="0.01" value="${cfg.fee || 0}"/></div>
+      </div>
+      ${cfg.feeMode === 'distancia' ? `
+      <p class="hint">A taxa é calculada automaticamente a partir do CEP/endereço que o cliente digitar no cadastro, com base na distância até a loja. Se não for possível calcular (CEP inválido, endereço não localizado), o sistema usa a taxa padrão/fallback acima — e você ainda pode ajustar o valor manualmente ao aceitar o pedido.</p>
+      <div class="admin-row" style="align-items:flex-end;">
+        <div class="admin-field" style="flex:2">
+          <label>Coordenadas da loja</label>
+          <input disabled value="${(cfg.storeLat && cfg.storeLng) ? `${Number(cfg.storeLat).toFixed(5)}, ${Number(cfg.storeLng).toFixed(5)} ✅` : '⚠️ ainda não localizadas'}"/>
+        </div>
+        <div class="admin-field" style="max-width:220px;">
+          <button class="btn-save" style="margin:0;padding:8px;" onclick="geocodeStore()">📍 Localizar pelo endereço acima</button>
+        </div>
+      </div>
+      <p class="hint" id="geocode-status"></p>
+      <div class="admin-row">
+        <div class="admin-field"><label>Km inclusos na taxa base</label><input id="cfg-feebasekm" type="number" step="0.1" value="${cfg.feeBaseKm ?? 2}"/></div>
+        <div class="admin-field"><label>Valor da taxa base (R$)</label><input id="cfg-feebasevalue" type="number" step="0.01" value="${cfg.feeBaseValue ?? 8}"/></div>
+        <div class="admin-field"><label>R$ por km excedente</label><input id="cfg-feeperkm" type="number" step="0.01" value="${cfg.feePerKm ?? 2.5}"/></div>
+      </div>
+      <div class="admin-row">
+        <div class="admin-field"><label>Raio máximo de entrega (km, 0 = sem limite)</label><input id="cfg-feemaxkm" type="number" step="0.1" value="${cfg.feeMaxKm ?? 12}"/></div>
+        <div class="admin-field"><label>Arredondar taxa para múltiplos de (R$)</label><input id="cfg-feeround" type="number" step="0.1" value="${cfg.feeRound ?? 0.5}"/></div>
+      </div>
+      <p class="hint">Exemplo com os valores acima: até ${cfg.feeBaseKm ?? 2} km a taxa é R$ ${Number(cfg.feeBaseValue ?? 8).toFixed(2).replace('.', ',')}; cada km além disso soma R$ ${Number(cfg.feePerKm ?? 2.5).toFixed(2).replace('.', ',')}.</p>
+      ` : `
+      <p class="hint">Essa é a taxa única cobrada em todo pedido de delivery. Você ainda pode ajustar o valor manualmente ao aceitar cada pedido no painel (útil quando a taxa varia por bairro).</p>
+      `}
+    </div>
+
+    <p class="admin-sec-title">📱 Recebimento de PIX (copia-e-cola automático)</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>Sua chave PIX</label><input id="cfg-pixkey" value="${cfg.pixKey || ''}" placeholder="CPF, e-mail, telefone ou chave aleatória"/></div>
+        <div class="admin-field"><label>Nome do recebedor</label><input id="cfg-pixname" value="${cfg.pixName || ''}" placeholder="max 25 letras"/></div>
+        <div class="admin-field"><label>Cidade</label><input id="cfg-pixcity" value="${cfg.pixCity || ''}" placeholder="ex: RIO DAS OSTRAS"/></div>
+      </div>
+      <p class="hint">O QR/código já sai com o valor exato do pedido. O pagamento ainda precisa ser conferido manualmente no seu banco (isso não confirma automaticamente — para confirmação automática seria necessário integrar um gateway como Mercado Pago ou Asaas).</p>
+    </div>
+
+    <p class="admin-sec-title">🔒 Senhas</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>Senha atual do painel</label><input type="password" id="pw-admin-cur"/></div>
+        <div class="admin-field"><label>Nova senha do painel</label><input type="password" id="pw-admin-new"/></div>
+        <div class="admin-field" style="max-width:120px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:8px;" onclick="changePassword('admin')">Trocar</button></div>
+      </div>
+      <p class="hint">A "senha master" é separada da senha do painel: ela só é pedida na hora de apagar pedidos antigos, como uma segunda trava de segurança.</p>
+      <div class="admin-row">
+        <div class="admin-field"><label>Senha master atual</label><input type="password" id="pw-master-cur"/></div>
+        <div class="admin-field"><label>Nova senha master</label><input type="password" id="pw-master-new"/></div>
+        <div class="admin-field" style="max-width:120px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:8px;" onclick="changePassword('master')">Trocar</button></div>
+      </div>
+    </div>
+
+    <p class="admin-sec-title">🖨️ Impressão do Comprovante</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field">
+          <label>Tipo de letra</label>
+          <select id="cfg-printfont">
+            <option value="monospace" ${cfg.printFont === 'monospace' || !cfg.printFont ? 'selected' : ''}>Monoespaçada (estilo cupom fiscal)</option>
+            <option value="sans-serif" ${cfg.printFont === 'sans-serif' ? 'selected' : ''}>Sem serifa (mais limpa)</option>
+            <option value="serif" ${cfg.printFont === 'serif' ? 'selected' : ''}>Serifada (mais formal)</option>
+          </select>
+        </div>
+        <div class="admin-field"><label>Tamanho da fonte (px)</label><input id="cfg-printsize" type="number" min="8" max="32" step="1" value="${cfg.printSize || 14}"/></div>
+        <div class="admin-field"><label>Cor do texto</label><input id="cfg-printcolor" type="color" value="${cfg.printColor || '#000000'}" style="height:38px;padding:2px;"/></div>
+      </div>
+      <p class="hint">Vale para o comprovante impresso na aba "Pedidos" (botão 🖨️ em cada pedido). Use o botão abaixo para conferir como fica antes de salvar.</p>
+      <button class="btn-save" style="margin:0;padding:8px 16px;background:var(--border);" onclick="previewPrintSettings()">👁️ Pré-visualizar</button>
+    </div>
+
+    <p class="admin-sec-title">🖨️ Impressoras por Via (Cozinha, Sushibar, Bar, Caixa)</p>
+    <div class="settings-box">
+      <p class="hint">
+        <strong>Navegador</strong>: usa a impressora já instalada no computador/celular (USB ou rede), abre a tela de imprimir normalmente — funciona sempre, sem configuração extra.<br>
+        <strong>Rede (IP)</strong>: envia direto para uma impressora térmica de rede (porta 9100 padrão) sem abrir tela nenhuma — ideal pra imprimir do celular sem toque a mais.<br>
+        <strong>USB (avançado)</strong>: para impressora ligada por USB direto no computador que roda o sistema, informando o caminho do dispositivo (ex: <code>/dev/usb/lp0</code>, Linux/Raspberry Pi).
+      </p>
+      ${['cozinha', 'sushibar', 'bar', 'caixa'].map(st => {
+        const s = cfg.stations?.[st] || { method: 'navegador', ip: '', port: 9100, device: '' };
+        const icons = { cozinha: '🍳', sushibar: '🍣', bar: '🍹', caixa: '🧾' };
+        const labels = { cozinha: 'Cozinha', sushibar: 'Sushibar', bar: 'Bar', caixa: 'Caixa' };
+        return `
+        <div class="admin-row" style="align-items:flex-end;border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+          <div class="admin-field" style="max-width:120px;"><label>${icons[st]} Via</label><input disabled value="${labels[st]}"/></div>
+          <div class="admin-field">
+            <label>Conexão</label>
+            <select id="cfg-st-${st}-method" onchange="cfg.stations['${st}']={...(cfg.stations['${st}']||{}),method:this.value};renderConfig()">
+              <option value="navegador" ${s.method === 'navegador' || !s.method ? 'selected' : ''}>🖥️ Navegador</option>
+              <option value="rede" ${s.method === 'rede' ? 'selected' : ''}>🌐 Rede (IP)</option>
+              <option value="usb" ${s.method === 'usb' ? 'selected' : ''}>🔌 USB (avançado)</option>
+            </select>
+          </div>
+          ${s.method === 'rede' ? `
+          <div class="admin-field"><label>IP da impressora</label><input id="cfg-st-${st}-ip" placeholder="192.168.0.50" value="${s.ip || ''}"/></div>
+          <div class="admin-field" style="max-width:90px;"><label>Porta</label><input id="cfg-st-${st}-port" type="number" value="${s.port || 9100}"/></div>
+          ` : `<input type="hidden" id="cfg-st-${st}-ip" value="${s.ip || ''}"/><input type="hidden" id="cfg-st-${st}-port" value="${s.port || 9100}"/>`}
+          ${s.method === 'usb' ? `
+          <div class="admin-field" style="flex:2"><label>Caminho do dispositivo USB</label><input id="cfg-st-${st}-device" placeholder="/dev/usb/lp0" value="${s.device || ''}"/></div>
+          ` : `<input type="hidden" id="cfg-st-${st}-device" value="${s.device || ''}"/>`}
+          <div class="admin-field" style="max-width:130px;">
+            <button class="btn-save" style="margin:0;padding:8px;background:var(--border);" onclick="testPrint('${st}')">🖨️ Testar</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <p class="admin-sec-title">🔴 Motivos de Cancelamento</p>
+    <div class="settings-box">
+      <p class="hint" style="margin-top:0;">Esses motivos aparecem como atalhos rápidos na hora de cancelar um pedido no painel. O cliente vê o motivo escolhido na tela de acompanhamento do pedido dele.</p>
+      <div id="cancel-reasons-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">
+        ${(cfg.cancelReasons || []).map((r, i) => `
+          <span style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px 8px 6px 12px;font-size:11px;display:flex;align-items:center;gap:6px;">
+            ${r} <button onclick="removeCancelReason(${i})" style="background:none;border:none;color:var(--red-lt);cursor:pointer;font-size:13px;padding:0;">✕</button>
+          </span>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <input id="new-cancel-reason" placeholder="Novo motivo..." style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--white);"/>
+        <button class="btn-save" style="margin:0;padding:8px 16px;" onclick="addCancelReason()">+ Adicionar</button>
+      </div>
+    </div>
+
+    <p class="admin-sec-title">🔤 Aparência do Painel (tamanho da fonte por aba)</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>📋 Pedidos (px)</label><input id="cfg-fs-pedidos" type="number" min="10" max="22" value="${cfg.uiFonts?.pedidos ?? 13}"/></div>
+        <div class="admin-field"><label>🍱 Cardápio & Config (px)</label><input id="cfg-fs-config" type="number" min="10" max="22" value="${cfg.uiFonts?.config ?? 13}"/></div>
+        <div class="admin-field"><label>👥 Clientes (px)</label><input id="cfg-fs-clientes" type="number" min="10" max="22" value="${cfg.uiFonts?.clientes ?? 13}"/></div>
+        <div class="admin-field"><label>📊 Relatórios (px)</label><input id="cfg-fs-relatorios" type="number" min="10" max="22" value="${cfg.uiFonts?.relatorios ?? 13}"/></div>
+      </div>
+      <p class="hint">Ajusta o tamanho do texto de cada aba do painel — útil se estiver usando uma tela menor ou preferir letras maiores. Aplica assim que você salvar.</p>
+    </div>
+
+    <p class="admin-sec-title">🌈 Paleta de Cores do Site (cliente)</p>
+    <div class="settings-box">
+      <div class="admin-row">
+        <div class="admin-field"><label>Cor principal (detalhes, botões)</label><input id="cfg-theme-primary" type="color" value="${cfg.theme?.primary || '#c9a84c'}" style="height:38px;padding:2px;"/></div>
+        <div class="admin-field"><label>Cor de destaque (avisos, badges)</label><input id="cfg-theme-accent" type="color" value="${cfg.theme?.accent || '#c0392b'}" style="height:38px;padding:2px;"/></div>
+        <div class="admin-field"><label>Cor de fundo</label><input id="cfg-theme-bg" type="color" value="${cfg.theme?.bg || '#0a0a0a'}" style="height:38px;padding:2px;"/></div>
+      </div>
+      <p class="hint">Essas cores mudam a aparência do site que o cliente vê (não mexe no painel). Salve e recarregue o site do cliente pra conferir.</p>
+    </div>
+
+    <p class="admin-sec-title">🖼️ Slider da Capa (imagens rotativas no topo do site)</p>
+    <div class="settings-box">
+      <p class="hint" style="margin-top:0;">Adicione fotos pra aparecerem em rotação automática no topo do site — pratos em destaque, promoções, o ambiente da loja etc. Se não adicionar nenhuma, o site mostra a faixa padrão.</p>
+      <div id="slides-list" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+        ${(cfg.slides || []).map((s, i) => `
+          <div style="position:relative;width:120px;">
+            <img src="${s}" style="width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">
+            <button onclick="removeSlide(${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:1px solid var(--red-dk);color:var(--red-lt);border-radius:4px;width:22px;height:22px;font-size:11px;">✕</button>
+            <div style="display:flex;justify-content:center;gap:4px;margin-top:4px;">
+              <button onclick="moveSlide(${i},-1)" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:3px;font-size:10px;padding:2px 6px;" ${i === 0 ? 'disabled' : ''}>◀</button>
+              <button onclick="moveSlide(${i},1)" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:3px;font-size:10px;padding:2px 6px;" ${i === (cfg.slides.length - 1) ? 'disabled' : ''}>▶</button>
+            </div>
+          </div>`).join('')}
+      </div>
+      <input type="file" accept="image/png,image/jpeg,image/webp" id="file-slide" style="display:none" onchange="uploadSlide(this)"/>
+      <button class="btn-save" style="margin:0;padding:8px 16px;background:var(--border);" onclick="document.getElementById('file-slide').click()">+ Adicionar imagem ao slider</button>
+    </div>
+
+    <p class="admin-sec-title">🍱 Cardápio</p>
+    <div id="admin-menu-content">${menu.map((sec, si) => `
+      <p style="font-size:13px;color:var(--gold);margin:16px 0 8px;">${sec.icon} ${sec.title}</p>
+      <div class="settings-box" style="margin-bottom:4px;">
+        <div class="admin-field"><label>Observação da seção</label>
+          <input value="${sec.note || ''}" onchange="menu[${si}].note=this.value"/></div>
+      </div>
+      ${sec.items.map((item, ii) => adminItemHTML(si, ii, item)).join('')}
+      <button class="btn-add-item" onclick="adminAddItem(${si})">+ Adicionar item em ${sec.title}</button>
+    `).join('')}</div>
+
+    <button class="btn-save" onclick="saveConfig()">💾 Salvar tudo</button>
+  `;
+}
+
+function adminItemHTML(si, ii, item) {
+  const isAvail = item.available !== false;
+  return `<div class="admin-item-box ${isAvail ? '' : 'item-unavailable'}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:10px;color:var(--muted);">ITEM ${ii + 1}${isAvail ? '' : ' · INDISPONÍVEL'}</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-avail ${isAvail ? '' : 'off'}" onclick="toggleAvailable(${si},${ii})">${isAvail ? '✅ Disponível' : '🚫 Indisponível'}</button>
+        <button class="btn-del" onclick="adminDelItem(${si},${ii})">🗑 Remover</button>
+      </div>
+    </div>
+    <div class="admin-row" style="align-items:flex-start;">
+      <div class="admin-field" style="max-width:90px;">
+        <label>Foto</label>
+        <div class="photo-thumb" id="thumb-${si}-${ii}" onclick="document.getElementById('file-${si}-${ii}').click()">
+          ${item.img ? `<img src="${item.img}">` : '<span>+ foto</span>'}
+        </div>
+        <input type="file" accept="image/png,image/jpeg,image/webp" id="file-${si}-${ii}" style="display:none" onchange="uploadPhoto(${si},${ii},this)"/>
+      </div>
+      <div class="admin-field" style="flex:2"><label>Nome</label><input value="${item.name}" onchange="menu[${si}].items[${ii}].name=this.value"/></div>
+      <div class="admin-field"><label>Preço</label><input type="number" step="0.01" value="${item.price}" onchange="menu[${si}].items[${ii}].price=parseFloat(this.value)||0"/></div>
+      <div class="admin-field"><label>Porção</label><input value="${item.qty || ''}" onchange="menu[${si}].items[${ii}].qty=this.value"/></div>
+    </div>
+    <div class="admin-row">
+      <div class="admin-field" style="flex:2"><label>Descrição</label><textarea onchange="menu[${si}].items[${ii}].desc=this.value">${item.desc}</textarea></div>
+      <div class="admin-field"><label>Badge</label><input value="${item.badge || ''}" onchange="menu[${si}].items[${ii}].badge=this.value"/></div>
+      <div class="admin-field"><label>Via de impressão (toque pra marcar 1 ou mais)</label>
+        <div class="station-icons">
+          <button type="button" class="station-icon-btn ${(item.stations || []).includes('cozinha') ? 'on' : ''}" title="Cozinha" onclick="toggleItemStation(${si},${ii},'cozinha')">🍳</button>
+          <button type="button" class="station-icon-btn ${(item.stations || []).includes('sushibar') ? 'on' : ''}" title="Sushibar" onclick="toggleItemStation(${si},${ii},'sushibar')">🍣</button>
+          <button type="button" class="station-icon-btn ${(item.stations || []).includes('bar') ? 'on' : ''}" title="Bar" onclick="toggleItemStation(${si},${ii},'bar')">🍹</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+async function toggleAvailable(si, ii) {
+  menu[si].items[ii].available = menu[si].items[ii].available === false ? true : false;
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ cfg, menu })
+    });
+    if (r.ok) toast(menu[si].items[ii].available ? `✅ "${menu[si].items[ii].name}" disponível` : `🚫 "${menu[si].items[ii].name}" marcado como indisponível`);
+    else toast('Erro ao salvar.', true);
+  } catch (e) { toast('Erro de conexão ao salvar.', true); }
+  renderConfig();
+}
+async function uploadPhoto(si, ii, input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('Imagem muito grande (máx. 4MB).'); return; }
+  const thumb = document.getElementById(`thumb-${si}-${ii}`);
+  thumb.innerHTML = '<span>enviando...</span>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      const data = await r.json();
+      if (r.ok) {
+        menu[si].items[ii].img = data.url;
+        thumb.innerHTML = `<img src="${data.url}">`;
+      } else { alert(data.error || 'Erro ao enviar imagem.'); thumb.innerHTML = '<span>+ foto</span>'; }
+    } catch (e) { alert('Erro de conexão ao enviar imagem.'); thumb.innerHTML = '<span>+ foto</span>'; }
+  };
+  reader.readAsDataURL(file);
+}
+function adminAddItem(si) { menu[si].items.push({ name: 'Novo prato', desc: 'Descrição.', price: 0, qty: '', badge: '', stations: ['cozinha'], available: true }); renderConfig(); }
+
+function toggleItemStation(si, ii, st) {
+  const item = menu[si].items[ii];
+  if (!Array.isArray(item.stations) || !item.stations.length) item.stations = ['cozinha'];
+  const idx = item.stations.indexOf(st);
+  if (idx >= 0) {
+    if (item.stations.length === 1) { toast('O prato precisa ficar em pelo menos uma via.'); return; }
+    item.stations.splice(idx, 1);
+  } else {
+    item.stations.push(st);
+  }
+  renderConfig();
+}
+function adminDelItem(si, ii) { if (confirm(`Remover "${menu[si].items[ii].name}"?`)) { menu[si].items.splice(ii, 1); renderConfig(); } }
+
+async function testPrint(station) {
+  // usa os valores já digitados na tela, mesmo sem ter clicado em "Salvar tudo"
+  const method = document.getElementById(`cfg-st-${station}-method`).value;
+  if (method !== 'navegador') {
+    cfg.stations[station] = {
+      ...cfg.stations[station],
+      method,
+      ip: document.getElementById(`cfg-st-${station}-ip`)?.value.trim() || '',
+      port: parseInt(document.getElementById(`cfg-st-${station}-port`)?.value) || 9100,
+      device: document.getElementById(`cfg-st-${station}-device`)?.value.trim() || ''
+    };
+    await fetch('/api/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ cfg })
+    }).catch(() => {});
+  }
+  try {
+    const r = await fetch('/api/print-test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ station })
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Erro ao testar impressão.', true); return; }
+    if (data.method === 'navegador') { toast('Essa via usa o navegador — imprima um pedido de verdade pra testar.'); return; }
+    toast(`✅ Ticket de teste enviado pra impressora da via "${station}"!`);
+  } catch (e) { toast('Erro de conexão ao testar.', true); }
+}
+
+async function saveConfig() {
+  cfg.whats = document.getElementById('cfg-whats').value.trim();
+  cfg.storePhone = document.getElementById('cfg-storephone').value.trim();
+  cfg.fee = parseFloat(document.getElementById('cfg-fee').value) || 0;
+  cfg.min = parseFloat(document.getElementById('cfg-min').value) || 0;
+  cfg.time = document.getElementById('cfg-time').value.trim();
+  cfg.addr = document.getElementById('cfg-addr').value.trim();
+  cfg.hours = document.getElementById('cfg-hours').value.trim();
+  cfg.open = parseInt(document.getElementById('cfg-open').value);
+  cfg.pixKey = document.getElementById('cfg-pixkey').value.trim();
+  cfg.pixName = document.getElementById('cfg-pixname').value.trim();
+  cfg.pixCity = document.getElementById('cfg-pixcity').value.trim();
+  cfg.printFont = document.getElementById('cfg-printfont').value;
+  cfg.printSize = parseInt(document.getElementById('cfg-printsize').value) || 14;
+  cfg.printColor = document.getElementById('cfg-printcolor').value;
+  cfg.logoShape = document.getElementById('cfg-logoshape').value;
+  cfg.logoSize = parseInt(document.getElementById('cfg-logosize').value) || 40;
+  cfg.uiFonts = {
+    pedidos: parseInt(document.getElementById('cfg-fs-pedidos').value) || 13,
+    config: parseInt(document.getElementById('cfg-fs-config').value) || 13,
+    clientes: parseInt(document.getElementById('cfg-fs-clientes').value) || 13,
+    relatorios: parseInt(document.getElementById('cfg-fs-relatorios').value) || 13
+  };
+  cfg.theme = {
+    primary: document.getElementById('cfg-theme-primary').value,
+    accent: document.getElementById('cfg-theme-accent').value,
+    bg: document.getElementById('cfg-theme-bg').value
+  };
+  ['cozinha', 'sushibar', 'bar', 'caixa'].forEach(st => {
+    const method = document.getElementById(`cfg-st-${st}-method`).value;
+    cfg.stations[st] = {
+      label: cfg.stations[st]?.label || st,
+      method,
+      ip: document.getElementById(`cfg-st-${st}-ip`)?.value.trim() || '',
+      port: parseInt(document.getElementById(`cfg-st-${st}-port`)?.value) || 9100,
+      device: document.getElementById(`cfg-st-${st}-device`)?.value.trim() || ''
+    };
+  });
+  cfg.feeMode = document.getElementById('cfg-feemode').value;
+  if (cfg.feeMode === 'distancia') {
+    cfg.feeBaseKm = parseFloat(document.getElementById('cfg-feebasekm').value) || 0;
+    cfg.feeBaseValue = parseFloat(document.getElementById('cfg-feebasevalue').value) || 0;
+    cfg.feePerKm = parseFloat(document.getElementById('cfg-feeperkm').value) || 0;
+    cfg.feeMaxKm = parseFloat(document.getElementById('cfg-feemaxkm').value) || 0;
+    cfg.feeRound = parseFloat(document.getElementById('cfg-feeround').value) || 0;
+  }
+
+  const r = await fetch('/api/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ cfg, menu })
+  });
+  if (r.ok) { alert('✅ Salvo com sucesso!'); applyUIFonts(); } else { alert('Erro ao salvar. Faça login novamente.'); logout(); }
+}
+
+async function geocodeStore() {
+  const status = document.getElementById('geocode-status');
+  const addr = document.getElementById('cfg-addr').value.trim();
+  if (!addr) { alert('Preencha o endereço da loja no campo "Endereço" acima primeiro.'); return; }
+  status.textContent = '🔎 Localizando...';
+  try {
+    const r = await fetch('/api/admin/geocode-store', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ address: addr })
+    });
+    const data = await r.json();
+    if (!r.ok) { status.textContent = '❌ ' + (data.error || 'não foi possível localizar.'); return; }
+    cfg.storeLat = data.lat; cfg.storeLng = data.lng;
+    status.textContent = '✅ Localizado! Endereço encontrado: ' + (data.label || '');
+    renderConfig();
+  } catch (e) { status.textContent = '❌ Erro de conexão ao localizar.'; }
+}
+
+function addCancelReason() {
+  const input = document.getElementById('new-cancel-reason');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!cfg.cancelReasons) cfg.cancelReasons = [];
+  cfg.cancelReasons.push(val);
+  renderConfig();
+}
+function removeCancelReason(i) { cfg.cancelReasons.splice(i, 1); renderConfig(); }
+
+function removeSlide(i) { cfg.slides.splice(i, 1); renderConfig(); }
+function moveSlide(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= cfg.slides.length) return;
+  [cfg.slides[i], cfg.slides[j]] = [cfg.slides[j], cfg.slides[i]];
+  renderConfig();
+}
+async function uploadSlide(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('Imagem muito grande (máx. 4MB).'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      const data = await r.json();
+      if (r.ok) { if (!cfg.slides) cfg.slides = []; cfg.slides.push(data.url); renderConfig(); toast('Imagem adicionada! Clique em "Salvar tudo" pra confirmar.'); }
+      else toast(data.error || 'Erro ao enviar imagem.', true);
+    } catch (e) { toast('Erro de conexão ao enviar imagem.', true); }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { alert('Imagem muito grande (máx. 4MB).'); return; }
+  const thumb = document.getElementById('thumb-logo');
+  thumb.innerHTML = '<span>enviando...</span>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const r = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      const data = await r.json();
+      if (r.ok) { cfg.logoUrl = data.url; thumb.innerHTML = `<img src="${data.url}">`; }
+      else { alert(data.error || 'Erro ao enviar imagem.'); thumb.innerHTML = '<span>+ logo</span>'; }
+    } catch (e) { alert('Erro de conexão ao enviar imagem.'); thumb.innerHTML = '<span>+ logo</span>'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function changePassword(which) {
+  const cur = document.getElementById(`pw-${which}-cur`).value;
+  const next = document.getElementById(`pw-${which}-new`).value;
+  if (!cur || !next) { alert('Preencha os dois campos.'); return; }
+  const r = await fetch('/api/change-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ which, current: cur, next })
+  });
+  const data = await r.json();
+  if (r.ok) { alert('✅ Senha atualizada!'); document.getElementById(`pw-${which}-cur`).value = ''; document.getElementById(`pw-${which}-new`).value = ''; }
+  else alert(data.error || 'Erro ao trocar senha.');
+}
+
+// ═══════════════════════════════════════════
+// RELATÓRIOS
+// ═══════════════════════════════════════════
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
+// ═══════════════════════════════════════════
+// CLIENTES
+// ═══════════════════════════════════════════
+let allCustomers = [];
+async function loadCustomers() {
+  const wrap = document.getElementById('view-clientes');
+  wrap.innerHTML = '<p class="hint">Carregando clientes...</p>';
+  try {
+    const r = await fetch('/api/admin/customers', { headers: { Authorization: 'Bearer ' + token } });
+    const data = await r.json();
+    allCustomers = data.customers || [];
+  } catch (e) { wrap.innerHTML = '<p class="hint">Erro ao carregar clientes.</p>'; return; }
+  renderCustomers();
+}
+
+function renderCustomers() {
+  const wrap = document.getElementById('view-clientes');
+  const pending = allCustomers.filter(c => c.hasPendingRecovery);
+  const totalPedidos = allCustomers.reduce((s, c) => s + c.orderCount, 0);
+
+  wrap.innerHTML = `
+    <div class="reports-grid" style="margin-bottom:20px;">
+      <div class="report-card"><div class="value">${allCustomers.length}</div><div class="label">Clientes cadastrados</div></div>
+      <div class="report-card"><div class="value">${totalPedidos}</div><div class="label">Pedidos (contas c/ login)</div></div>
+      <div class="report-card"><div class="value">${pending.length}</div><div class="label">Recuperações pendentes</div></div>
+    </div>
+
+    ${pending.length ? `
+    <p class="admin-sec-title">🔐 Recuperações de senha pendentes</p>
+    <div class="settings-box" style="margin-bottom:20px;">
+      ${pending.map(c => `
+        <div class="admin-row" style="align-items:center;border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+          <div class="admin-field"><label>Cliente</label><input disabled value="${c.name} · ${c.phone}"/></div>
+          <div class="admin-field" style="max-width:280px;"><label>Confirme no seu WhatsApp</label><input disabled value="Verifique se o código recebido bate com o do cliente"/></div>
+          <div class="admin-field" style="max-width:160px;"><button class="btn-save" style="margin:0;padding:10px;" onclick="approveRecovery('${c.phone}')">✅ Aprovar redefinição</button></div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    <p class="admin-sec-title">👥 Todos os clientes</p>
+    <input type="text" id="customer-search" placeholder="🔎 Buscar por nome ou telefone..." style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;color:var(--white);margin-bottom:12px;" oninput="filterCustomers(this.value)"/>
+    <div id="customer-list"></div>
+  `;
+  filterCustomers('');
+}
+
+function filterCustomers(q) {
+  q = q.toLowerCase().trim();
+  const list = allCustomers.filter(c => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q));
+  const listEl = document.getElementById('customer-list');
+  if (!listEl) return;
+  if (!list.length) { listEl.innerHTML = '<p class="hint">Nenhum cliente encontrado.</p>'; return; }
+  listEl.innerHTML = list.map(c => `
+    <div class="admin-item-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:600;">${c.name}</div>
+          <div style="font-size:12px;color:var(--muted);">📞 ${c.phone} · cliente desde ${new Date(c.createdAt).toLocaleDateString('pt-BR')}</div>
+          ${c.lastAddress ? `<div style="font-size:12px;color:var(--muted);">📍 Último endereço: ${c.lastAddress}</div>` : ''}
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:20px;font-weight:700;color:var(--gold);">${c.orderCount}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;">pedido${c.orderCount === 1 ? '' : 's'}</div>
+          ${c.lastOrderAt ? `<div style="font-size:11px;color:var(--muted);">último: ${new Date(c.lastOrderAt).toLocaleDateString('pt-BR')}</div>` : ''}
+        </div>
+      </div>
+      <button style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:6px 10px;font-size:11px;margin-top:8px;" onclick="toggleCustomerOrders('${c.phone}', this)">Ver histórico de pedidos</button>
+      <div id="cust-orders-${c.phone}" style="display:none;margin-top:10px;"></div>
+    </div>
+  `).join('');
+}
+
+async function toggleCustomerOrders(phone, btn) {
+  const box = document.getElementById(`cust-orders-${phone}`);
+  if (box.style.display === 'block') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<p class="hint">Carregando...</p>';
+  try {
+    const r = await fetch(`/api/admin/customers/orders?phone=${phone}`, { headers: { Authorization: 'Bearer ' + token } });
+    const data = await r.json();
+    box.innerHTML = (data.orders || []).map(o => `
+      <div class="summary-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px;">
+        <span>#${o.id} · ${new Date(o.createdAt).toLocaleDateString('pt-BR')} · ${o.status}</span>
+        <span>${fmtMoney(o.total)}</span>
+      </div>`).join('') || '<p class="hint">Nenhum pedido ainda.</p>';
+  } catch (e) { box.innerHTML = '<p class="hint">Erro ao carregar histórico.</p>'; }
+}
+
+async function approveRecovery(phone) {
+  try {
+    const r = await fetch('/api/admin/customers/recovery-approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ phone })
+    });
+    const data = await r.json();
+    if (!r.ok) { toast(data.error || 'Erro ao aprovar.', true); return; }
+    toast('✅ Recuperação aprovada! O cliente já pode definir a nova senha.');
+    loadCustomers();
+  } catch (e) { toast('Erro de conexão.', true); }
+}
+
+async function loadReports() {
+  const wrap = document.getElementById('view-relatorios');
+  if (!wrap.dataset.init) {
+    wrap.dataset.init = '1';
+    wrap.innerHTML = `
+      <div class="admin-row" style="margin-bottom:16px;">
+        <div class="admin-field"><label>De</label><input type="date" id="rep-from" value="${daysAgoISO(30)}"/></div>
+        <div class="admin-field"><label>Até</label><input type="date" id="rep-to" value="${todayISO()}"/></div>
+        <div class="admin-field" style="max-width:140px;display:flex;align-items:flex-end;"><button class="btn-save" style="margin:0;padding:10px;" onclick="loadReports()">Filtrar</button></div>
+      </div>
+      <div id="rep-content"></div>
+      <p class="admin-sec-title">🗑 Excluir pedidos antigos</p>
+      <div class="danger-box">
+        <p class="hint" style="margin-top:0;">Apaga permanentemente do histórico todos os pedidos criados antes da data escolhida. Essa ação não pode ser desfeita e exige a senha master.</p>
+        <div class="admin-row" style="margin-top:10px;">
+          <div class="admin-field"><label>Excluir pedidos antes de</label><input type="date" id="purge-before" value="${daysAgoISO(90)}"/></div>
+          <div class="admin-field"><label>Senha master</label><input type="password" id="purge-pass"/></div>
+          <div class="admin-field" style="max-width:140px;display:flex;align-items:flex-end;"><button class="btn-danger" onclick="purgeOrders()">Excluir</button></div>
+        </div>
+      </div>`;
+  }
+  const from = document.getElementById('rep-from').value;
+  const to = document.getElementById('rep-to').value;
+  const r = await fetch(`/api/reports?from=${from}&to=${to}`, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) return logout();
+  const d = await r.json();
+  const payLabels = { pix: 'PIX', credito: 'Crédito', debito: 'Débito', dinheiro: 'Dinheiro' };
+  document.getElementById('rep-content').innerHTML = `
+    <div class="report-cards">
+      <div class="report-card"><div class="value">${d.totalOrders}</div><div class="label">Pedidos</div></div>
+      <div class="report-card"><div class="value">${fmtMoney(d.totalRevenue)}</div><div class="label">Faturamento</div></div>
+      <div class="report-card"><div class="value">${fmtMoney(d.avgTicket)}</div><div class="label">Ticket médio</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin-bottom:8px;">MAIS VENDIDOS</p>
+        <table class="report-table"><tr><th>Item</th><th>Qtd</th><th>Receita</th></tr>
+          ${d.topItems.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${fmtMoney(i.revenue)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+      </div>
+      <div>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin-bottom:8px;">POR PAGAMENTO</p>
+        <table class="report-table"><tr><th>Forma</th><th>Total</th></tr>
+          ${Object.entries(d.byPayMethod).map(([k, v]) => `<tr><td>${payLabels[k] || k}</td><td>${fmtMoney(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+        <p style="font-size:11px;color:var(--red-lt);letter-spacing:1px;margin:16px 0 8px;">POR DIA</p>
+        <table class="report-table"><tr><th>Data</th><th>Pedidos</th><th>Receita</th></tr>
+          ${d.byDay.map(x => `<tr><td>${x.date.split('-').reverse().join('/')}</td><td>${x.orders}</td><td>${fmtMoney(x.revenue)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-col">Sem dados no período</td></tr>'}
+        </table>
+      </div>
+    </div>`;
+}
+
+async function purgeOrders() {
+  const beforeDate = document.getElementById('purge-before').value;
+  const masterPass = document.getElementById('purge-pass').value;
+  if (!beforeDate || !masterPass) { alert('Preencha a data e a senha master.'); return; }
+  if (!confirm(`Tem certeza? Todos os pedidos antes de ${beforeDate.split('-').reverse().join('/')} serão apagados permanentemente.`)) return;
+  const r = await fetch('/api/orders/purge', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ beforeDate, masterPass })
+  });
+  const data = await r.json();
+  if (r.ok) { alert(`✅ ${data.deleted} pedido(s) apagado(s).`); document.getElementById('purge-pass').value = ''; loadOrders().then(renderOrders); loadReports(); }
+  else alert(data.error || 'Erro ao excluir pedidos.');
+}
+
+if (token) boot();
+</script>
+</body>
+</html>
