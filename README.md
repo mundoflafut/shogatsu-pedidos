@@ -3,40 +3,13 @@
 Sistema de pedidos com cardápio (`/`), pedido enviado direto para a cozinha em
 tempo real, PIX com valor automático e painel do restaurante (`/painel.html`).
 
-**Persistência**: todos os dados (pedidos, clientes, cardápio, categorias,
-configurações e imagens enviadas) ficam gravados em um banco **PostgreSQL** —
-nada é salvo em arquivo local. Isso significa que reiniciar o servidor, fazer
-um novo deploy ou atualizar o código **nunca apaga nada**.
-
-## Dependências
-
-Usa uma única dependência: o driver oficial do PostgreSQL (`pg`). Antes de
-rodar pela primeira vez:
-
-```bash
-npm install
-```
-
-## Configurando o banco de dados
-
-1. Crie um banco PostgreSQL (no Render: "New +" → "PostgreSQL" — o plano
-   gratuito serve pra começar).
-2. Copie a "Internal Database URL" (se o site também for rodar no Render) ou
-   a "External Database URL" (se for rodar de outro lugar).
-3. Configure a variável de ambiente `DATABASE_URL` com essa connection string
-   — veja `.env.example`.
-
-Na primeira vez que o servidor conectar num banco **totalmente vazio**, ele
-cria as tabelas automaticamente (rodando a migration em `migrations/`) e
-grava a configuração e o cardápio padrão, só essa vez. Depois disso, ele
-nunca mais recria tabelas nem sobrescreve dados — só conecta e usa o que já
-existe. Se preferir desligar até essa criação inicial, defina `AUTO_SEED=false`.
+Não usa nenhuma dependência externa (só Node.js puro), então não precisa
+rodar `npm install` — basta ter Node instalado.
 
 ## Rodando localmente
 
 ```bash
-npm install
-DATABASE_URL="postgresql://usuario:senha@localhost:5432/shogatsu" node server.js
+node server.js
 ```
 
 Depois acesse:
@@ -46,30 +19,26 @@ Depois acesse:
   - Senha master (só pra apagar pedidos antigos): `shogatsuMaster2026`
   - **Troque as duas na aba "Cardápio & Config" assim que possível.**
 
-## Colocando no ar no Render
+## Colocando no ar (link online de verdade)
 
-1. Suba este projeto para um repositório Git (GitHub/GitLab).
-2. No Render: "New +" → "Web Service", conecte o repositório.
-3. Build Command: `npm install` — Start Command: `node server.js`.
-4. Crie (ou já tenha criado) um banco PostgreSQL no Render e copie a "Internal
-   Database URL".
-5. No seu Web Service → "Environment", adicione a variável `DATABASE_URL` com
-   essa connection string.
-6. Deploy. Acompanhe os logs — você deve ver:
-   ```
-   🔌 Conectando ao PostgreSQL...
-   ✅ Conectado ao PostgreSQL com sucesso.
-   📦 Verificando migrations...
-   ✅ Migration aplicada com sucesso: 001_init.sql
-   🌱 Nenhuma configuração encontrada (primeiro boot) — gravando valores padrão...
-   ✅ Banco de dados pronto.
-   🍣 Shogatsu rodando em http://localhost:10000
-   ```
-7. Acesse `/painel.html` no domínio que o Render deu e troque as senhas.
+Qualquer serviço que rode um app Node.js persistente funciona. Os mais simples
+para começar:
 
-✅ A partir daqui, qualquer novo deploy (push no Git, restart manual, etc.)
-só reconecta no mesmo banco — pedidos, clientes, cardápio e configurações
-continuam exatamente como estavam.
+- **Railway** ou **Render** (planos gratuitos/baratos, deploy direto do zip ou de um repositório Git)
+- **VPS próprio** (ex: um droplet da DigitalOcean/Hostinger) rodando `node server.js` atrás de um `pm2` ou `systemd`, com um domínio apontado via Nginx
+
+Passo geral:
+1. Suba esta pasta inteira para o serviço escolhido (ou um repositório Git).
+2. Configure o comando de start como `node server.js`.
+3. Aponte seu domínio (ex: `pedido.shogatsu.com.br`) para o serviço.
+4. Acesse `/painel.html` no domínio e troque a senha do restaurante (arquivo
+   `data/config.json`, campo `adminPass` — ou peça para eu adicionar uma tela
+   de troca de senha pelo próprio painel).
+
+⚠️ Importante: a pasta `data/` guarda os pedidos e o cardápio em arquivos
+JSON. Ela precisa estar num disco **persistente** do seu servidor (não use
+serviços "serverless" que apagam o disco a cada deploy, como Vercel/Netlify
+functions puras) — senão os pedidos e o cardápio somem a cada reinício.
 
 ## Como funciona o pagamento por PIX
 
@@ -178,8 +147,7 @@ pixels, com uma prévia ao vivo no painel antes de salvar.
 
 Na aba "Cardápio & Config" do painel, cada item tem um quadrado "+ foto" — clique,
 escolha uma imagem (PNG, JPG ou WEBP, até 4MB) e ela já sobe pro servidor e
-aparece pros clientes na hora. As imagens ficam salvas **dentro do PostgreSQL**
-(tabela `uploads`), não em disco — então também não se perdem em um redeploy.
+aparece pros clientes na hora. As imagens ficam salvas em `public/uploads/`.
 
 ## Relatórios e exclusão de pedidos antigos
 
@@ -205,8 +173,3 @@ vendas sem querer. A exclusão é permanente.
   pedido.
 - O botão de WhatsApp continua disponível na tela de sucesso, como um canal
   extra de contato.
-- **Persistência migrada de arquivos JSON para PostgreSQL** — pedidos,
-  clientes, cardápio/categorias, configurações e imagens enviadas agora
-  vivem no banco de dados (veja "Configurando o banco de dados" no topo
-  deste arquivo). Nada é mais salvo em disco local, então nada se perde em
-  restart, redeploy ou atualização do código no Render.
