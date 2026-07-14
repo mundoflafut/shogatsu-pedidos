@@ -1,7 +1,7 @@
 {
   "name": "shogatsu-pedidos",
-  "version": "1.0.0",
-  "description": "Sistema de pedidos online do Shogatsu (cardápio + painel da cozinha em tempo real)",
+  "version": "2.0.0",
+  "description": "Sistema de pedidos online do Shogatsu (cardápio + painel da cozinha em tempo real) — persistência em PostgreSQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,5 +9,7 @@
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {}
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
 }
