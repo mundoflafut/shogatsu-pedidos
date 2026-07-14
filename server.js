@@ -1,27 +1,26 @@
 // ═══════════════════════════════════════════════════════════
 // SHOGATSU · Servidor de Pedidos Online
-// Node.js puro (sem dependências) — http, fs, crypto
+// Node.js + PostgreSQL (persistência via db.js — ver DATABASE_URL)
+// Nenhum dado de negócio é gravado em arquivo local: tudo fica no Postgres,
+// então nada se perde em restart/redeploy no Render.
 // ═══════════════════════════════════════════════════════════
 const http = require('http');
 const https = require('https');
 const net = require('net');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const url = require('url');
+const db = require('./db');
 
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 
-// ─── Config / Menu padrão (usados só na primeira execução) ───
+// ─── Config / Menu padrão (usados só para semear um banco vazio, uma única vez) ───
 const DEFAULT_CFG = {
-  whats: '5522988683755', storePhone: '', fee: 8, min: 60,
-  time: '40–60 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costazul · Rio das Ostras',
+  whats: '552227641333', storePhone: '(22) 2764-1333', fee: 8, min: 60,
+  time: '40–60 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costa Azul · Rio das Ostras · CEP 28896-155',
   hours: '18h30–23h', open: 1,
   adminPass: 'shogatsu2026',
   masterPass: 'shogatsuMaster2026',
@@ -60,36 +59,24 @@ const DEFAULT_CFG = {
 };
 const DEFAULT_MENU = require('./default-menu.json');
 
-// ─── Bootstrap dos arquivos de dados ───
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-if (!fs.existsSync(CONFIG_FILE)) {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ cfg: DEFAULT_CFG, menu: DEFAULT_MENU }, null, 2));
-}
-if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
-if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
-
-function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-function writeJSON(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-
-// Lê o config.json e preenche com os valores padrão quaisquer campos novos que
-// ainda não existiam (ex: sites já em produção antes desta atualização) —
-// sem precisar apagar ou resetar nada que o restaurante já configurou.
-function readConfig() {
-  const data = readJSON(CONFIG_FILE);
-  const cfg = {
+// Lê a configuração do banco e preenche com os valores padrão quaisquer campos
+// novos que ainda não existiam (ex: bancos já em produção antes de uma
+// atualização) — sem apagar ou resetar nada que o restaurante já configurou.
+async function getConfig() {
+  const stored = (await db.getSettings()) || {};
+  return {
     ...DEFAULT_CFG,
-    ...data.cfg,
-    stations: { ...DEFAULT_CFG.stations, ...(data.cfg.stations || {}) },
-    uiFonts: { ...DEFAULT_CFG.uiFonts, ...(data.cfg.uiFonts || {}) },
-    theme: { ...DEFAULT_CFG.theme, ...(data.cfg.theme || {}) },
-    cancelReasons: data.cfg.cancelReasons || DEFAULT_CFG.cancelReasons,
-    slides: data.cfg.slides || DEFAULT_CFG.slides
+    ...stored,
+    stations: { ...DEFAULT_CFG.stations, ...(stored.stations || {}) },
+    uiFonts: { ...DEFAULT_CFG.uiFonts, ...(stored.uiFonts || {}) },
+    theme: { ...DEFAULT_CFG.theme, ...(stored.theme || {}) },
+    cancelReasons: stored.cancelReasons || DEFAULT_CFG.cancelReasons,
+    slides: stored.slides || DEFAULT_CFG.slides
   };
-  return { cfg, menu: normalizeMenu(data.menu) };
 }
 
-// ─── Sessões admin (em memória) ───
+// ─── Sessões admin (em memória — tokens são efêmeros por natureza; um restart
+// apenas exige novo login, isso não é "perda de dado de negócio") ───
 const sessions = new Map(); // token -> expiresAt
 function newSession() {
   const token = crypto.randomBytes(24).toString('hex');
@@ -103,28 +90,10 @@ function checkAuth(token) {
   return true;
 }
 
-// ─── Contas de cliente (telefone + senha de 4 dígitos) ───
-// Mantém só dígitos no telefone, pra "22999991234" e "(22) 99999-1234" serem o mesmo cliente.
+// ─── Contas de cliente — helpers de senha (telefone + PIN de 4 dígitos) ───
 function normalizePhone(phone) { return String(phone || '').replace(/\D/g, ''); }
-
 function hashPin(phone, pin) {
   return crypto.createHash('sha256').update(normalizePhone(phone) + ':' + String(pin) + ':shogatsu-salt').digest('hex');
-}
-
-function findCustomer(customers, phone) {
-  const p = normalizePhone(phone);
-  return customers.find(c => c.phone === p);
-}
-
-// Calcula quantos pedidos e o último pedido de um cliente, direto do orders.json
-// (evita manter dois lugares com a mesma contagem fora de sincronia).
-function customerStats(phone, orders) {
-  const p = normalizePhone(phone);
-  const mine = orders.filter(o => normalizePhone(o.phone) === p && o.status !== 'cancelado');
-  return {
-    orderCount: mine.length,
-    lastOrderAt: mine.length ? mine[0].createdAt : null // orders.json fica sempre com o mais novo primeiro (unshift)
-  };
 }
 
 // ─── Clientes conectados via SSE (painel da cozinha) ───
@@ -135,7 +104,6 @@ function broadcast(event, data) {
 }
 
 // ─── Geolocalização / taxa por distância ───
-// Faz um GET https e retorna o corpo já parseado como JSON, com timeout.
 function httpsGetJSON(urlStr, headers = {}, timeoutMs = 6000) {
   return new Promise((resolve, reject) => {
     const req = https.get(urlStr, { headers }, (res) => {
@@ -153,7 +121,6 @@ function httpsGetJSON(urlStr, headers = {}, timeoutMs = 6000) {
   });
 }
 
-// CEP (só dígitos) → endereço aproximado via ViaCEP (gratuito, sem chave)
 async function lookupCEP(cep) {
   const clean = String(cep || '').replace(/\D/g, '');
   if (clean.length !== 8) return null;
@@ -162,7 +129,6 @@ async function lookupCEP(cep) {
   return { street: data.logradouro || '', hood: data.bairro || '', city: data.localidade || '', uf: data.uf || '' };
 }
 
-// Endereço em texto → { lat, lng } via Nominatim/OpenStreetMap (gratuito, sem chave)
 async function geocodeAddress(addressText) {
   const q = encodeURIComponent(addressText);
   const data = await httpsGetJSON(
@@ -173,7 +139,6 @@ async function geocodeAddress(addressText) {
   return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
 }
 
-// Distância em linha reta entre dois pontos (km)
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const toRad = (d) => d * Math.PI / 180;
@@ -183,7 +148,6 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Aplica a fórmula de taxa (base + excedente por km, arredondada)
 function calcFeeByDistance(cfg, distanceKm) {
   const baseKm = Number(cfg.feeBaseKm) || 0;
   const extraKm = Math.max(0, distanceKm - baseKm);
@@ -194,7 +158,6 @@ function calcFeeByDistance(cfg, distanceKm) {
 }
 
 // ─── Impressão — rede (ESC/POS via TCP) e USB (dispositivo local) ───
-// Comandos ESC/POS básicos
 const ESC = {
   init: '\x1B\x40',
   boldOn: '\x1B\x45\x01', boldOff: '\x1B\x45\x00',
@@ -203,13 +166,24 @@ const ESC = {
   cut: '\x1D\x56\x01',
   feed: '\n\n\n'
 };
-
-// Monta o texto puro do ticket (usado tanto na pré-visualização quanto na impressão real)
 function buildTicketText(lines) {
-  return ESC.init + lines.join('\n') + ESC.feed + ESC.cut;
+  return ESC.init + stripAccentsForPrinter(lines.join('\n')) + ESC.feed + ESC.cut;
 }
 
-// Envia bytes brutos para uma impressora de rede (porta 9100 é o padrão da maioria)
+// Impressoras térmicas ESC/POS (Bematech, Epson, Elgin etc.) usam páginas de
+// código de 1 byte que raramente batem com o Unicode/UTF-8 do JavaScript —
+// enviar "ã", "ç", "õ" direto costuma sair como símbolo trocado/corrompido no
+// papel. Em vez de apostar na tabela de código exata de cada impressora (que
+// varia por marca/modelo/firmware), a solução universal e à prova de falhas é
+// tirar o acento antes de mandar pro ESC/POS — funciona igual em qualquer
+// impressora térmica, de qualquer marca. Não afeta a impressão pelo navegador
+// (essa já lida com UTF-8 corretamente sozinha).
+function stripAccentsForPrinter(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // tira os acentos combinantes (á→a, ç→c, ã→a...)
+    .replace(/[^\x00-\x7E]/g, ''); // remove qualquer byte fora do ASCII básico (emojis etc.) —
+      // preserva 0x00-0x1F de propósito, é onde ficam os comandos ESC/GS de negrito/centralizar/corte
+}
 function sendNetworkPrint(ip, port, text) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection({ host: ip, port: port || 9100, timeout: 5000 }, () => {
@@ -220,9 +194,6 @@ function sendNetworkPrint(ip, port, text) {
     socket.on('error', reject);
   });
 }
-
-// Envia para um dispositivo USB local (ex: /dev/usb/lp0) — só funciona quando o
-// servidor roda na mesma máquina física conectada à impressora (ex: Raspberry Pi/PC local).
 function sendUSBPrint(devicePath, text) {
   return new Promise((resolve, reject) => {
     fs.writeFile(devicePath, Buffer.from(text, 'binary'), (err) => {
@@ -232,12 +203,73 @@ function sendUSBPrint(devicePath, text) {
   });
 }
 
-// Preenche valores padrão em itens antigos do cardápio (sem alterar o arquivo salvo)
-function normalizeMenu(menu) {
-  return (menu || []).map(sec => ({
-    ...sec,
-    items: (sec.items || []).map(it => ({ station: 'cozinha', available: true, ...it }))
-  }));
+// ─── Busca automática de impressoras ───
+// IMPORTANTE: isso só encontra impressoras alcançáveis a partir de onde o
+// server.js está rodando de fato. Se o servidor estiver no Render (nuvem), ele
+// NÃO enxerga a rede Wi-Fi do restaurante nem tem porta USB física — nesse
+// caso, tanto a busca quanto a impressão em Rede/USB não vão funcionar, e o
+// método "Navegador" é o único que funciona (ele imprime a partir do
+// computador/celular que está com o painel aberto, não do servidor).
+
+// Testa se uma porta TCP está aberta num IP (usado pra achar impressoras de rede)
+function checkPrinterPort(ip, port, timeoutMs) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; socket.destroy(); resolve(ok); };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+    socket.connect(port, ip);
+  });
+}
+
+// Descobre a rede local do próprio servidor (ex: 192.168.1.) pra saber o que escanear
+function getLocalSubnetBase() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const iface of nets[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address.split('.').slice(0, 3).join('.');
+      }
+    }
+  }
+  return null;
+}
+
+// Varre a rede local inteira (254 endereços) procurando a porta 9100 aberta
+// (padrão universal de impressoras térmicas de rede, incluindo Bematech).
+async function scanNetworkPrinters(port = 9100, timeoutMs = 400) {
+  const base = getLocalSubnetBase();
+  if (!base) return { subnet: null, found: [] };
+  const ips = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`);
+  const found = [];
+  const CONCURRENCY = 32;
+  for (let i = 0; i < ips.length; i += CONCURRENCY) {
+    const batch = ips.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(ip => checkPrinterPort(ip, port, timeoutMs)));
+    batch.forEach((ip, idx) => { if (results[idx]) found.push(ip); });
+  }
+  return { subnet: base + '.0/24', found };
+}
+
+// Procura impressoras USB conectadas fisicamente na máquina que roda o servidor
+// (só funciona em Linux — ex: Raspberry Pi ou PC local — nunca num serviço em nuvem).
+function scanUSBPrinters() {
+  if (process.platform !== 'linux') {
+    return {
+      platform: process.platform, found: [],
+      note: 'Busca automática de USB só funciona quando o servidor roda em Linux (ex: Raspberry Pi ou PC local). No Windows/Mac, instale a impressora normalmente no sistema operacional e use o método "Navegador".'
+    };
+  }
+  const candidates = [
+    ...Array.from({ length: 8 }, (_, i) => `/dev/usb/lp${i}`),
+    ...Array.from({ length: 8 }, (_, i) => `/dev/ttyUSB${i}`),
+    ...Array.from({ length: 8 }, (_, i) => `/dev/ttyACM${i}`)
+  ];
+  const found = candidates.filter(p => { try { return fs.existsSync(p); } catch (e) { return false; } });
+  return { platform: process.platform, found };
 }
 
 // ─── PIX — geração do payload BR Code (copia-e-cola) ───
@@ -258,7 +290,7 @@ function tlv(id, value) {
 }
 function sanitizePix(str, max) {
   return (str || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9 ]/g, '')
     .toUpperCase().slice(0, max) || 'NA';
 }
@@ -310,6 +342,8 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon'
 };
 
+// Serve apenas os arquivos estáticos do app (HTML/CSS/JS/ícones do repositório).
+// Nenhum dado de usuário é lido ou gravado aqui — só o código do próprio site.
 function serveStatic(req, res, pathname) {
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
@@ -331,511 +365,522 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') { return sendJSON(res, 204, {}); }
 
-  // ── GET /api/config — dados públicos do cardápio/config ──
-  if (pathname === '/api/config' && req.method === 'GET') {
-    const { cfg, menu } = readConfig();
-    const { adminPass, masterPass, ...publicCfg } = cfg; // nunca vaza as senhas
-    return sendJSON(res, 200, { cfg: publicCfg, menu });
-  }
+  try {
+    // ── GET /api/config — dados públicos do cardápio/config ──
+    if (pathname === '/api/config' && req.method === 'GET') {
+      const cfg = await getConfig();
+      const menu = await db.getMenu();
+      const { adminPass, masterPass, ...publicCfg } = cfg; // nunca vaza as senhas
+      return sendJSON(res, 200, { cfg: publicCfg, menu });
+    }
 
-  // ── POST /api/config — admin salva config/cardápio ──
-  if (pathname === '/api/config' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const body = await readBody(req);
-      const current = readConfig();
-      const merged = {
-        cfg: { ...current.cfg, ...body.cfg, adminPass: current.cfg.adminPass, masterPass: current.cfg.masterPass },
-        menu: body.menu || current.menu
-      };
-      writeJSON(CONFIG_FILE, merged);
-      broadcast('config-updated', {});
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
-  if (pathname === '/api/change-password' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { which, current: curPass, next } = await readBody(req);
-      const field = which === 'master' ? 'masterPass' : 'adminPass';
-      const data = readConfig();
-      if (curPass !== data.cfg[field]) return sendJSON(res, 403, { error: 'senha atual incorreta' });
-      if (!next || next.length < 4) return sendJSON(res, 400, { error: 'nova senha muito curta (mín. 4 caracteres)' });
-      data.cfg[field] = next;
-      writeJSON(CONFIG_FILE, data);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/upload — envia foto de um produto (admin) ──
-  if (pathname === '/api/upload' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { dataUrl } = await readBody(req);
-      const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
-      if (!m) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG ou WEBP.' });
-      const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
-      const buffer = Buffer.from(m[2], 'base64');
-      if (buffer.length > 4 * 1024 * 1024) return sendJSON(res, 400, { error: 'Imagem muito grande (máx. 4MB).' });
-      const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
-      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
-      return sendJSON(res, 200, { url: '/uploads/' + filename });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/orders/purge — apaga pedidos antigos (exige senha master) ──
-  if (pathname === '/api/orders/purge' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { masterPass, beforeDate } = await readBody(req);
-      const data = readConfig();
-      if (masterPass !== data.cfg.masterPass) return sendJSON(res, 403, { error: 'Senha master incorreta.' });
-      if (!beforeDate) return sendJSON(res, 400, { error: 'Informe a data limite.' });
-      const cutoff = new Date(beforeDate).getTime();
-      let orders = readJSON(ORDERS_FILE);
-      const before = orders.length;
-      orders = orders.filter(o => new Date(o.createdAt).getTime() >= cutoff);
-      writeJSON(ORDERS_FILE, orders);
-      return sendJSON(res, 200, { ok: true, deleted: before - orders.length });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── GET /api/reports — relatório de vendas (admin) ──
-  if (pathname === '/api/reports' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const orders = readJSON(ORDERS_FILE);
-    const from = query.from ? new Date(query.from + 'T00:00:00').getTime() : 0;
-    const to = query.to ? new Date(query.to + 'T23:59:59').getTime() : Infinity;
-    const filtered = orders.filter(o => {
-      const t = new Date(o.createdAt).getTime();
-      return t >= from && t <= to && o.status !== 'cancelado';
-    });
-    const totalOrders = filtered.length;
-    const totalRevenue = filtered.reduce((s, o) => s + Number(o.total || 0), 0);
-    const avgTicket = totalOrders ? totalRevenue / totalOrders : 0;
-    const byPayMethod = {}, byDayMap = {}, itemsMap = {};
-    filtered.forEach(o => {
-      byPayMethod[o.payMethod] = (byPayMethod[o.payMethod] || 0) + Number(o.total || 0);
-      const day = o.createdAt.slice(0, 10);
-      if (!byDayMap[day]) byDayMap[day] = { date: day, revenue: 0, orders: 0 };
-      byDayMap[day].revenue += Number(o.total || 0);
-      byDayMap[day].orders++;
-      (o.items || []).forEach(i => {
-        if (!itemsMap[i.name]) itemsMap[i.name] = { name: i.name, qty: 0, revenue: 0 };
-        itemsMap[i.name].qty += i.qty;
-        itemsMap[i.name].revenue += i.price * i.qty;
-      });
-    });
-    const topItems = Object.values(itemsMap).sort((a, b) => b.qty - a.qty).slice(0, 15);
-    const byDay = Object.values(byDayMap).sort((a, b) => a.date.localeCompare(b.date));
-    return sendJSON(res, 200, { totalOrders, totalRevenue, avgTicket, byPayMethod, byDay, topItems });
-  }
-
-  // ── POST /api/login — autenticação do painel ──
-  if (pathname === '/api/login' && req.method === 'POST') {
-    try {
-      const { password } = await readBody(req);
-      const { cfg } = readConfig();
-      if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession() });
-      return sendJSON(res, 401, { error: 'senha incorreta' });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/pix — gera o copia-e-cola para um valor ──
-  if (pathname === '/api/pix' && req.method === 'POST') {
-    try {
-      const { amount, txid } = await readBody(req);
-      const { cfg } = readConfig();
-      if (!cfg.pixKey) return sendJSON(res, 400, { error: 'PIX não configurado pelo restaurante' });
-      const payload = buildPixPayload({
-        pixKey: cfg.pixKey, merchantName: cfg.pixName, merchantCity: cfg.pixCity, amount, txid
-      });
-      const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
-      return sendJSON(res, 200, { payload, qrImg });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada pela distância ──
-  if (pathname === '/api/delivery-fee' && req.method === 'POST') {
-    try {
-      const { cep, street, hood, city, uf } = await readBody(req);
-      const { cfg } = readConfig();
-
-      // Se o restaurante não usa taxa por distância (ou ainda não configurou as
-      // coordenadas da loja), devolve a taxa padrão direto — sem chamar nada externo.
-      if (cfg.feeMode !== 'distancia' || !cfg.storeLat || !cfg.storeLng) {
-        return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo', distanceKm: null });
-      }
-
+    // ── POST /api/config — admin salva config/cardápio ──
+    if (pathname === '/api/config' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
       try {
-        let addrStreet = String(street || '').trim();
-        let addrHood = String(hood || '').trim();
-        let addrCity = String(city || '').trim();
-        let addrUf = String(uf || '').trim();
+        const body = await readBody(req);
+        const current = await getConfig();
+        const merged = { ...current, ...body.cfg, adminPass: current.adminPass, masterPass: current.masterPass };
+        await db.saveSettings(merged);
+        if (body.menu) await db.saveMenu(body.menu);
+        broadcast('config-updated', {});
+        return sendJSON(res, 200, { ok: true });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-        // Se veio CEP, usa ele para completar/confirmar bairro-cidade-UF (mais preciso)
-        if (cep) {
-          const viacep = await lookupCEP(cep);
-          if (viacep) {
-            addrHood = addrHood || viacep.hood;
-            addrCity = addrCity || viacep.city;
-            addrUf = addrUf || viacep.uf;
-            if (!addrStreet) addrStreet = viacep.street;
+    // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
+    if (pathname === '/api/change-password' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { which, current: curPass, next } = await readBody(req);
+        const field = which === 'master' ? 'masterPass' : 'adminPass';
+        const cfg = await getConfig();
+        if (curPass !== cfg[field]) return sendJSON(res, 403, { error: 'senha atual incorreta' });
+        if (!next || next.length < 4) return sendJSON(res, 400, { error: 'nova senha muito curta (mín. 4 caracteres)' });
+        cfg[field] = next;
+        await db.saveSettings(cfg);
+        return sendJSON(res, 200, { ok: true });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── POST /api/upload — envia foto (logo/produto/slide); grava no Postgres, não em disco ──
+    if (pathname === '/api/upload' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { dataUrl } = await readBody(req);
+        const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+        if (!m) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG ou WEBP.' });
+        const mimeType = 'image/' + (m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase());
+        const buffer = Buffer.from(m[2], 'base64');
+        if (buffer.length > 4 * 1024 * 1024) return sendJSON(res, 400, { error: 'Imagem muito grande (máx. 4MB).' });
+        const id = await db.saveUpload(buffer, mimeType);
+        return sendJSON(res, 200, { url: '/uploads/' + id });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── GET /uploads/:id — serve uma imagem gravada no banco ──
+    if (pathname.startsWith('/uploads/') && req.method === 'GET') {
+      const id = pathname.split('/').pop();
+      const upload = await db.getUpload(id);
+      if (!upload) { res.writeHead(404); return res.end('Not found'); }
+      res.writeHead(200, { 'Content-Type': upload.mime_type, 'Cache-Control': 'public, max-age=31536000, immutable' });
+      return res.end(upload.data);
+    }
+
+    // ── POST /api/orders/purge — apaga pedidos antigos (exige senha master) ──
+    if (pathname === '/api/orders/purge' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { masterPass, beforeDate } = await readBody(req);
+        const cfg = await getConfig();
+        if (masterPass !== cfg.masterPass) return sendJSON(res, 403, { error: 'Senha master incorreta.' });
+        if (!beforeDate) return sendJSON(res, 400, { error: 'Informe a data limite.' });
+        const cutoffISO = new Date(beforeDate).toISOString();
+        const deleted = await db.purgeOrdersBefore(cutoffISO);
+        return sendJSON(res, 200, { ok: true, deleted });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── GET /api/reports — relatório de vendas (admin) ──
+    if (pathname === '/api/reports' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      const from = query.from ? new Date(query.from + 'T00:00:00').getTime() : 0;
+      const to = query.to ? new Date(query.to + 'T23:59:59').getTime() : Date.now();
+      const rangeOrders = await db.getOrdersInRange(from, to);
+      const filtered = rangeOrders.filter(o => o.status !== 'cancelado');
+      const totalOrders = filtered.length;
+      const totalRevenue = filtered.reduce((s, o) => s + Number(o.total || 0), 0);
+      const avgTicket = totalOrders ? totalRevenue / totalOrders : 0;
+      const byPayMethod = {}, byDayMap = {}, itemsMap = {};
+      filtered.forEach(o => {
+        byPayMethod[o.payMethod] = (byPayMethod[o.payMethod] || 0) + Number(o.total || 0);
+        const day = o.createdAt.slice(0, 10);
+        if (!byDayMap[day]) byDayMap[day] = { date: day, revenue: 0, orders: 0 };
+        byDayMap[day].revenue += Number(o.total || 0);
+        byDayMap[day].orders++;
+        (o.items || []).forEach(i => {
+          if (!itemsMap[i.name]) itemsMap[i.name] = { name: i.name, qty: 0, revenue: 0 };
+          itemsMap[i.name].qty += i.qty;
+          itemsMap[i.name].revenue += i.price * i.qty;
+        });
+      });
+      const topItems = Object.values(itemsMap).sort((a, b) => b.qty - a.qty).slice(0, 15);
+      const byDay = Object.values(byDayMap).sort((a, b) => a.date.localeCompare(b.date));
+      return sendJSON(res, 200, { totalOrders, totalRevenue, avgTicket, byPayMethod, byDay, topItems });
+    }
+
+    // ── POST /api/login — autenticação do painel ──
+    if (pathname === '/api/login' && req.method === 'POST') {
+      try {
+        const { password } = await readBody(req);
+        const cfg = await getConfig();
+        if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession() });
+        return sendJSON(res, 401, { error: 'senha incorreta' });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── POST /api/pix — gera o copia-e-cola para um valor ──
+    if (pathname === '/api/pix' && req.method === 'POST') {
+      try {
+        const { amount, txid } = await readBody(req);
+        const cfg = await getConfig();
+        if (!cfg.pixKey) return sendJSON(res, 400, { error: 'PIX não configurado pelo restaurante' });
+        const payload = buildPixPayload({
+          pixKey: cfg.pixKey, merchantName: cfg.pixName, merchantCity: cfg.pixCity, amount, txid
+        });
+        const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
+        return sendJSON(res, 200, { payload, qrImg });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada pela distância ──
+    if (pathname === '/api/delivery-fee' && req.method === 'POST') {
+      try {
+        const { cep, street, hood, city, uf } = await readBody(req);
+        const cfg = await getConfig();
+
+        if (cfg.feeMode !== 'distancia' || !cfg.storeLat || !cfg.storeLng) {
+          return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo', distanceKm: null });
+        }
+
+        try {
+          let addrStreet = String(street || '').trim();
+          let addrHood = String(hood || '').trim();
+          let addrCity = String(city || '').trim();
+          let addrUf = String(uf || '').trim();
+
+          if (cep) {
+            const viacep = await lookupCEP(cep);
+            if (viacep) {
+              addrHood = addrHood || viacep.hood;
+              addrCity = addrCity || viacep.city;
+              addrUf = addrUf || viacep.uf;
+              if (!addrStreet) addrStreet = viacep.street;
+            }
           }
-        }
 
-        const queryText = [addrStreet, addrHood, addrCity, addrUf, 'Brasil'].filter(Boolean).join(', ');
-        if (!queryText || (!addrStreet && !addrHood && !cep)) {
+          const queryText = [addrStreet, addrHood, addrCity, addrUf, 'Brasil'].filter(Boolean).join(', ');
+          if (!queryText || (!addrStreet && !addrHood && !cep)) {
+            return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
+          }
+
+          const geo = await geocodeAddress(queryText);
+          if (!geo) {
+            return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
+          }
+
+          const distanceKm = haversineKm(Number(cfg.storeLat), Number(cfg.storeLng), geo.lat, geo.lng);
+          const maxKm = Number(cfg.feeMaxKm) || 0;
+          if (maxKm > 0 && distanceKm > maxKm) {
+            return sendJSON(res, 200, { error: 'fora_area', distanceKm: Math.round(distanceKm * 10) / 10, maxKm });
+          }
+
+          const fee = calcFeeByDistance(cfg, distanceKm);
+          return sendJSON(res, 200, { fee, mode: 'distancia', distanceKm: Math.round(distanceKm * 10) / 10 });
+        } catch (geoErr) {
           return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
         }
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-        const geo = await geocodeAddress(queryText);
-        if (!geo) {
-          return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
-        }
-
-        const distanceKm = haversineKm(Number(cfg.storeLat), Number(cfg.storeLng), geo.lat, geo.lng);
-        const maxKm = Number(cfg.feeMaxKm) || 0;
-        if (maxKm > 0 && distanceKm > maxKm) {
-          return sendJSON(res, 200, { error: 'fora_area', distanceKm: Math.round(distanceKm * 10) / 10, maxKm });
-        }
-
-        const fee = calcFeeByDistance(cfg, distanceKm);
-        return sendJSON(res, 200, { fee, mode: 'distancia', distanceKm: Math.round(distanceKm * 10) / 10 });
-      } catch (geoErr) {
-        // Qualquer falha nas APIs externas (fora do ar, CEP não encontrado, etc.)
-        // não pode travar o pedido — cai para a taxa padrão configurada.
-        return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
-      }
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/admin/geocode-store — painel localiza e salva as coordenadas da loja ──
-  if (pathname === '/api/admin/geocode-store' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const body = await readBody(req);
-      const data = readConfig();
-      const address = String(body.address || data.cfg.addr || '').trim();
-      if (!address) return sendJSON(res, 400, { error: 'Informe o endereço do restaurante.' });
-      const geo = await geocodeAddress(address + ', Brasil');
-      if (!geo) return sendJSON(res, 404, { error: 'Não conseguimos localizar esse endereço. Tente descrevê-lo de outro jeito (ex: rua, número, bairro, cidade).' });
-      data.cfg.storeLat = geo.lat;
-      data.cfg.storeLng = geo.lng;
-      writeJSON(CONFIG_FILE, data);
-      return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
-    } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
-  }
-
-  // ── POST /api/print — imprime a via de uma estação para um pedido ──
-  if (pathname === '/api/print' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { orderId, station } = await readBody(req);
-      const st = ['cozinha', 'sushibar', 'bar', 'caixa'].includes(station) ? station : null;
-      if (!st) return sendJSON(res, 400, { error: 'Via inválida.' });
-      const orders = readJSON(ORDERS_FILE);
-      const order = orders.find(o => o.id === orderId);
-      if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
-      const { cfg } = readConfig();
-
-      const items = st === 'caixa' ? order.items : order.items.filter(i => i.station === st);
-      if (!items.length) return sendJSON(res, 200, { ok: true, printed: false, skipped: true, order, station: st });
-
-      const printerCfg = cfg.stations[st] || { method: 'navegador' };
-      if (printerCfg.method === 'navegador') {
-        // O navegador do cliente (painel) monta e imprime o ticket — servidor só confirma os dados.
-        return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador' });
-      }
-
-      const lines = [];
-      lines.push(ESC.center + ESC.boldOn + 'SHOGATSU' + ESC.boldOff + ESC.left);
-      lines.push((printerCfg.label || st).toUpperCase() + (st !== 'caixa' ? ' - VIA DE PRODUCAO' : ' - COMPROVANTE'));
-      lines.push('--------------------------------');
-      lines.push('Pedido #' + order.id + '  ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-      lines.push(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
-      lines.push('--------------------------------');
-      items.forEach(i => lines.push(`${i.qty}x ${i.name}` + (st === 'caixa' ? `   R$ ${(i.price * i.qty).toFixed(2)}` : '')));
-      if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
-      if (st === 'caixa') {
-        lines.push('--------------------------------');
-        lines.push(`Subtotal: R$ ${order.subtotal.toFixed(2)}`);
-        lines.push(`Entrega: R$ ${order.fee.toFixed(2)}`);
-        lines.push(ESC.boldOn + `TOTAL: R$ ${order.total.toFixed(2)}` + ESC.boldOff);
-        lines.push('Pagamento: ' + order.payMethod);
-      } else {
-        lines.push('--------------------------------');
-        lines.push(order.name + ' - ' + order.phone);
-      }
-      const ticketText = buildTicketText(lines);
-
+    // ── POST /api/admin/geocode-store — painel localiza e salva as coordenadas da loja ──
+    if (pathname === '/api/admin/geocode-store' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
       try {
+        const body = await readBody(req);
+        const cfg = await getConfig();
+        const address = String(body.address || cfg.addr || '').trim();
+        if (!address) return sendJSON(res, 400, { error: 'Informe o endereço do restaurante.' });
+        const geo = await geocodeAddress(address + ', Brasil');
+        if (!geo) return sendJSON(res, 404, { error: 'Não conseguimos localizar esse endereço. Tente descrevê-lo de outro jeito (ex: rua, número, bairro, cidade).' });
+        cfg.storeLat = geo.lat;
+        cfg.storeLng = geo.lng;
+        await db.saveSettings(cfg);
+        return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
+      } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
+    }
+
+    // ── GET /api/admin/scan-network-printers — procura impressoras na rede local do servidor ──
+    if (pathname === '/api/admin/scan-network-printers' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const result = await scanNetworkPrinters();
+        if (!result.subnet) return sendJSON(res, 200, { found: [], note: 'Não foi possível detectar a rede local deste servidor.' });
+        return sendJSON(res, 200, result);
+      } catch (e) { return sendJSON(res, 500, { error: 'Erro ao buscar impressoras na rede.' }); }
+    }
+
+    // ── GET /api/admin/scan-usb-printers — procura impressoras USB conectadas ao servidor ──
+    if (pathname === '/api/admin/scan-usb-printers' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        return sendJSON(res, 200, scanUSBPrinters());
+      } catch (e) { return sendJSON(res, 500, { error: 'Erro ao buscar impressoras USB.' }); }
+    }
+
+    // ── POST /api/print — imprime a via de uma estação para um pedido ──
+    if (pathname === '/api/print' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { orderId, station } = await readBody(req);
+        const st = ['cozinha', 'sushibar', 'bar', 'caixa'].includes(station) ? station : null;
+        if (!st) return sendJSON(res, 400, { error: 'Via inválida.' });
+        const order = await db.getOrderById(orderId);
+        if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
+        const cfg = await getConfig();
+
+        const items = st === 'caixa' ? order.items : order.items.filter(i => i.station === st);
+        if (!items.length) return sendJSON(res, 200, { ok: true, printed: false, skipped: true, order, station: st });
+
+        const printerCfg = cfg.stations[st] || { method: 'navegador' };
+        if (printerCfg.method === 'navegador') {
+          return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador' });
+        }
+
+        const lines = [];
+        lines.push(ESC.center + ESC.boldOn + 'SHOGATSU' + ESC.boldOff + ESC.left);
+        lines.push((printerCfg.label || st).toUpperCase() + (st !== 'caixa' ? ' - VIA DE PRODUCAO' : ' - COMPROVANTE'));
+        lines.push('--------------------------------');
+        lines.push('Pedido #' + order.id + '  ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        lines.push(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
+        lines.push('--------------------------------');
+        items.forEach(i => lines.push(`${i.qty}x ${i.name}` + (st === 'caixa' ? `   R$ ${(i.price * i.qty).toFixed(2)}` : '')));
+        if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
+        if (st === 'caixa') {
+          lines.push('--------------------------------');
+          lines.push(order.name + ' - ' + order.phone);
+          if (order.mode === 'delivery' && order.address) lines.push(order.address);
+          lines.push('--------------------------------');
+          lines.push(`Subtotal: R$ ${order.subtotal.toFixed(2)}`);
+          lines.push(`Entrega: R$ ${order.fee.toFixed(2)}`);
+          lines.push(ESC.boldOn + `TOTAL: R$ ${order.total.toFixed(2)}` + ESC.boldOff);
+          lines.push('Pagamento: ' + order.payMethod);
+        } else {
+          lines.push('--------------------------------');
+          lines.push(order.name + ' - ' + order.phone);
+        }
+        const ticketText = buildTicketText(lines);
+
+        try {
+          if (printerCfg.method === 'rede') {
+            if (!printerCfg.ip) return sendJSON(res, 400, { error: `Impressora de rede da via "${st}" sem IP configurado.` });
+            await sendNetworkPrint(printerCfg.ip, printerCfg.port, ticketText);
+          } else if (printerCfg.method === 'usb') {
+            if (!printerCfg.device) return sendJSON(res, 400, { error: `Caminho do dispositivo USB da via "${st}" não configurado.` });
+            await sendUSBPrint(printerCfg.device, ticketText);
+          }
+          return sendJSON(res, 200, { ok: true, printed: true, order, station: st, method: printerCfg.method });
+        } catch (printErr) {
+          return sendJSON(res, 502, { error: `Falha ao imprimir na via "${st}": ${printErr.message}` });
+        }
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── POST /api/print-test — envia um ticket de teste para a impressora de uma via ──
+    if (pathname === '/api/print-test' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { station } = await readBody(req);
+        const cfg = await getConfig();
+        const printerCfg = cfg.stations[station];
+        if (!printerCfg) return sendJSON(res, 400, { error: 'Via inválida.' });
+        if (printerCfg.method === 'navegador') return sendJSON(res, 200, { ok: true, method: 'navegador' });
+        const text = buildTicketText([
+          ESC.center + ESC.boldOn + 'TESTE DE IMPRESSAO' + ESC.boldOff + ESC.left,
+          'Via: ' + (printerCfg.label || station),
+          new Date().toLocaleString('pt-BR')
+        ]);
         if (printerCfg.method === 'rede') {
-          if (!printerCfg.ip) return sendJSON(res, 400, { error: `Impressora de rede da via "${st}" sem IP configurado.` });
-          await sendNetworkPrint(printerCfg.ip, printerCfg.port, ticketText);
+          if (!printerCfg.ip) return sendJSON(res, 400, { error: 'Informe o IP da impressora.' });
+          await sendNetworkPrint(printerCfg.ip, printerCfg.port, text);
         } else if (printerCfg.method === 'usb') {
-          if (!printerCfg.device) return sendJSON(res, 400, { error: `Caminho do dispositivo USB da via "${st}" não configurado.` });
-          await sendUSBPrint(printerCfg.device, ticketText);
+          if (!printerCfg.device) return sendJSON(res, 400, { error: 'Informe o caminho do dispositivo USB.' });
+          await sendUSBPrint(printerCfg.device, text);
         }
-        return sendJSON(res, 200, { ok: true, printed: true, order, station: st, method: printerCfg.method });
-      } catch (printErr) {
-        return sendJSON(res, 502, { error: `Falha ao imprimir na via "${st}": ${printErr.message}` });
-      }
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
+        return sendJSON(res, 200, { ok: true, printed: true });
+      } catch (e) { return sendJSON(res, e.message && e.code ? 502 : 400, { error: e.message || 'invalid body' }); }
+    }
 
-  // ── POST /api/print-test — envia um ticket de teste para a impressora de uma via ──
-  if (pathname === '/api/print-test' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { station } = await readBody(req);
-      const { cfg } = readConfig();
-      const printerCfg = cfg.stations[station];
-      if (!printerCfg) return sendJSON(res, 400, { error: 'Via inválida.' });
-      if (printerCfg.method === 'navegador') return sendJSON(res, 200, { ok: true, method: 'navegador' });
-      const text = buildTicketText([
-        ESC.center + ESC.boldOn + 'TESTE DE IMPRESSAO' + ESC.boldOff + ESC.left,
-        'Via: ' + (printerCfg.label || station),
-        new Date().toLocaleString('pt-BR')
-      ]);
-      if (printerCfg.method === 'rede') {
-        if (!printerCfg.ip) return sendJSON(res, 400, { error: 'Informe o IP da impressora.' });
-        await sendNetworkPrint(printerCfg.ip, printerCfg.port, text);
-      } else if (printerCfg.method === 'usb') {
-        if (!printerCfg.device) return sendJSON(res, 400, { error: 'Informe o caminho do dispositivo USB.' });
-        await sendUSBPrint(printerCfg.device, text);
-      }
-      return sendJSON(res, 200, { ok: true, printed: true });
-    } catch (e) { return sendJSON(res, e.message && e.code ? 502 : 400, { error: e.message || 'invalid body' }); }
-  }
+    // ── POST /api/customer/register — cliente cria conta (telefone + senha de 4 dígitos) ──
+    if (pathname === '/api/customer/register' && req.method === 'POST') {
+      try {
+        const { phone, name, pin } = await readBody(req);
+        const p = normalizePhone(phone);
+        if (p.length < 10) return sendJSON(res, 400, { error: 'Telefone inválido.' });
+        if (!/^\d{4}$/.test(String(pin || ''))) return sendJSON(res, 400, { error: 'A senha precisa ter exatamente 4 dígitos.' });
+        if (!name || !name.trim()) return sendJSON(res, 400, { error: 'Informe seu nome.' });
 
-  // ── POST /api/customer/register — cliente cria conta (telefone + senha de 4 dígitos) ──
-  if (pathname === '/api/customer/register' && req.method === 'POST') {
-    try {
-      const { phone, name, pin } = await readBody(req);
-      const p = normalizePhone(phone);
-      if (p.length < 10) return sendJSON(res, 400, { error: 'Telefone inválido.' });
-      if (!/^\d{4}$/.test(String(pin || ''))) return sendJSON(res, 400, { error: 'A senha precisa ter exatamente 4 dígitos.' });
-      if (!name || !name.trim()) return sendJSON(res, 400, { error: 'Informe seu nome.' });
+        const existing = await db.getCustomerByPhone(p);
+        if (existing) return sendJSON(res, 409, { error: 'Já existe uma conta com esse telefone. Use "Entrar" ou "Esqueci minha senha".' });
 
-      const customers = readJSON(CUSTOMERS_FILE);
-      let customer = findCustomer(customers, p);
-      if (customer) return sendJSON(res, 409, { error: 'Já existe uma conta com esse telefone. Use "Entrar" ou "Esqueci minha senha".' });
+        const customer = await db.createCustomer({ phone: p, name: String(name).trim().slice(0, 80), pinHash: hashPin(p, pin) });
+        return sendJSON(res, 201, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: null } });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-      customer = {
-        phone: p, name: String(name).trim().slice(0, 80),
-        pinHash: hashPin(p, pin), createdAt: new Date().toISOString(),
-        lastAddress: null, recovery: null
-      };
-      customers.push(customer);
-      writeJSON(CUSTOMERS_FILE, customers);
-      return sendJSON(res, 201, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: null } });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
+    // ── POST /api/customer/login — cliente entra com telefone + senha de 4 dígitos ──
+    if (pathname === '/api/customer/login' && req.method === 'POST') {
+      try {
+        const { phone, pin } = await readBody(req);
+        const p = normalizePhone(phone);
+        const customer = await db.getCustomerByPhone(p);
+        if (!customer || customer.pinHash !== hashPin(p, pin)) return sendJSON(res, 401, { error: 'Telefone ou senha incorretos.' });
+        const stats = await db.getCustomerStats(p);
+        return sendJSON(res, 200, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: customer.lastAddress, ...stats } });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-  // ── POST /api/customer/login — cliente entra com telefone + senha de 4 dígitos ──
-  if (pathname === '/api/customer/login' && req.method === 'POST') {
-    try {
-      const { phone, pin } = await readBody(req);
-      const p = normalizePhone(phone);
-      const customers = readJSON(CUSTOMERS_FILE);
-      const customer = findCustomer(customers, p);
-      if (!customer || customer.pinHash !== hashPin(p, pin)) return sendJSON(res, 401, { error: 'Telefone ou senha incorretos.' });
-      const orders = readJSON(ORDERS_FILE);
-      const stats = customerStats(p, orders);
-      return sendJSON(res, 200, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: customer.lastAddress, ...stats } });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
+    // ── POST /api/customer/recovery-request — gera código e devolve link do WhatsApp da loja ──
+    if (pathname === '/api/customer/recovery-request' && req.method === 'POST') {
+      try {
+        const { phone } = await readBody(req);
+        const p = normalizePhone(phone);
+        const customer = await db.getCustomerByPhone(p);
+        if (!customer) return sendJSON(res, 404, { error: 'Não existe conta com esse telefone.' });
 
-  // ── POST /api/customer/recovery-request — gera código e devolve link do WhatsApp da loja ──
-  if (pathname === '/api/customer/recovery-request' && req.method === 'POST') {
-    try {
-      const { phone } = await readBody(req);
-      const p = normalizePhone(phone);
-      const customers = readJSON(CUSTOMERS_FILE);
-      const customer = findCustomer(customers, p);
-      if (!customer) return sendJSON(res, 404, { error: 'Não existe conta com esse telefone.' });
+        const code = String(Math.floor(100000 + Math.random() * 900000)); // 6 dígitos
+        await db.setCustomerRecovery(p, { code, requestedAt: new Date().toISOString(), approved: false });
 
-      const code = String(Math.floor(100000 + Math.random() * 900000)); // 6 dígitos
-      customer.recovery = { code, requestedAt: new Date().toISOString(), approved: false };
-      writeJSON(CUSTOMERS_FILE, customers);
+        const cfg = await getConfig();
+        const waText = `Olá! Quero recuperar minha senha do Shogatsu.\nMeu telefone: ${customer.phone}\nCódigo: ${code}`;
+        const waUrl = `https://wa.me/${cfg.whats}?text=${encodeURIComponent(waText)}`;
+        return sendJSON(res, 200, { ok: true, code, waUrl });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-      const { cfg } = readConfig();
-      const waText = `Olá! Quero recuperar minha senha do Shogatsu.\nMeu telefone: ${customer.phone}\nCódigo: ${code}`;
-      const waUrl = `https://wa.me/${cfg.whats}?text=${encodeURIComponent(waText)}`;
-      return sendJSON(res, 200, { ok: true, code, waUrl });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/customer/recovery-set-pin — cliente define nova senha (precisa já ter sido aprovado no painel) ──
-  if (pathname === '/api/customer/recovery-set-pin' && req.method === 'POST') {
-    try {
-      const { phone, code, newPin } = await readBody(req);
-      const p = normalizePhone(phone);
-      if (!/^\d{4}$/.test(String(newPin || ''))) return sendJSON(res, 400, { error: 'A nova senha precisa ter exatamente 4 dígitos.' });
-      const customers = readJSON(CUSTOMERS_FILE);
-      const customer = findCustomer(customers, p);
-      if (!customer || !customer.recovery || customer.recovery.code !== String(code)) {
-        return sendJSON(res, 400, { error: 'Código inválido.' });
-      }
-      if (!customer.recovery.approved) {
-        return sendJSON(res, 403, { error: 'Ainda aguardando a confirmação da loja pelo WhatsApp. Tente novamente em instantes.' });
-      }
-      customer.pinHash = hashPin(p, newPin);
-      customer.recovery = null;
-      writeJSON(CUSTOMERS_FILE, customers);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── GET /api/admin/customers — lista de clientes com estatísticas (painel, requer auth) ──
-  if (pathname === '/api/admin/customers' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const customers = readJSON(CUSTOMERS_FILE);
-    const orders = readJSON(ORDERS_FILE);
-    const list = customers.map(c => ({
-      phone: c.phone, name: c.name, createdAt: c.createdAt, lastAddress: c.lastAddress,
-      hasPendingRecovery: !!(c.recovery && !c.recovery.approved),
-      ...customerStats(c.phone, orders)
-    })).sort((a, b) => b.orderCount - a.orderCount);
-    return sendJSON(res, 200, { customers: list });
-  }
-
-  // ── GET /api/admin/customers/orders?phone=... — histórico de pedidos de um cliente ──
-  if (pathname === '/api/admin/customers/orders' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const p = normalizePhone(query.phone);
-    const orders = readJSON(ORDERS_FILE).filter(o => normalizePhone(o.phone) === p);
-    return sendJSON(res, 200, { orders });
-  }
-
-  // ── POST /api/admin/customers/recovery-approve — restaurante confirma o código recebido no WhatsApp ──
-  if (pathname === '/api/admin/customers/recovery-approve' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const { phone } = await readBody(req);
-      const p = normalizePhone(phone);
-      const customers = readJSON(CUSTOMERS_FILE);
-      const customer = findCustomer(customers, p);
-      if (!customer || !customer.recovery) return sendJSON(res, 404, { error: 'Nenhuma recuperação pendente pra esse telefone.' });
-      customer.recovery.approved = true;
-      writeJSON(CUSTOMERS_FILE, customers);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/orders — cria um novo pedido (cliente) ──
-  if (pathname === '/api/orders' && req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const { cfg } = readConfig();
-      if (!Number(cfg.open)) return sendJSON(res, 400, { error: 'Restaurante fechado no momento.' });
-      if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
-
-      const orders = readJSON(ORDERS_FILE);
-      const order = {
-        id: 'SG' + Date.now().toString(36).toUpperCase(),
-        createdAt: new Date().toISOString(),
-        status: 'novo',
-        mode: body.mode === 'retirada' ? 'retirada' : 'delivery',
-        name: String(body.name || '').slice(0, 80),
-        phone: String(body.phone || '').slice(0, 30),
-        address: String(body.address || '').slice(0, 200),
-        items: (body.items || []).slice(0, 60).map(i => ({
-          name: String(i.name || '').slice(0, 80),
-          qty: Math.max(1, parseInt(i.qty) || 1),
-          price: Number(i.price) || 0,
-          station: ['cozinha', 'sushibar', 'bar', 'caixa'].includes(i.station) ? i.station : 'cozinha'
-        })),
-        obs: String(body.obs || '').slice(0, 300),
-        payMethod: String(body.payMethod || '').slice(0, 20),
-        troco: String(body.troco || '').slice(0, 20),
-        subtotal: Number(body.subtotal) || 0,
-        fee: Number(body.fee) || 0,
-        total: Number(body.total) || 0
-      };
-      orders.unshift(order);
-      writeJSON(ORDERS_FILE, orders);
-
-      // Se o telefone tem conta cadastrada, guarda o endereço mais recente pra pré-preencher da próxima vez
-      if (order.mode === 'delivery') {
-        const customers = readJSON(CUSTOMERS_FILE);
-        const customer = findCustomer(customers, order.phone);
-        if (customer) {
-          customer.lastAddress = order.address;
-          writeJSON(CUSTOMERS_FILE, customers);
+    // ── POST /api/customer/recovery-set-pin — cliente define nova senha (precisa já ter sido aprovado no painel) ──
+    if (pathname === '/api/customer/recovery-set-pin' && req.method === 'POST') {
+      try {
+        const { phone, code, newPin } = await readBody(req);
+        const p = normalizePhone(phone);
+        if (!/^\d{4}$/.test(String(newPin || ''))) return sendJSON(res, 400, { error: 'A nova senha precisa ter exatamente 4 dígitos.' });
+        const customer = await db.getCustomerByPhone(p);
+        if (!customer || !customer.recovery || customer.recovery.code !== String(code)) {
+          return sendJSON(res, 400, { error: 'Código inválido.' });
         }
-      }
+        if (!customer.recovery.approved) {
+          return sendJSON(res, 403, { error: 'Ainda aguardando a confirmação da loja pelo WhatsApp. Tente novamente em instantes.' });
+        }
+        await db.updateCustomerPin(p, hashPin(p, newPin));
+        return sendJSON(res, 200, { ok: true });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
 
-      broadcast('new-order', order);
-      return sendJSON(res, 201, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
+    // ── GET /api/admin/customers — lista de clientes com estatísticas (painel, requer auth) ──
+    if (pathname === '/api/admin/customers' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      const list = await db.listCustomersWithStats();
+      return sendJSON(res, 200, { customers: list });
+    }
 
-  // ── GET /api/orders — lista pedidos (painel, requer auth) ──
-  if (pathname === '/api/orders' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    return sendJSON(res, 200, readJSON(ORDERS_FILE));
-  }
+    // ── GET /api/admin/customers/orders?phone=... — histórico de pedidos de um cliente ──
+    if (pathname === '/api/admin/customers/orders' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      const orders = await db.getOrdersByPhone(normalizePhone(query.phone));
+      return sendJSON(res, 200, { orders });
+    }
 
-  // ── PATCH /api/orders/:id — atualiza status (painel) ──
-  if (pathname.startsWith('/api/orders/') && req.method === 'PATCH') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const id = pathname.split('/').pop();
-    try {
-      const { status, fee, cancelReason } = await readBody(req);
-      const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
-      if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
-      const orders = readJSON(ORDERS_FILE);
-      const order = orders.find(o => o.id === id);
+    // ── POST /api/admin/customers/recovery-approve — restaurante confirma o código recebido no WhatsApp ──
+    if (pathname === '/api/admin/customers/recovery-approve' && req.method === 'POST') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      try {
+        const { phone } = await readBody(req);
+        const p = normalizePhone(phone);
+        const customer = await db.getCustomerByPhone(p);
+        if (!customer || !customer.recovery) return sendJSON(res, 404, { error: 'Nenhuma recuperação pendente pra esse telefone.' });
+        await db.setCustomerRecovery(p, { ...customer.recovery, approved: true });
+        return sendJSON(res, 200, { ok: true });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── POST /api/orders — cria um novo pedido (cliente) ──
+    if (pathname === '/api/orders' && req.method === 'POST') {
+      try {
+        const body = await readBody(req);
+        const cfg = await getConfig();
+        if (!Number(cfg.open)) return sendJSON(res, 400, { error: 'Restaurante fechado no momento.' });
+        if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
+
+        const order = {
+          id: 'SG' + Date.now().toString(36).toUpperCase(),
+          createdAt: new Date().toISOString(),
+          status: 'novo',
+          mode: body.mode === 'retirada' ? 'retirada' : 'delivery',
+          name: String(body.name || '').slice(0, 80),
+          phone: String(body.phone || '').slice(0, 30),
+          address: String(body.address || '').slice(0, 200),
+          items: (body.items || []).slice(0, 60).map(i => ({
+            name: String(i.name || '').slice(0, 80),
+            qty: Math.max(1, parseInt(i.qty) || 1),
+            price: Number(i.price) || 0,
+            station: ['cozinha', 'sushibar', 'bar', 'caixa'].includes(i.station) ? i.station : 'cozinha'
+          })),
+          obs: String(body.obs || '').slice(0, 300),
+          payMethod: String(body.payMethod || '').slice(0, 20),
+          troco: String(body.troco || '').slice(0, 20),
+          subtotal: Number(body.subtotal) || 0,
+          fee: Number(body.fee) || 0,
+          total: Number(body.total) || 0
+        };
+        await db.createOrder(order);
+
+        // Se o telefone tem conta cadastrada, guarda o endereço mais recente pra pré-preencher da próxima vez
+        if (order.mode === 'delivery') {
+          const customer = await db.getCustomerByPhone(order.phone);
+          if (customer) await db.updateCustomerLastAddress(order.phone, order.address);
+        }
+
+        broadcast('new-order', order);
+        return sendJSON(res, 201, { ok: true, order });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── GET /api/orders — lista pedidos (painel, requer auth) ──
+    if (pathname === '/api/orders' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      return sendJSON(res, 200, await db.getOrders());
+    }
+
+    // ── PATCH /api/orders/:id — atualiza status (painel) ──
+    if (pathname.startsWith('/api/orders/') && req.method === 'PATCH') {
+      if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+      const id = pathname.split('/').pop();
+      try {
+        const { status, fee, cancelReason } = await readBody(req);
+        const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
+        if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
+        const existing = await db.getOrderById(id);
+        if (!existing) return sendJSON(res, 404, { error: 'pedido não encontrado' });
+
+        const fields = { status };
+        if (status === 'cancelado') fields.cancelReason = String(cancelReason || '').slice(0, 200) || 'Não informado';
+        if (fee !== undefined && fee !== null && fee !== '') {
+          fields.fee = Number(fee) || 0;
+          fields.total = Number(existing.subtotal || 0) + fields.fee;
+        }
+        const order = await db.updateOrder(id, fields);
+        broadcast('order-updated', order);
+        return sendJSON(res, 200, { ok: true, order });
+      } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    }
+
+    // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
+    if (pathname.startsWith('/api/track/') && req.method === 'GET') {
+      const id = pathname.split('/').pop();
+      const order = await db.getOrderById(id);
       if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
-      order.status = status;
-      if (status === 'cancelado') order.cancelReason = String(cancelReason || '').slice(0, 200) || 'Não informado';
-      if (fee !== undefined && fee !== null && fee !== '') {
-        order.fee = Number(fee) || 0;
-        order.total = Number(order.subtotal || 0) + order.fee;
-      }
-      writeJSON(ORDERS_FILE, orders);
-      broadcast('order-updated', order);
-      return sendJSON(res, 200, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
+      const { name, phone, address, ...rest } = order;
+      return sendJSON(res, 200, rest); // não expõe dados pessoais de novo, só status/itens/valores
+    }
 
-  // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
-  if (pathname.startsWith('/api/track/') && req.method === 'GET') {
-    const id = pathname.split('/').pop();
-    const orders = readJSON(ORDERS_FILE);
-    const order = orders.find(o => o.id === id);
-    if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
-    const { name, phone, address, ...rest } = order;
-    return sendJSON(res, 200, rest); // não expõe dados pessoais de novo, só status/itens/valores
-  }
+    // ── GET /api/stream — Server-Sent Events (painel em tempo real) ──
+    if (pathname === '/api/stream' && req.method === 'GET') {
+      if (!checkAuth(getToken(req, query))) { res.writeHead(401); return res.end(); }
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.write(': connected\n\n');
+      sseClients.add(res);
+      const keepAlive = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
+      req.on('close', () => { clearInterval(keepAlive); sseClients.delete(res); });
+      return;
+    }
 
-  // ── GET /api/stream — Server-Sent Events (painel em tempo real) ──
-  if (pathname === '/api/stream' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) { res.writeHead(401); return res.end(); }
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
+    // ── Arquivos estáticos (site do cliente + painel) ──
+    if (req.method === 'GET') return serveStatic(req, res, pathname);
+
+    res.writeHead(404); res.end('Not found');
+  } catch (err) {
+    console.error('❌ Erro não tratado numa rota:', err.message);
+    return sendJSON(res, 500, { error: 'Erro interno do servidor. Tente novamente.' });
+  }
+});
+
+// ─── Boot: conecta e prepara o banco ANTES de aceitar requisições ───
+(async () => {
+  try {
+    await db.init(DEFAULT_CFG, DEFAULT_MENU);
+    server.listen(PORT, () => {
+      console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+      console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
     });
-    res.write(': connected\n\n');
-    sseClients.add(res);
-    const keepAlive = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
-    req.on('close', () => { clearInterval(keepAlive); sseClients.delete(res); });
-    return;
+  } catch (err) {
+    console.error('❌ Falha fatal ao iniciar o servidor:', err.message);
+    process.exit(1);
   }
+})();
 
-  // ── Arquivos estáticos (site do cliente + painel) ──
-  if (req.method === 'GET') return serveStatic(req, res, pathname);
-
-  res.writeHead(404); res.end('Not found');
-});
-
-server.listen(PORT, () => {
-  console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-  console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
-});
+// ─── Encerramento gracioso (Render manda SIGTERM antes de reiniciar/reimplantar) ───
+async function gracefulShutdown(signal) {
+  console.log(`🛑 ${signal} recebido — encerrando servidor com segurança...`);
+  server.close(async () => {
+    await db.shutdown();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000).unref(); // trava de segurança
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
