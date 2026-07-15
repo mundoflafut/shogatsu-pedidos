@@ -26,6 +26,7 @@ const DEFAULT_CFG = {
   adminPass: 'shogatsu2026',
   masterPass: 'shogatsuMaster2026',
   logoUrl: '',
+  print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
   pixKey: '', pixName: 'Shogatsu Culinaria Oriental', pixCity: 'RIO DAS OSTRAS',
   // ── Impressão do comprovante ──
   printFont: 'monospace',      // 'monospace' | 'sans-serif' | 'serif'
@@ -529,6 +530,25 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
   }
 
+// Calcula uma janela de horário estimada de entrega/retirada a partir da hora do
+// pedido + o texto configurado em cfg.time (ex: "40–60 min"). Se não conseguir
+// extrair dois números do texto, devolve só o texto original como está.
+function estimateDeliveryWindow(order, cfg) {
+  const nums = String(cfg.time || '').match(/\d+/g);
+  const created = new Date(order.createdAt);
+  const fmt = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (nums && nums.length >= 2) {
+    const from = new Date(created.getTime() + parseInt(nums[0]) * 60000);
+    const to = new Date(created.getTime() + parseInt(nums[nums.length - 1]) * 60000);
+    return `${fmt(from)} – ${fmt(to)}`;
+  }
+  if (nums && nums.length === 1) {
+    const to = new Date(created.getTime() + parseInt(nums[0]) * 60000);
+    return `até ${fmt(to)}`;
+  }
+  return cfg.time || '—';
+}
+
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
   if (pathname === '/api/print' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
@@ -540,34 +560,47 @@ const server = http.createServer(async (req, res) => {
       const order = orders.find(o => o.id === orderId);
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
       const { cfg } = readConfig();
+      const isCaixa = st === 'caixa';
 
-      const items = st === 'caixa' ? order.items : order.items.filter(i => i.station === st);
+      // Caixa: comprovante completo (todos os itens + dados do cliente + horário).
+      // Cozinha/Sushibar/Bar: só os itens daquela estação + observações, sem dados pessoais.
+      const items = isCaixa ? order.items : order.items.filter(i => i.station === st);
       if (!items.length) return sendJSON(res, 200, { ok: true, printed: false, skipped: true, order, station: st });
 
+      const deliveryWindow = estimateDeliveryWindow(order, cfg);
       const printerCfg = cfg.stations[st] || { method: 'navegador' };
       if (printerCfg.method === 'navegador') {
         // O navegador do cliente (painel) monta e imprime o ticket — servidor só confirma os dados.
-        return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador' });
+        return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador', deliveryWindow });
       }
 
       const lines = [];
       lines.push(ESC.center + ESC.boldOn + 'SHOGATSU' + ESC.boldOff + ESC.left);
-      lines.push((printerCfg.label || st).toUpperCase() + (st !== 'caixa' ? ' - VIA DE PRODUCAO' : ' - COMPROVANTE'));
+      lines.push((printerCfg.label || st).toUpperCase() + (isCaixa ? ' - COMPROVANTE' : ' - VIA DE PRODUCAO'));
       lines.push('--------------------------------');
       lines.push('Pedido #' + order.id + '  ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
       lines.push(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
-      lines.push('--------------------------------');
-      items.forEach(i => lines.push(`${i.qty}x ${i.name}` + (st === 'caixa' ? `   R$ ${(i.price * i.qty).toFixed(2)}` : '')));
-      if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
-      if (st === 'caixa') {
+
+      if (isCaixa) {
+        // ── Via do Caixa: dados completos do cliente + horário estimado ──
+        lines.push('--------------------------------');
+        lines.push('Cliente: ' + order.name);
+        lines.push('Telefone: ' + order.phone);
+        if (order.mode === 'delivery') lines.push('Endereco: ' + order.address);
+        lines.push((order.mode === 'delivery' ? 'Previsao de entrega: ' : 'Previsao de retirada: ') + deliveryWindow);
+        lines.push('--------------------------------');
+        items.forEach(i => lines.push(`${i.qty}x ${i.name}   R$ ${(i.price * i.qty).toFixed(2)}`));
+        if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
         lines.push('--------------------------------');
         lines.push(`Subtotal: R$ ${order.subtotal.toFixed(2)}`);
         lines.push(`Entrega: R$ ${order.fee.toFixed(2)}`);
         lines.push(ESC.boldOn + `TOTAL: R$ ${order.total.toFixed(2)}` + ESC.boldOff);
-        lines.push('Pagamento: ' + order.payMethod);
+        lines.push('Pagamento: ' + order.payMethod + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
       } else {
+        // ── Vias de produção (cozinha/sushibar/bar): só pedido, itens e observações ──
         lines.push('--------------------------------');
-        lines.push(order.name + ' - ' + order.phone);
+        items.forEach(i => lines.push(`${i.qty}x ${i.name}`));
+        if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
       }
       const ticketText = buildTicketText(lines);
 
