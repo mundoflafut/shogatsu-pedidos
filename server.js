@@ -236,7 +236,7 @@ function sendUSBPrint(devicePath, text) {
 function normalizeMenu(menu) {
   return (menu || []).map(sec => ({
     ...sec,
-    items: (sec.items || []).map(it => ({ station: 'cozinha', available: true, ...it }))
+    items: (sec.items || []).map(it => ({ station: 'cozinha', available: true, variants: [], ...it }))
   }));
 }
 
