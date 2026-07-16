@@ -1,55 +1,31 @@
-# Shogatsu — Evoluções aplicadas (atualização mais recente)
+# Shogatsu — Textos de status e botões editáveis
 
-## 🖨 Impressoras: renomear + escolher pra onde cada prato vai
+## ✏️ Personalize os textos do fluxo de pedidos
+Em **Configurações → Textos de Status e Botões**, agora dá pra renomear:
+- O nome das 4 colunas do Kanban (Novos / Preparando / Pronto / Entregue)
+- O texto dos botões de ação (Aceitar Pedido / Marcar Pronto / Confirmar
+  Entrega / Cancelar)
 
-**Renomear o nome de cada via**
-Em **Configurações → Impressoras por Estação**, cada uma das 4 vias
-(Cozinha, Sushibar, Bar, Caixa) agora tem um campo de texto pra você
-renomear como quiser (ex: "Cozinha" → "Cozinha 1", "Bar" → "Bar/Drinks").
-Também dá pra escolher, por via, se ela imprime pela janela do navegador
-(mais simples, padrão), por impressora de rede (informando o IP) ou por
-impressora USB (informando o caminho do dispositivo). Tem um botão
-**🖨 Testar** pra confirmar que está tudo certo antes de usar de verdade.
+Esses textos aparecem tanto no Kanban quanto na lista de Pedidos e no
+dashboard — muda em um lugar só e atualiza em todo o painel.
 
-**Marcar pra onde cada prato vai (uma ou mais vias)**
-Ao editar um prato no cardápio, o campo que antes era um "select" de uma
-via só virou **caixinhas de marcação**: Cozinha / Sushibar / Bar. Agora dá
-pra marcar mais de uma — por exemplo, um combo com bebida pode sair
-impresso ao mesmo tempo na Cozinha **e** no Bar, cada um recebendo sua
-parte. Antes só dava pra escolher uma via por prato.
+Isso, somado ao que já existia (renomear as vias de impressão), cobre a
+parte do painel que faz mais sentido customizar: o vocabulário do fluxo de
+trabalho, pra bater com como seu restaurante realmente chama cada etapa.
+Não mexi nos botões de utilidade (Editar, Excluir, Salvar, etc.) porque
+tornar esses editáveis não traria ganho real e deixaria a manutenção do
+sistema mais arriscada — se quiser algo específico aí, me diga qual botão.
 
-## 🔄 Cardápio do cliente atualiza sozinho, em tempo real
-Antes, se um cliente já estivesse com o site aberto no celular e você
-mudasse um preço, marcasse um prato como esgotado ou alterasse qualquer
-coisa no painel, ele só via a mudança se recarregasse a página manualmente.
-
-Agora o site do cliente fica "escutando" o painel: assim que você salva
-qualquer coisa (cardápio, preços, variações, config geral), todo mundo que
-já está com o cardápio aberto recebe a atualização na hora, sem precisar
-dar F5. Testado e confirmado funcionando de ponta a ponta.
-
-## 🐛 Bugs encontrados e corrigidos nessa varredura
-1. **"Imprimir ao Receber" não fazia nada.** O campo existia na tela de
-   Configurações, mas nunca era salvo nem lido — ativar ou desativar não
-   mudava nada de verdade. Corrigido: agora funciona de verdade (imprime
-   todas as vias automaticamente quando um pedido novo chega).
-2. **Vias de produção (Cozinha/Sushibar/Bar) mostravam nome e telefone do
-   cliente.** Não faz sentido a cozinha ter esse dado — corrigido na
-   atualização anterior de impressão, mantido aqui.
-3. **Não existia jeito de marcar um prato como esgotado.** Adicionei um
-   botão "✅ Disponível / 🚫 Esgotado" em cada item do cardápio no painel —
-   um clique já salva.
-4. **Editar um prato reativava ele sozinho.** Se um prato estava marcado
-   como esgotado e você só editava a descrição ou o preço, ele voltava a
-   ficar "disponível" escondido — sem querer. Corrigido: editar não mexe
-   mais nesse status.
+## 🐛 Bug encontrado: salvamento "raso" das configurações
+Ao salvar configurações, o servidor substituía objetos aninhados inteiros
+(estações de impressão, temas, fontes) em vez de mesclar campo por campo.
+Na prática isso nunca deu problema visível porque o painel sempre manda o
+objeto completo — mas era uma armadilha esperando acontecer (bastaria uma
+função futura mandar só uma parte pra apagar o resto sem querer). Corrigido
+e testado: rename de uma única via de impressão agora garante que as outras
+3 continuam intactas.
 
 ## Como aplicar
-Substitua `server.js`, `public/index.html` e `public/painel.html` no seu
-repositório do GitHub por estes arquivos (são os 3 únicos que mudaram) e dê
-push — o Render atualiza sozinho. Não precisa mexer em mais nada.
-
-⚠️ Lembrete de sempre: os dados ainda ficam em arquivos JSON no disco do
-Render sem persistência configurada — um reinício ainda apaga
-cardápio/pedidos de teste. Fica pra quando o sistema estiver mais fechado,
-como já combinamos.
+Substitua `server.js` e `public/painel.html` no seu repositório do GitHub
+(o `index.html` não mudou nesta atualização) e dê push — o Render atualiza
+sozinho.
