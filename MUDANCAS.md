@@ -1,56 +1,55 @@
-# Shogatsu — Evoluções aplicadas
+# Shogatsu — Evoluções aplicadas (atualização mais recente)
 
-## Fase 1 — Organização e Variações do Cardápio
-- Reordenar categorias e itens no painel (setas ▲▼).
-- Busca de pratos no painel (todas categorias de uma vez) e no site do cliente.
-- Variações de item: grupos de opções (tamanho, sabor, adicionais), escolha
-  única ou múltipla, obrigatório ou opcional, cada opção com preço extra.
-  No site, prato com variação abre uma tela de personalização antes de ir
-  pro carrinho, com preço já calculado.
+## 🖨 Impressoras: renomear + escolher pra onde cada prato vai
 
-## Fase 5 — Impressão por Estação (até 4 vias)
-Agora existem **dois modelos de impressão** diferentes, de acordo com a via:
+**Renomear o nome de cada via**
+Em **Configurações → Impressoras por Estação**, cada uma das 4 vias
+(Cozinha, Sushibar, Bar, Caixa) agora tem um campo de texto pra você
+renomear como quiser (ex: "Cozinha" → "Cozinha 1", "Bar" → "Bar/Drinks").
+Também dá pra escolher, por via, se ela imprime pela janela do navegador
+(mais simples, padrão), por impressora de rede (informando o IP) ou por
+impressora USB (informando o caminho do dispositivo). Tem um botão
+**🖨 Testar** pra confirmar que está tudo certo antes de usar de verdade.
 
-**Via CAIXA (comprovante completo)**
-- Nome, telefone e endereço do cliente (endereço só se for delivery)
-- Horário estimado de entrega/retirada (calculado a partir da hora do
-  pedido + o tempo configurado em "Tempo estimado", ex: 40–60 min vira
-  "20:40 – 21:00")
-- Todos os itens do pedido com preço
-- Observações do pedido (se houver)
-- Subtotal, taxa de entrega, total e forma de pagamento (com troco, se for
-  dinheiro)
+**Marcar pra onde cada prato vai (uma ou mais vias)**
+Ao editar um prato no cardápio, o campo que antes era um "select" de uma
+via só virou **caixinhas de marcação**: Cozinha / Sushibar / Bar. Agora dá
+pra marcar mais de uma — por exemplo, um combo com bebida pode sair
+impresso ao mesmo tempo na Cozinha **e** no Bar, cada um recebendo sua
+parte. Antes só dava pra escolher uma via por prato.
 
-**Vias de produção (Cozinha / Sushibar / Bar)**
-- Só o número do pedido, horário, modo (delivery/retirada)
-- Só os itens daquela estação específica (sem preço — não é comprovante)
-- Observações do pedido (útil pra alergias/preferências)
-- **Sem nenhum dado pessoal do cliente** (nome/telefone/endereço não aparecem
-  mais nas vias de produção — antes apareciam por engano)
+## 🔄 Cardápio do cliente atualiza sozinho, em tempo real
+Antes, se um cliente já estivesse com o site aberto no celular e você
+mudasse um preço, marcasse um prato como esgotado ou alterasse qualquer
+coisa no painel, ele só via a mudança se recarregasse a página manualmente.
 
-**Como usar**
-- Cada pedido agora tem um botão **🖨 Imprimir** (na lista de pedidos, no
-  Kanban e no card do dashboard). Ele imprime automaticamente só as vias que
-  têm itens daquele pedido (ex: se não tem bebida, a via do Bar nem abre).
-- Cada via abre numa janelinha separada e já manda pra impressão do
-  navegador (funciona com qualquer impressora térmica USB comum ligada no
-  computador do caixa/cozinha, sem precisar configurar IP).
-- Em Configurações → existe a opção **"Imprimir ao Receber"**: se ativada,
-  toda vez que um pedido novo chegar, todas as vias são impressas
-  automaticamente, sem precisar clicar em nada. **Esse campo já existia na
-  tela mas não estava funcionando (nunca era salvo) — corrigido nessa
-  atualização.**
-- Se você configurar impressora de rede (IP) ou USB (caminho do dispositivo)
-  em Configurações → Impressoras por Estação, a impressão sai direto por lá
-  em vez de abrir a janela do navegador — os dois modelos (Caixa completo /
-  Produção enxuta) valem pros dois jeitos de imprimir.
+Agora o site do cliente fica "escutando" o painel: assim que você salva
+qualquer coisa (cardápio, preços, variações, config geral), todo mundo que
+já está com o cardápio aberto recebe a atualização na hora, sem precisar
+dar F5. Testado e confirmado funcionando de ponta a ponta.
+
+## 🐛 Bugs encontrados e corrigidos nessa varredura
+1. **"Imprimir ao Receber" não fazia nada.** O campo existia na tela de
+   Configurações, mas nunca era salvo nem lido — ativar ou desativar não
+   mudava nada de verdade. Corrigido: agora funciona de verdade (imprime
+   todas as vias automaticamente quando um pedido novo chega).
+2. **Vias de produção (Cozinha/Sushibar/Bar) mostravam nome e telefone do
+   cliente.** Não faz sentido a cozinha ter esse dado — corrigido na
+   atualização anterior de impressão, mantido aqui.
+3. **Não existia jeito de marcar um prato como esgotado.** Adicionei um
+   botão "✅ Disponível / 🚫 Esgotado" em cada item do cardápio no painel —
+   um clique já salva.
+4. **Editar um prato reativava ele sozinho.** Se um prato estava marcado
+   como esgotado e você só editava a descrição ou o preço, ele voltava a
+   ficar "disponível" escondido — sem querer. Corrigido: editar não mexe
+   mais nesse status.
 
 ## Como aplicar
 Substitua `server.js`, `public/index.html` e `public/painel.html` no seu
-repositório do GitHub por estes arquivos (ou suba o projeto inteiro) e dê
-push — o Render atualiza sozinho.
+repositório do GitHub por estes arquivos (são os 3 únicos que mudaram) e dê
+push — o Render atualiza sozinho. Não precisa mexer em mais nada.
 
 ⚠️ Lembrete de sempre: os dados ainda ficam em arquivos JSON no disco do
-Render sem persistência configurada, então um reinício ainda apaga
-cardápio/pedidos de teste. Isso é uma questão separada, que já conversamos
-antes (fica pra quando o sistema estiver mais "fechado").
+Render sem persistência configurada — um reinício ainda apaga
+cardápio/pedidos de teste. Fica pra quando o sistema estiver mais fechado,
+como já combinamos.
