@@ -717,6 +717,9 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push('--------------------------------');
         lines.push(`Subtotal: R$ ${order.subtotal.toFixed(2)}`);
         lines.push(`Entrega: R$ ${order.fee.toFixed(2)}`);
+        if (order.discount > 0 || order.couponCode) {
+          lines.push(`Cupom ${order.couponCode}: -R$ ${(order.discount || 0).toFixed(2)}`);
+        }
         lines.push(ESC.boldOn + `TOTAL: R$ ${order.total.toFixed(2)}` + ESC.boldOff);
         lines.push('Pagamento: ' + order.payMethod + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
       } else {
