@@ -91,7 +91,14 @@ const DEFAULT_CFG = {
   // Precisa de conta própria em twilio.com (pago, mas barato); sem isso configurado, o envio simplesmente falha com aviso claro.
   sms: { accountSid: '', authToken: '', fromNumber: '' },
   // ── Avaliações — frase que aparece pro cliente depois que ele confirma que recebeu o pedido ──
-  reviewPrompt: 'O que você achou do seu pedido? Sua opinião ajuda muito a gente! 🍣'
+  reviewPrompt: 'O que você achou do seu pedido? Sua opinião ajuda muito a gente! 🍣',
+  reviewPhrases: [
+    'Comida deliciosa! 😋',
+    'Entrega rápida! 🛵',
+    'Atendimento excelente! ⭐',
+    'Embalagem caprichada 📦',
+    'Voltarei a pedir com certeza! 🙌'
+  ]
 };
 const DEFAULT_MENU = require('./default-menu.json');
 
@@ -238,7 +245,8 @@ async function reverseGeocode(lat, lng) {
   const a = data.address;
   return {
     cep: (a.postcode || '').replace(/\D/g, ''),
-    street: [a.road, a.house_number].filter(Boolean).join(', '),
+    street: a.road || '',
+    number: a.house_number || '',
     hood: a.suburb || a.neighbourhood || a.city_district || '',
     city: a.city || a.town || a.municipality || '',
     uf: a.state_code || (a.state ? a.state.slice(0, 2).toUpperCase() : '')
@@ -720,6 +728,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada conforme o modo configurado ──
+  // ── GET /api/cep/:cep — busca endereço pelo CEP (autopreenchimento no checkout) ──
+  if (pathname.match(/^\/api\/cep\/[^/]+$/) && req.method === 'GET') {
+    const cep = pathname.split('/').pop();
+    try {
+      const addr = await lookupCEP(cep);
+      if (!addr) return sendJSON(res, 200, { ok: false, error: 'CEP não encontrado.' });
+      return sendJSON(res, 200, { ok: true, ...addr });
+    } catch (e) { return sendJSON(res, 200, { ok: false, error: 'Não foi possível buscar esse CEP agora.' }); }
+  }
+
   // ── POST /api/reverse-geocode — usado pelo botão "usar minha localização" no checkout ──
   if (pathname === '/api/reverse-geocode' && req.method === 'POST') {
     try {
