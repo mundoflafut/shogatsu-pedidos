@@ -98,7 +98,9 @@ const DEFAULT_CFG = {
     'Atendimento excelente! ⭐',
     'Embalagem caprichada 📦',
     'Voltarei a pedir com certeza! 🙌'
-  ]
+  ],
+  // ── Anúncios/promoções — aparecem pra QUALQUER pessoa que abrir o cardápio, sem precisar de conta ──
+  announcements: []  // [{id, title, message, active, expiresAt}]
 };
 const DEFAULT_MENU = require('./default-menu.json');
 
