@@ -40,6 +40,47 @@ JSON. Ela precisa estar num disco **persistente** do seu servidor (não use
 serviços "serverless" que apagam o disco a cada deploy, como Vercel/Netlify
 functions puras) — senão os pedidos e o cardápio somem a cada reinício.
 
+## Banco de dados (evita perder pedidos entre deploys)
+
+Por padrão, os dados (pedidos, cardápio, clientes) ficam salvos em arquivos
+JSON dentro da pasta `data/`. Isso funciona bem, mas em hospedagens como o
+**Render**, esse disco é apagado toda vez que você faz um novo deploy (ou às
+vezes num reinício) — ou seja, os pedidos e o cardápio somem.
+
+Pra resolver isso, o servidor agora também sabe salvar uma cópia de tudo num
+banco de dados **Postgres** externo, que é permanente. É opcional: sem
+configurar nada, o sistema continua funcionando exatamente como antes (só com
+o arquivo local).
+
+### Passo a passo (grátis, sem depender do banco pago do Render)
+
+1. Crie uma conta grátis em **[neon.com](https://neon.com)** (ou
+   [supabase.com](https://supabase.com), ambos têm plano gratuito
+   permanente — diferente do banco do próprio Render, que apaga os dados
+   grátis depois de 30 dias).
+2. Crie um projeto/banco novo. Copie a **connection string** (algo como
+   `postgresql://usuario:senha@host/nomedobanco?sslmode=require`).
+3. No painel do Render, vá em **Environment** (do seu Web Service) e adicione
+   uma variável:
+   - Nome: `DATABASE_URL`
+   - Valor: a connection string que você copiou
+4. Salve — o Render faz o redeploy automático. No log vai aparecer:
+   `✅ Banco de dados conectado`.
+5. Rode `npm install` (localmente, ou deixe o Render rodar sozinho no deploy)
+   pra instalar o driver do Postgres (`pg`), que agora é a única dependência
+   do projeto.
+
+A partir daí, toda vez que um pedido, o cardápio ou um cliente for
+salvo, a mesma informação vai automaticamente pro banco em segundo plano
+(sem deixar o site mais lento). E toda vez que o servidor ligar, ele busca a
+versão mais recente no banco antes de aceitar pedidos — então mesmo que o
+Render apague o disco local num deploy, os dados voltam sozinhos.
+
+⚠️ Se o banco cair ou ficar fora do ar por algum motivo, o site **continua
+funcionando normalmente** com o arquivo local (o banco é só uma cópia de
+segurança, não uma dependência obrigatória pro dia a dia) — só aparece um
+aviso no log até a conexão voltar.
+
 ## Como funciona o pagamento por PIX
 
 Configure sua chave PIX no painel (aba "Cardápio & Config"). O sistema já

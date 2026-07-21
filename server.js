@@ -117,7 +117,93 @@ if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
 if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 
 function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-function writeJSON(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  dbSet(DB_KEY_BY_FILE[file], data); // "fire-and-forget": não trava a resposta esperando o banco
+}
+
+// ═══════════════════════════════════════════════════════════
+// Banco de dados (Postgres) — cópia durável dos dados
+// ═══════════════════════════════════════════════════════════
+// Os arquivos em data/*.json continuam sendo a fonte usada pelo servidor
+// durante a operação normal (rápido, sem depender de rede). O banco de dados
+// é uma cópia de segurança: sempre que um arquivo é salvo, o mesmo conteúdo
+// vai (em segundo plano) pro banco também. E quando o servidor liga, ele
+// primeiro busca a versão mais recente no banco e a usa pra (re)criar os
+// arquivos locais — isso é o que resolve o problema de hospedagens como o
+// Render apagarem o disco a cada novo deploy.
+//
+// Pra ativar, defina a variável de ambiente DATABASE_URL com a "connection
+// string" de um banco Postgres (ex: Neon, Supabase — veja o README). Sem essa
+// variável configurada, o servidor roda exatamente como antes, só com os
+// arquivos locais (sem banco nenhum) — nada quebra.
+const DB_KEY_BY_FILE = { [CONFIG_FILE]: 'config', [ORDERS_FILE]: 'orders', [CUSTOMERS_FILE]: 'customers' };
+let dbPool = null;
+
+if (process.env.DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    dbPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
+    dbPool.on('error', (err) => console.error('⚠️  Erro na conexão com o banco de dados (seguindo com o arquivo local):', err.message));
+  } catch (e) {
+    console.error('⚠️  DATABASE_URL configurado mas o pacote "pg" não está instalado — rode "npm install". Seguindo só com arquivo local por enquanto.');
+  }
+}
+
+async function dbGet(key) {
+  if (!dbPool) return null;
+  try {
+    const r = await dbPool.query('SELECT value FROM app_state WHERE key = $1', [key]);
+    return r.rows.length ? r.rows[0].value : null;
+  } catch (e) {
+    console.error(`⚠️  Falha ao ler "${key}" do banco de dados:`, e.message);
+    return null;
+  }
+}
+
+async function dbSet(key, value) {
+  if (!dbPool || !key) return;
+  try {
+    await dbPool.query(
+      `INSERT INTO app_state (key, value, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()`,
+      [key, JSON.stringify(value)]
+    );
+  } catch (e) {
+    console.error(`⚠️  Falha ao salvar "${key}" no banco de dados (o dado já está salvo no arquivo local):`, e.message);
+  }
+}
+
+// Roda uma vez, antes do servidor começar a aceitar pedidos: garante a
+// tabela, baixa a versão mais recente de cada dado do banco (se existir) pra
+// dentro dos arquivos locais, e — na primeiríssima vez, quando o banco ainda
+// está vazio — sobe pra lá o conteúdo padrão que acabou de ser criado.
+async function dbSyncOnBoot() {
+  if (!dbPool) {
+    if (process.env.DATABASE_URL) {
+      console.log('ℹ️  Rodando só com arquivo local por enquanto (instale as dependências com "npm install" para ativar o banco).');
+    } else {
+      console.log('ℹ️  DATABASE_URL não definido — rodando só com arquivo local (dados podem se perder se o disco for reiniciado pela hospedagem).');
+    }
+    return;
+  }
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS app_state (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  for (const [file, key] of Object.entries(DB_KEY_BY_FILE)) {
+    const remote = await dbGet(key);
+    if (remote !== null) {
+      fs.writeFileSync(file, JSON.stringify(remote, null, 2));
+    } else {
+      await dbSet(key, JSON.parse(fs.readFileSync(file, 'utf8')));
+    }
+  }
+  console.log('✅ Banco de dados conectado — pedidos, cardápio e clientes agora persistem entre deploys.');
+}
 
 // Confere se o horário atual está dentro da janela configurada (ex: 18:00–23:00).
 // Usa sempre o horário de Brasília, independente de em qual fuso o servidor
@@ -1515,7 +1601,14 @@ function estimateDeliveryWindow(order, cfg) {
   res.writeHead(404); res.end('Not found');
 });
 
-server.listen(PORT, () => {
-  console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-  console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+// Espera a sincronização com o banco (no máximo 8s — se o banco estiver
+// fora do ar ou demorando, o servidor sobe do mesmo jeito com o arquivo
+// local, em vez de deixar todo mundo esperando) e só então começa a aceitar
+// pedidos.
+const dbBootPromise = dbSyncOnBoot().catch((e) => console.error('⚠️  Falha na sincronização inicial com o banco de dados:', e.message));
+Promise.race([dbBootPromise, new Promise((resolve) => setTimeout(resolve, 8000))]).finally(() => {
+  server.listen(PORT, () => {
+    console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+    console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+  });
 });
