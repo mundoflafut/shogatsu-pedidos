@@ -1,16 +1,18 @@
 {
-  "name": "shogatsu-pedidos",
-  "version": "1.0.0",
-  "description": "Sistema de pedidos online do Shogatsu (cardápio + painel da cozinha em tempo real)",
+  "name": "shogatsu-pedidos-online",
+  "version": "2.0.0",
+  "description": "Cardapio online com persistencia PostgreSQL/Supabase",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "migrate": "node migrate-server.js"
   },
   "dependencies": {
-    "pg": "^8.22.0",
-    "web-push": "^3.6.7"
+    "pg": "^8.11.3",
+    "web-push": "^3.6.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
