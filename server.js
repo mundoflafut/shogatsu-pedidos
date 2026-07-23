@@ -1,9 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 // SHOGATSU · Servidor de Pedidos Online
-// Node.js quase puro — http, fs, crypto — dados 100% em PostgreSQL, via database.js.
-// Cardápio, configurações, pedidos e clientes NÃO usam mais arquivo JSON como
-// armazenamento operacional. Os arquivos data/*.json e default-menu.json só
-// servem de seed inicial (uma vez), dentro de database.js.
+// Node.js puro (sem dependências) — http, fs, crypto
 // ═══════════════════════════════════════════════════════════
 const http = require('http');
 const https = require('https');
@@ -13,23 +10,242 @@ const path = require('path');
 const crypto = require('crypto');
 const url = require('url');
 const os = require('os');
-const db = require('./database');
-const customerDB = db; // mantém o nome usado no resto deste arquivo (clientes)
-const notifications = require('./notifications');
 
 const PORT = process.env.PORT || 3000;
+const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
+const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 
+// ─── Config / Menu padrão (usados só na primeira execução) ───
+const DEFAULT_CFG = {
+  whats: '552227641333', storePhone: '(22) 2764-1333', fee: 8, min: 60,
+  name: 'Shogatsu Culinária Oriental', days: 'Ter–Dom',
+  time: '40–60 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costazul · Rio das Ostras · CEP 22896-155',
+  hours: '18h30–23h', open: 1,
+  // ── Auto-abertura/fechamento por horário (se ativado, cfg.open passa a ser calculado sozinho) ──
+  schedule: { enabled: false, openTime: '18:00', closeTime: '23:00' },
+  adminPass: 'shogatsu2026',
+  masterPass: 'shogatsuMaster2026',
+  // ── Usuários do painel (login por usuário + senha, com nível de acesso) ──
+  // master: acesso total, inclusive gerenciar outros usuários.
+  // admin: acesso total ao painel, exceto gerenciar usuários.
+  // vendas: só Dashboard, Pedidos e Kanban — pra quem só precisa bater pedido no balcão.
+  users: [
+    { username: 'master', password: 'shogatsuMaster2026', role: 'master' },
+    { username: 'admin', password: 'shogatsu2026', role: 'admin' }
+  ],
+  logoUrl: '',
+  print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
+  sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
+  labels: {                     // textos dos botões/status do painel, customizáveis pelo admin
+    actionNovo: 'Aceitar Pedido',
+    actionPrep: 'Marcar Pronto',
+    actionPronto: 'Confirmar Entrega',
+    colNovo: 'Novos',
+    colPrep: 'Preparando',
+    colPronto: 'Pronto',
+    colEntregue: 'Entregue',
+    btnCancel: 'Cancelar',
+    btnPrint: 'Imprimir',
+  },
+  pixKey: '', pixName: 'Shogatsu Culinaria Oriental', pixCity: 'RIO DAS OSTRAS',
+  // ── Impressão do comprovante ──
+  printFont: 'Verdana, sans-serif',      // 'monospace' | 'sans-serif' | 'serif' | outras opções na tela de config
+  printSize: 20,                // tamanho da fonte em px
+  printColor: '#000000',        // cor do texto
+  // ── Logotipo ──
+  logoShape: 'retangular',      // 'redondo' | 'quadrado' | 'retangular'
+  logoSize: 40,                  // altura em px
+  // ── Impressoras por estação (vias separadas) ──
+  stations: {
+    cozinha:  { label: 'Cozinha',  method: 'navegador', ip: '', port: 9100, device: '' },
+    sushibar: { label: 'Sushibar', method: 'navegador', ip: '', port: 9100, device: '' },
+    bar:      { label: 'Bar',      method: 'navegador', ip: '', port: 9100, device: '' },
+    caixa:    { label: 'Caixa',    method: 'navegador', ip: '', port: 9100, device: '' }
+  },
+  // ── Motivos de cancelamento/recusa (chips rápidos no painel) ──
+  cancelReasons: ['Item em falta', 'Fora da área de entrega', 'Pedido duplicado', 'Cliente desistiu', 'Loja fechada no momento'],
+  // ── Aparência do painel (tamanho de fonte por aba) ──
+  uiFonts: { pedidos: 13, config: 13, clientes: 13, relatorios: 13 },
+  // ── Paleta de cores do site do cliente ──
+  theme: { primary: '#c9a84c', accent: '#c0392b', bg: '#0a0a0a' },
+  // ── Slider de capa (imagens rotativas no topo do site) ──
+  slides: [],
+  // ── Taxa de entrega por distância ──
+  feeMode: 'fixo',            // 'fixo' (taxa única) ou 'distancia' (calculada por km)
+  storeLat: null, storeLng: null, // coordenadas do restaurante (preenchidas pelo painel)
+  feeBaseKm: 2,                // km inclusos na taxa base
+  feeBaseValue: 8,             // R$ da taxa até feeBaseKm
+  feePerKm: 2.5,                // R$ por km excedente
+  feeMaxKm: 12,                 // raio máximo de entrega (0 = sem limite)
+  feeRound: 0.5,                 // arredonda a taxa para múltiplos disso
+  // ── Taxa de entrega por CEP ou por Bairro (zonas com valor fixo cada) ──
+  feeZonesCep: [],               // [{ prefix:'28890', label:'Costazul', fee:6 }, ...]
+  feeZonesBairro: [],            // [{ bairro:'Costazul', fee:6 }, ...]
+  feeZoneFallback: 'padrao',      // 'padrao' (usa cfg.fee se não achar a zona) ou 'bloqueado' (recusa o pedido)
+  // ── Cupons de desconto (aplicados pelo cliente no checkout) ──
+  coupons: [],                    // [{code, type:'percent'|'valor'|'frete_gratis', value, active, expiresAt, usageLimit, usedCount, minOrder}]
+  // ── Número da senha/pedido (1 a 200, cíclico) ──
+  nextTicketNumber: 1,
+  // ── SMS (envio de promoções pros clientes cadastrados) — usa a API da Twilio.
+  // Precisa de conta própria em twilio.com (pago, mas barato); sem isso configurado, o envio simplesmente falha com aviso claro.
+  sms: { accountSid: '', authToken: '', fromNumber: '' },
+  // ── Avaliações — frase que aparece pro cliente depois que ele confirma que recebeu o pedido ──
+  reviewPrompt: 'O que você achou do seu pedido? Sua opinião ajuda muito a gente! 🍣',
+  reviewPhrases: [
+    'Comida deliciosa! 😋',
+    'Entrega rápida! 🛵',
+    'Atendimento excelente! ⭐',
+    'Embalagem caprichada 📦',
+    'Voltarei a pedir com certeza! 🙌'
+  ],
+  // ── Anúncios/promoções — aparecem pra QUALQUER pessoa que abrir o cardápio, sem precisar de conta ──
+  announcements: []  // [{id, title, message, active, expiresAt}]
+};
+const DEFAULT_MENU = require('./default-menu.json');
+
+// ─── Bootstrap dos arquivos de dados ───
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(CONFIG_FILE)) {
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ cfg: DEFAULT_CFG, menu: DEFAULT_MENU }, null, 2));
+}
+if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
+if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 
-// Lê config + cardápio do Postgres — mesma forma de retorno de antes: { cfg, menu }.
-// (as demais funções deste arquivo continuam chamando "await readConfig()", só que
-// agora com "await" na frente, já que virou uma chamada assíncrona ao banco.)
-async function readConfig() { return db.getConfig(); }
+function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  dbSet(DB_KEY_BY_FILE[file], data); // "fire-and-forget": não trava a resposta esperando o banco
+}
 
-// Grava config e/ou cardápio no Postgres — substitui o antigo salvamento em arquivo.
-async function writeConfig(data) { return db.saveConfig(data); }
+// ═══════════════════════════════════════════════════════════
+// Banco de dados (Postgres) — cópia durável dos dados
+// ═══════════════════════════════════════════════════════════
+// Os arquivos em data/*.json continuam sendo a fonte usada pelo servidor
+// durante a operação normal (rápido, sem depender de rede). O banco de dados
+// é uma cópia de segurança: sempre que um arquivo é salvo, o mesmo conteúdo
+// vai (em segundo plano) pro banco também. E quando o servidor liga, ele
+// primeiro busca a versão mais recente no banco e a usa pra (re)criar os
+// arquivos locais — isso é o que resolve o problema de hospedagens como o
+// Render apagarem o disco a cada novo deploy.
+//
+// Pra ativar, defina a variável de ambiente DATABASE_URL com a "connection
+// string" de um banco Postgres (ex: Neon, Supabase — veja o README). Sem essa
+// variável configurada, o servidor roda exatamente como antes, só com os
+// arquivos locais (sem banco nenhum) — nada quebra.
+const DB_KEY_BY_FILE = { [CONFIG_FILE]: 'config', [ORDERS_FILE]: 'orders', [CUSTOMERS_FILE]: 'customers' };
+let dbPool = null;
+
+if (process.env.DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    dbPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
+    dbPool.on('error', (err) => console.error('⚠️  Erro na conexão com o banco de dados (seguindo com o arquivo local):', err.message));
+  } catch (e) {
+    console.error('⚠️  DATABASE_URL configurado mas o pacote "pg" não está instalado — rode "npm install". Seguindo só com arquivo local por enquanto.');
+  }
+}
+
+async function dbGet(key) {
+  if (!dbPool) return null;
+  try {
+    const r = await dbPool.query('SELECT value FROM app_state WHERE key = $1', [key]);
+    return r.rows.length ? r.rows[0].value : null;
+  } catch (e) {
+    console.error(`⚠️  Falha ao ler "${key}" do banco de dados:`, e.message);
+    return null;
+  }
+}
+
+async function dbSet(key, value) {
+  if (!dbPool || !key) return;
+  try {
+    await dbPool.query(
+      `INSERT INTO app_state (key, value, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()`,
+      [key, JSON.stringify(value)]
+    );
+  } catch (e) {
+    console.error(`⚠️  Falha ao salvar "${key}" no banco de dados (o dado já está salvo no arquivo local):`, e.message);
+  }
+}
+
+// Roda uma vez, antes do servidor começar a aceitar pedidos: garante a
+// tabela, baixa a versão mais recente de cada dado do banco (se existir) pra
+// dentro dos arquivos locais, e — na primeiríssima vez, quando o banco ainda
+// está vazio — sobe pra lá o conteúdo padrão que acabou de ser criado.
+async function dbSyncOnBoot() {
+  if (!dbPool) {
+    if (process.env.DATABASE_URL) {
+      console.log('ℹ️  Rodando só com arquivo local por enquanto (instale as dependências com "npm install" para ativar o banco).');
+    } else {
+      console.log('ℹ️  DATABASE_URL não definido — rodando só com arquivo local (dados podem se perder se o disco for reiniciado pela hospedagem).');
+    }
+    return;
+  }
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS app_state (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  for (const [file, key] of Object.entries(DB_KEY_BY_FILE)) {
+    const remote = await dbGet(key);
+    if (remote !== null) {
+      fs.writeFileSync(file, JSON.stringify(remote, null, 2));
+    } else {
+      await dbSet(key, JSON.parse(fs.readFileSync(file, 'utf8')));
+    }
+  }
+  console.log('✅ Banco de dados conectado — pedidos, cardápio e clientes agora persistem entre deploys.');
+}
+
+// Confere se o horário atual está dentro da janela configurada (ex: 18:00–23:00).
+// Usa sempre o horário de Brasília, independente de em qual fuso o servidor
+// esteja rodando de verdade (isso evita o bug clássico de "abriu 3h errado"
+// quando o servidor roda em UTC, como costuma acontecer em hospedagem na nuvem).
+// Lida com horários que passam da meia-noite (ex: 18:00–02:00).
+function isWithinSchedule(openTime, closeTime) {
+  if (!openTime || !closeTime) return true;
+  const nowStr = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  const toMinutes = (t) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  const nowMin = toMinutes(nowStr), openMin = toMinutes(openTime), closeMin = toMinutes(closeTime);
+  if (openMin === closeMin) return true; // aberto 24h
+  if (openMin < closeMin) return nowMin >= openMin && nowMin < closeMin;
+  return nowMin >= openMin || nowMin < closeMin; // passa da meia-noite
+}
+
+// Lê o config.json e preenche com os valores padrão quaisquer campos novos que
+// ainda não existiam (ex: sites já em produção antes desta atualização) —
+// sem precisar apagar ou resetar nada que o restaurante já configurou.
+function readConfig() {
+  const data = readJSON(CONFIG_FILE);
+  const cfg = {
+    ...DEFAULT_CFG,
+    ...data.cfg,
+    stations: { ...DEFAULT_CFG.stations, ...(data.cfg.stations || {}) },
+    labels: { ...DEFAULT_CFG.labels, ...(data.cfg.labels || {}) },
+    uiFonts: { ...DEFAULT_CFG.uiFonts, ...(data.cfg.uiFonts || {}) },
+    theme: { ...DEFAULT_CFG.theme, ...(data.cfg.theme || {}) },
+    cancelReasons: data.cfg.cancelReasons || DEFAULT_CFG.cancelReasons,
+    slides: data.cfg.slides || DEFAULT_CFG.slides,
+    users: (Array.isArray(data.cfg.users) && data.cfg.users.length) ? data.cfg.users : DEFAULT_CFG.users,
+    sms: { ...DEFAULT_CFG.sms, ...(data.cfg.sms || {}) },
+    schedule: { ...DEFAULT_CFG.schedule, ...(data.cfg.schedule || {}) }
+  };
+  // Se a auto-programação de horário estiver ativada, o status aberto/fechado
+  // passa a ser calculado sozinho a partir do horário configurado — o toggle
+  // manual do painel deixa de valer enquanto isso estiver ligado.
+  if (cfg.schedule && cfg.schedule.enabled) {
+    cfg.open = isWithinSchedule(cfg.schedule.openTime, cfg.schedule.closeTime) ? 1 : 0;
+  }
+  return { cfg, menu: normalizeMenu(data.menu) };
+}
 
 // ─── Sessões admin (em memória) ───
 const sessions = new Map(); // token -> { expiresAt, role, username }
@@ -66,14 +282,14 @@ function findCustomer(customers, phone) {
   return customers.find(c => c.phone === p);
 }
 
-// Calcula quantos pedidos e o último pedido de um cliente, direto da tabela orders
+// Calcula quantos pedidos e o último pedido de um cliente, direto do orders.json
 // (evita manter dois lugares com a mesma contagem fora de sincronia).
 function customerStats(phone, orders) {
   const p = normalizePhone(phone);
   const mine = orders.filter(o => normalizePhone(o.phone) === p && o.status !== 'cancelado');
   return {
     orderCount: mine.length,
-    lastOrderAt: mine.length ? mine[0].createdAt : null // db.getOrders() já devolve do mais novo pro mais antigo
+    lastOrderAt: mine.length ? mine[0].createdAt : null // orders.json fica sempre com o mais novo primeiro (unshift)
   };
 }
 
@@ -302,6 +518,21 @@ function sendUSBPrint(devicePath, text) {
   });
 }
 
+// Preenche valores padrão em itens antigos do cardápio (sem alterar o arquivo salvo)
+function normalizeMenu(menu) {
+  const validStations = ['cozinha', 'sushibar', 'bar'];
+  return (menu || []).map(sec => ({
+    ...sec,
+    items: (sec.items || []).map(it => {
+      const base = { station: 'cozinha', available: true, variants: [], ...it };
+      let stations = Array.isArray(base.stations) ? base.stations.filter(s => validStations.includes(s)) : [];
+      if (!stations.length) stations = [validStations.includes(base.station) ? base.station : 'cozinha'];
+      const { station, ...rest } = base;
+      return { ...rest, stations: [...new Set(stations)] };
+    })
+  }));
+}
+
 // ─── PIX — geração do payload BR Code (copia-e-cola) ───
 function crc16(payload) {
   let crc = 0xFFFF;
@@ -395,7 +626,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── GET /api/config — dados públicos do cardápio/config ──
   if (pathname === '/api/config' && req.method === 'GET') {
-    const { cfg, menu } = await readConfig();
+    const { cfg, menu } = readConfig();
     const { adminPass, masterPass, ...publicCfg } = cfg; // nunca vaza as senhas
     return sendJSON(res, 200, { cfg: publicCfg, menu });
   }
@@ -405,7 +636,7 @@ const server = http.createServer(async (req, res) => {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra alterar configurações/cardápio.' });
     try {
       const body = await readBody(req);
-      const current = await readConfig();
+      const current = readConfig();
       const merged = {
         cfg: {
           ...current.cfg, ...body.cfg,
@@ -415,17 +646,15 @@ const server = http.createServer(async (req, res) => {
           uiFonts: { ...current.cfg.uiFonts, ...(body.cfg && body.cfg.uiFonts || {}) },
           theme: { ...current.cfg.theme, ...(body.cfg && body.cfg.theme || {}) },
           sms: { ...current.cfg.sms, ...(body.cfg && body.cfg.sms || {}) },
-          vapid: { ...current.cfg.vapid, ...(body.cfg && body.cfg.vapid || {}) },
           schedule: { ...current.cfg.schedule, ...(body.cfg && body.cfg.schedule || {}) }
         },
         menu: body.menu || current.menu
       };
-      await writeConfig(merged);
-      notifications.configurarVapid(merged.cfg);
+      writeJSON(CONFIG_FILE, merged);
       broadcast('config-updated', {});
       publicBroadcast('menu-updated', {});
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
@@ -434,23 +663,32 @@ const server = http.createServer(async (req, res) => {
     try {
       const { which, current: curPass, next } = await readBody(req);
       const field = which === 'master' ? 'masterPass' : 'adminPass';
-      const data = await readConfig();
+      const data = readConfig();
       if (curPass !== data.cfg[field]) return sendJSON(res, 403, { error: 'senha atual incorreta' });
       if (!next || next.length < 4) return sendJSON(res, 400, { error: 'nova senha muito curta (mín. 4 caracteres)' });
       data.cfg[field] = next;
-      await writeConfig(data);
+      writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Gerenciamento de usuários do painel (só o usuário master pode mexer) ──
+  // ── GET /api/admin/customers — lista clientes cadastrados (pra promoções por SMS) ──
+  if (pathname === '/api/admin/customers' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver os clientes.' });
+    const customers = readJSON(CUSTOMERS_FILE);
+    const orders = readJSON(ORDERS_FILE);
+    return sendJSON(res, 200, {
+      customers: customers.map(c => ({ name: c.name, phone: c.phone, ...customerStats(c.phone, orders) }))
+    });
+  }
 
 
   if (pathname === '/api/admin/send-promo-sms' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra enviar SMS.' });
     try {
       const { phones, message } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const msg = String(message || '').slice(0, 300).trim();
       if (!msg) return sendJSON(res, 400, { error: 'Digite a mensagem.' });
       const list = Array.isArray(phones) ? phones.slice(0, 200) : [];
@@ -461,97 +699,12 @@ const server = http.createServer(async (req, res) => {
         catch (e) { results.failed++; if (results.errors.length < 3) results.errors.push(e.message); }
       }
       return sendJSON(res, 200, { ok: true, ...results });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── Painel: gera um par de chaves VAPID novo (uma vez, antes de ativar o push) ──
-  if (pathname === '/api/admin/vapid/generate' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'sem permissão' });
-    try {
-      const keys = notifications.gerarChavesVapid();
-      return sendJSON(res, 200, { ok: true, publicKey: keys.publicKey, privateKey: keys.privateKey });
-    } catch (e) { return sendJSON(res, 400, { error: e.message }); }
-  }
-
-  // ── Web Push: chave pública (pro app pedir permissão e se inscrever) ──
-  if (pathname === '/api/push/vapid-public-key' && req.method === 'GET') {
-    const { cfg } = await readConfig();
-    notifications.configurarVapid(cfg);
-    return sendJSON(res, 200, { publicKey: (cfg.vapid && cfg.vapid.publicKey) || '', disponivel: notifications.webpushDisponivel() });
-  }
-
-  // ── Web Push: cliente se inscreve pra receber notificações no app ──
-  if (pathname === '/api/push/subscribe' && req.method === 'POST') {
-    try {
-      const { phone, subscription } = await readBody(req);
-      if (!phone || !subscription || !subscription.endpoint) return sendJSON(res, 400, { error: 'dados de inscrição inválidos' });
-      await notifications.saveSubscription(phone, subscription);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── Web Push: cliente cancela as notificações ──
-  if (pathname === '/api/push/unsubscribe' && req.method === 'POST') {
-    try {
-      const { endpoint } = await readBody(req);
-      if (endpoint) await notifications.removeSubscription(endpoint);
-      return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── Painel: lista as mensagens pré-programadas (20 mensagens do restaurante) ──
-  if (pathname === '/api/admin/campaigns' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    return sendJSON(res, 200, await notifications.readCampaigns());
-  }
-
-  // ── Painel: ativa/desativa uma mensagem pré-programada (pré-configuração) ──
-  if (pathname.match(/^\/api\/admin\/campaigns\/messages\/[^/]+$/) && req.method === 'PATCH') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const id = pathname.split('/').pop();
-    try {
-      const { active } = await readBody(req);
-      const data = await notifications.readCampaigns();
-      const msg = data.mensagens.find((m) => m.id === id);
-      if (!msg) return sendJSON(res, 404, { error: 'mensagem não encontrada' });
-      msg.active = !!active;
-      await notifications.writeCampaigns(data);
-      return sendJSON(res, 200, { ok: true, mensagem: msg });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── Painel: consulta/atualiza os horários de disparo automático (vezes por dia) ──
-  if (pathname === '/api/admin/campaigns/schedule' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const data = await notifications.readCampaigns();
-    return sendJSON(res, 200, { horarios: data.horarios });
-  }
-
-  if (pathname === '/api/admin/campaigns/schedule' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'sem permissão' });
-    try {
-      const { horarios } = await readBody(req);
-      const validos = (Array.isArray(horarios) ? horarios : []).filter((h) => /^([01]\d|2[0-3]):[0-5]\d$/.test(h));
-      if (!validos.length) return sendJSON(res, 400, { error: 'informe ao menos um horário válido (HH:MM)' });
-      const data = await notifications.readCampaigns();
-      data.horarios = validos;
-      await notifications.writeCampaigns(data);
-      return sendJSON(res, 200, { ok: true, horarios: validos });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── Painel: dispara uma campanha manualmente agora (fora do agendamento automático) ──
-  if (pathname === '/api/admin/campaigns/send-now' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'sem permissão' });
-    try {
-      const resultado = await notifications.dispararProximaCampanha();
-      return sendJSON(res, 200, { ok: true, ...resultado });
-    } catch (e) { return sendJSON(res, 500, { error: e.message }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   if (pathname === '/api/admin/users' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'master')) return sendJSON(res, 403, { error: 'Só o usuário master pode gerenciar usuários.' });
-    const { cfg } = await readConfig();
+    const { cfg } = readConfig();
     return sendJSON(res, 200, { users: (cfg.users || []).map(u => ({ username: u.username, role: u.role })) });
   }
   if (pathname === '/api/admin/users' && req.method === 'POST') {
@@ -561,7 +714,7 @@ const server = http.createServer(async (req, res) => {
       const uname = String(username || '').trim().toLowerCase();
       if (!uname || uname.length < 3) return sendJSON(res, 400, { error: 'Usuário precisa ter pelo menos 3 caracteres.' });
       if (!['master', 'admin', 'vendas'].includes(role)) return sendJSON(res, 400, { error: 'Nível de acesso inválido.' });
-      const data = await readConfig();
+      const data = readConfig();
       const existing = data.cfg.users.find(u => String(u.username || '').toLowerCase() === uname);
       if (existing) {
         existing.role = role;
@@ -570,21 +723,21 @@ const server = http.createServer(async (req, res) => {
         if (!password || password.length < 4) return sendJSON(res, 400, { error: 'Senha precisa ter pelo menos 4 caracteres.' });
         data.cfg.users.push({ username: uname, password, role });
       }
-      await writeConfig(data);
+      writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { ok: true, users: data.cfg.users.map(u => ({ username: u.username, role: u.role })) });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
   if (pathname.startsWith('/api/admin/users/') && req.method === 'DELETE') {
     if (!requireRole(getToken(req, query), 'master')) return sendJSON(res, 403, { error: 'Só o usuário master pode gerenciar usuários.' });
     const uname = decodeURIComponent(pathname.split('/').pop() || '').toLowerCase();
-    const data = await readConfig();
+    const data = readConfig();
     const target = data.cfg.users.find(u => String(u.username || '').toLowerCase() === uname);
     if (!target) return sendJSON(res, 404, { error: 'Usuário não encontrado.' });
     if (target.role === 'master' && data.cfg.users.filter(u => u.role === 'master').length <= 1) {
       return sendJSON(res, 400, { error: 'Precisa existir pelo menos um usuário master.' });
     }
     data.cfg.users = data.cfg.users.filter(u => String(u.username || '').toLowerCase() !== uname);
-    await writeConfig(data);
+    writeJSON(CONFIG_FILE, data);
     return sendJSON(res, 200, { ok: true });
   }
 
@@ -601,7 +754,7 @@ const server = http.createServer(async (req, res) => {
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       return sendJSON(res, 200, { url: '/uploads/' + filename });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/orders/purge — apaga pedidos antigos (exige senha master) ──
@@ -609,22 +762,22 @@ const server = http.createServer(async (req, res) => {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const { masterPass, beforeDate } = await readBody(req);
-      const data = await readConfig();
+      const data = readConfig();
       if (masterPass !== data.cfg.masterPass) return sendJSON(res, 403, { error: 'Senha master incorreta.' });
       if (!beforeDate) return sendJSON(res, 400, { error: 'Informe a data limite.' });
       const cutoff = new Date(beforeDate).getTime();
-      let orders = await db.getOrders();
+      let orders = readJSON(ORDERS_FILE);
       const before = orders.length;
       orders = orders.filter(o => new Date(o.createdAt).getTime() >= cutoff);
-      await db.saveOrders(orders);
+      writeJSON(ORDERS_FILE, orders);
       return sendJSON(res, 200, { ok: true, deleted: before - orders.length });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/reports — relatório de vendas (admin) ──
   if (pathname === '/api/reports' && req.method === 'GET') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const orders = await db.getOrders();
+    const orders = readJSON(ORDERS_FILE);
     const from = query.from ? new Date(query.from + 'T00:00:00').getTime() : 0;
     const to = query.to ? new Date(query.to + 'T23:59:59').getTime() : Infinity;
     const filtered = orders.filter(o => {
@@ -656,7 +809,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/login' && req.method === 'POST') {
     try {
       const { username, password } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const uname = String(username || '').trim().toLowerCase();
 
       if (uname) {
@@ -671,21 +824,21 @@ const server = http.createServer(async (req, res) => {
       if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession('admin', 'admin'), role: 'admin', username: 'admin' });
       if (password === cfg.masterPass) return sendJSON(res, 200, { token: newSession('master', 'master'), role: 'master', username: 'master' });
       return sendJSON(res, 401, { error: 'senha incorreta' });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/pix — gera o copia-e-cola para um valor ──
   if (pathname === '/api/pix' && req.method === 'POST') {
     try {
       const { amount, txid } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       if (!cfg.pixKey) return sendJSON(res, 400, { error: 'PIX não configurado pelo restaurante' });
       const payload = buildPixPayload({
         pixKey: cfg.pixKey, merchantName: cfg.pixName, merchantCity: cfg.pixCity, amount, txid
       });
       const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
       return sendJSON(res, 200, { payload, qrImg });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada conforme o modo configurado ──
@@ -713,7 +866,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/delivery-fee' && req.method === 'POST') {
     try {
       const { cep, street, hood, city, uf } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const cleanCep = String(cep || '').replace(/\D/g, '');
 
       // ── Modo CEP: cada faixa de CEP tem uma taxa fixa configurada ──
@@ -788,7 +941,7 @@ const server = http.createServer(async (req, res) => {
         // não pode travar o pedido — cai para a taxa padrão configurada.
         return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
       }
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/admin/detect-usb-printers — procura impressoras USB conectadas ──
@@ -847,14 +1000,14 @@ const server = http.createServer(async (req, res) => {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const body = await readBody(req);
-      const data = await readConfig();
+      const data = readConfig();
       const address = String(body.address || data.cfg.addr || '').trim();
       if (!address) return sendJSON(res, 400, { error: 'Informe o endereço do restaurante.' });
       const geo = await geocodeAddress(address + ', Brasil');
       if (!geo) return sendJSON(res, 404, { error: 'Não conseguimos localizar esse endereço. Tente descrevê-lo de outro jeito (ex: rua, número, bairro, cidade).' });
       data.cfg.storeLat = geo.lat;
       data.cfg.storeLng = geo.lng;
-      await writeConfig(data);
+      writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
     } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
   }
@@ -879,14 +1032,14 @@ const server = http.createServer(async (req, res) => {
     };
 
     if (format === 'csv' && type === 'clientes') {
-      const customers = await customerDB.listCustomers();
+      const customers = readJSON(CUSTOMERS_FILE);
       const rows = [['Nome', 'Telefone', 'Cadastrado em', 'Último Endereço'].join(',')]
         .concat(customers.map(c => [csvEscape(c.name), csvEscape(c.phone), csvEscape(c.createdAt), csvEscape(c.lastAddress || '')].join(',')));
       return sendFile(`clientes-${stamp}.csv`, 'text/csv', '\uFEFF' + rows.join('\r\n'));
     }
 
     if (format === 'csv' && type === 'pedidos') {
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const rows = [['Pedido', 'Data', 'Status', 'Cliente', 'Modo', 'Itens', 'Subtotal', 'Taxa', 'Desconto', 'Total', 'Pagamento'].join(',')]
         .concat(orders.map(o => [
           csvEscape(o.id), csvEscape(o.createdAt), csvEscape(o.status), csvEscape(o.name), csvEscape(o.mode),
@@ -897,7 +1050,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (format === 'txt' && type === 'cardapio') {
-      const { menu } = await readConfig();
+      const { menu } = readConfig();
       const lines = ['CARDÁPIO — exportado em ' + new Date().toLocaleString('pt-BR'), ''];
       menu.forEach(sec => {
         lines.push('═'.repeat(40));
@@ -914,9 +1067,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     // formato padrão: backup completo em JSON, pra restaurar depois se precisar
-    const data = await readConfig();
-    const orders = await db.getOrders();
-    const customers = await customerDB.listCustomers();
+    const data = readConfig();
+    const orders = readJSON(ORDERS_FILE);
+    const customers = readJSON(CUSTOMERS_FILE);
     const backup = { exportedAt: new Date().toISOString(), version: 1, cfg: data.cfg, menu: data.menu, orders, customers };
     return sendFile(`shogatsu-backup-${stamp}.json`, 'application/json', JSON.stringify(backup, null, 2));
   }
@@ -930,13 +1083,13 @@ const server = http.createServer(async (req, res) => {
       if (!body || body.version !== 1 || !body.cfg || !body.menu) {
         return sendJSON(res, 400, { error: 'Arquivo de backup inválido ou de uma versão não reconhecida.' });
       }
-      const current = await readConfig();
-      await writeConfig({
+      const current = readConfig();
+      writeJSON(CONFIG_FILE, {
         cfg: { ...current.cfg, ...body.cfg, adminPass: current.cfg.adminPass, masterPass: current.cfg.masterPass },
         menu: body.menu
       });
-      if (Array.isArray(body.orders)) await db.saveOrders(body.orders);
-      if (Array.isArray(body.customers)) await customerDB.replaceAllCustomers(body.customers);
+      if (Array.isArray(body.orders)) writeJSON(ORDERS_FILE, body.orders);
+      if (Array.isArray(body.customers)) writeJSON(CUSTOMERS_FILE, body.customers);
       publicBroadcast('menu-updated', {});
       return sendJSON(res, 200, {
         ok: true,
@@ -974,10 +1127,10 @@ function estimateDeliveryWindow(order, cfg) {
       const { orderId, station } = await readBody(req);
       const st = ['cozinha', 'sushibar', 'bar', 'caixa'].includes(station) ? station : null;
       if (!st) return sendJSON(res, 400, { error: 'Via inválida.' });
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === orderId);
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const isCaixa = st === 'caixa';
 
       // Caixa: comprovante completo (todos os itens + dados do cliente + horário).
@@ -1038,7 +1191,7 @@ function estimateDeliveryWindow(order, cfg) {
       } catch (printErr) {
         return sendJSON(res, 502, { error: `Falha ao imprimir na via "${st}": ${printErr.message}` });
       }
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/print-test — envia um ticket de teste para a impressora de uma via ──
@@ -1046,7 +1199,7 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const { station } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const printerCfg = cfg.stations[station];
       if (!printerCfg) return sendJSON(res, 400, { error: 'Via inválida.' });
       if (printerCfg.method === 'navegador') return sendJSON(res, 200, { ok: true, method: 'navegador' });
@@ -1075,17 +1228,19 @@ function estimateDeliveryWindow(order, cfg) {
       if (!/^\d{4}$/.test(String(pin || ''))) return sendJSON(res, 400, { error: 'A senha precisa ter exatamente 4 dígitos.' });
       if (!name || !name.trim()) return sendJSON(res, 400, { error: 'Informe seu nome.' });
 
-      const customer0 = await customerDB.findCustomerByPhone(p);
-      if (customer0) return sendJSON(res, 409, { error: 'Já existe uma conta com esse telefone. Use "Entrar" ou "Esqueci minha senha".' });
+      const customers = readJSON(CUSTOMERS_FILE);
+      let customer = findCustomer(customers, p);
+      if (customer) return sendJSON(res, 409, { error: 'Já existe uma conta com esse telefone. Use "Entrar" ou "Esqueci minha senha".' });
 
-      const customer = {
+      customer = {
         phone: p, name: String(name).trim().slice(0, 80),
         pinHash: hashPin(p, pin), createdAt: new Date().toISOString(),
-        lastAddress: '', recovery: null
+        lastAddress: null, recovery: null
       };
-      await customerDB.createCustomer(customer);
-      return sendJSON(res, 201, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: '' } });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+      customers.push(customer);
+      writeJSON(CUSTOMERS_FILE, customers);
+      return sendJSON(res, 201, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: null } });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/login — cliente entra com telefone + senha de 4 dígitos ──
@@ -1093,12 +1248,13 @@ function estimateDeliveryWindow(order, cfg) {
     try {
       const { phone, pin } = await readBody(req);
       const p = normalizePhone(phone);
-      const customer = await customerDB.findCustomerByPhone(p);
+      const customers = readJSON(CUSTOMERS_FILE);
+      const customer = findCustomer(customers, p);
       if (!customer || customer.pinHash !== hashPin(p, pin)) return sendJSON(res, 401, { error: 'Telefone ou senha incorretos.' });
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const stats = customerStats(p, orders);
       return sendJSON(res, 200, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: customer.lastAddress, ...stats } });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/recovery-request — gera código e devolve link do WhatsApp da loja ──
@@ -1106,17 +1262,19 @@ function estimateDeliveryWindow(order, cfg) {
     try {
       const { phone } = await readBody(req);
       const p = normalizePhone(phone);
-      const customer = await customerDB.findCustomerByPhone(p);
+      const customers = readJSON(CUSTOMERS_FILE);
+      const customer = findCustomer(customers, p);
       if (!customer) return sendJSON(res, 404, { error: 'Não existe conta com esse telefone.' });
 
       const code = String(Math.floor(100000 + Math.random() * 900000)); // 6 dígitos
-      await customerDB.updateCustomer(p, { recovery: { code, requestedAt: new Date().toISOString(), approved: false } });
+      customer.recovery = { code, requestedAt: new Date().toISOString(), approved: false };
+      writeJSON(CUSTOMERS_FILE, customers);
 
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const waText = `Olá! Quero recuperar minha senha do Shogatsu.\nMeu telefone: ${customer.phone}\nCódigo: ${code}`;
       const waUrl = `https://wa.me/${cfg.whats}?text=${encodeURIComponent(waText)}`;
       return sendJSON(res, 200, { ok: true, code, waUrl });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/recovery-set-pin — cliente define nova senha (precisa já ter sido aprovado no painel) ──
@@ -1125,23 +1283,26 @@ function estimateDeliveryWindow(order, cfg) {
       const { phone, code, newPin } = await readBody(req);
       const p = normalizePhone(phone);
       if (!/^\d{4}$/.test(String(newPin || ''))) return sendJSON(res, 400, { error: 'A nova senha precisa ter exatamente 4 dígitos.' });
-      const customer = await customerDB.findCustomerByPhone(p);
+      const customers = readJSON(CUSTOMERS_FILE);
+      const customer = findCustomer(customers, p);
       if (!customer || !customer.recovery || customer.recovery.code !== String(code)) {
         return sendJSON(res, 400, { error: 'Código inválido.' });
       }
       if (!customer.recovery.approved) {
         return sendJSON(res, 403, { error: 'Ainda aguardando a confirmação da loja pelo WhatsApp. Tente novamente em instantes.' });
       }
-      await customerDB.updateCustomer(p, { pinHash: hashPin(p, newPin), recovery: null });
+      customer.pinHash = hashPin(p, newPin);
+      customer.recovery = null;
+      writeJSON(CUSTOMERS_FILE, customers);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
-  // ── GET /api/admin/customers — lista de clientes com estatísticas (painel, requer nível admin) ──
+  // ── GET /api/admin/customers — lista de clientes com estatísticas (painel, requer auth) ──
   if (pathname === '/api/admin/customers' && req.method === 'GET') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver os clientes.' });
-    const customers = await customerDB.listCustomers();
-    const orders = await db.getOrders();
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const customers = readJSON(CUSTOMERS_FILE);
+    const orders = readJSON(ORDERS_FILE);
     const list = customers.map(c => ({
       phone: c.phone, name: c.name, createdAt: c.createdAt, lastAddress: c.lastAddress,
       hasPendingRecovery: !!(c.recovery && !c.recovery.approved),
@@ -1154,7 +1315,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/admin/customers/orders' && req.method === 'GET') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const p = normalizePhone(query.phone);
-    const orders = (await db.getOrders()).filter(o => normalizePhone(o.phone) === p);
+    const orders = readJSON(ORDERS_FILE).filter(o => normalizePhone(o.phone) === p);
     return sendJSON(res, 200, { orders });
   }
 
@@ -1164,12 +1325,13 @@ function estimateDeliveryWindow(order, cfg) {
     try {
       const { phone } = await readBody(req);
       const p = normalizePhone(phone);
-      const customer = await customerDB.findCustomerByPhone(p);
+      const customers = readJSON(CUSTOMERS_FILE);
+      const customer = findCustomer(customers, p);
       if (!customer || !customer.recovery) return sendJSON(res, 404, { error: 'Nenhuma recuperação pendente pra esse telefone.' });
       customer.recovery.approved = true;
-      await customerDB.updateCustomer(p, { recovery: customer.recovery });
+      writeJSON(CUSTOMERS_FILE, customers);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/orders — cria um novo pedido (cliente) ──
@@ -1177,7 +1339,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/coupon/validate' && req.method === 'POST') {
     try {
       const { code, subtotal } = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       const result = findValidCoupon(cfg, code, Number(subtotal) || 0);
       if (result.error) return sendJSON(res, 200, { valid: false, error: result.error });
       return sendJSON(res, 200, {
@@ -1188,13 +1350,13 @@ function estimateDeliveryWindow(order, cfg) {
         freeDelivery: result.freeDelivery,
         message: result.coupon.type === 'frete_gratis' ? 'Frete grátis aplicado! 🎉' : `Desconto de R$ ${result.discount.toFixed(2).replace('.', ',')} aplicado! 🎉`
       });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   if (pathname === '/api/orders' && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      const { cfg } = await readConfig();
+      const { cfg } = readConfig();
       if (!Number(cfg.open)) return sendJSON(res, 400, { error: 'Restaurante fechado no momento.' });
       if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
 
@@ -1210,6 +1372,7 @@ function estimateDeliveryWindow(order, cfg) {
       const feeNum = appliedCoupon && appliedCoupon.type === 'frete_gratis' ? 0 : (Number(body.fee) || 0);
       const totalNum = Math.max(0, subtotalNum + feeNum - discount);
 
+      const orders = readJSON(ORDERS_FILE);
       const order = {
         id: 'SG' + Date.now().toString(36).toUpperCase(),
         ticketNumber: null, // só é atribuído quando a loja ACEITA o pedido (veja PATCH /api/orders/:id)
@@ -1239,42 +1402,35 @@ function estimateDeliveryWindow(order, cfg) {
         discount,
         total: totalNum
       };
-      await db.createOrder(order);
+      orders.unshift(order);
+      writeJSON(ORDERS_FILE, orders);
 
       // Contabiliza o uso do cupom (pra respeitar o limite de usos configurado)
       if (appliedCoupon) {
-        const data = await readConfig();
+        const data = readConfig();
         const c = (data.cfg.coupons || []).find(x => String(x.code || '').toUpperCase() === appliedCoupon.code.toUpperCase());
-        if (c) { c.usedCount = (c.usedCount || 0) + 1; await writeConfig(data); }
+        if (c) { c.usedCount = (c.usedCount || 0) + 1; writeJSON(CONFIG_FILE, data); }
       }
 
       // Se o telefone tem conta cadastrada, guarda o endereço mais recente pra pré-preencher da próxima vez
       if (order.mode === 'delivery') {
-        const normPhone = normalizePhone(order.phone);
-        const customer = await customerDB.findCustomerByPhone(normPhone);
-        if (customer) await customerDB.updateCustomer(normPhone, { lastAddress: order.address });
+        const customers = readJSON(CUSTOMERS_FILE);
+        const customer = findCustomer(customers, order.phone);
+        if (customer) {
+          customer.lastAddress = order.address;
+          writeJSON(CUSTOMERS_FILE, customers);
+        }
       }
 
       broadcast('new-order', order);
-
-      // Notifica o cliente que o pedido foi recebido — push grátis (app instalado),
-      // com SMS como fallback pago só se o cliente não tiver push cadastrado.
-      if (order.phone) {
-        notifications.dispatchToCustomer(
-          order.phone,
-          { title: '🍣 Pedido recebido!', body: `Recebemos seu pedido ${order.id}. Total: R$ ${order.total.toFixed(2)}. Já estamos preparando!` },
-          { permitirSmsFallback: true, smsCfg: cfg.sms, sendSMSFn: sendSMS }
-        ).catch(() => {});
-      }
-
       return sendJSON(res, 201, { ok: true, order });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/orders — lista pedidos (painel, requer auth) ──
   if (pathname === '/api/orders' && req.method === 'GET') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    return sendJSON(res, 200, await db.getOrders());
+    return sendJSON(res, 200, readJSON(ORDERS_FILE));
   }
 
   // ── PATCH /api/orders/:id — atualiza status (painel) ──
@@ -1285,7 +1441,7 @@ function estimateDeliveryWindow(order, cfg) {
       const { status, fee, cancelReason, cancelledBy, ticketNumber } = await readBody(req);
       const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
       if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === id);
       if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
       order.status = status;
@@ -1304,13 +1460,13 @@ function estimateDeliveryWindow(order, cfg) {
       } else if (status === 'preparando' && !order.ticketNumber) {
         // Loja aceitou o pedido sem escolher um número manualmente — atribui o próximo da fila (1 a 200, cíclico),
         // pulando qualquer número que já esteja em uso por outro pedido ainda em andamento.
-        const cfgData = await readConfig();
+        const cfgData = readConfig();
         let next = Number(cfgData.cfg.nextTicketNumber) >= 1 && Number(cfgData.cfg.nextTicketNumber) <= 200 ? Number(cfgData.cfg.nextTicketNumber) : 1;
         const activeNumbers = new Set(orders.filter(o => o.id !== id && o.ticketNumber && !['entregue', 'cancelado'].includes(o.status)).map(o => o.ticketNumber));
         for (let i = 0; i < 200 && activeNumbers.has(next); i++) next = next >= 200 ? 1 : next + 1;
         order.ticketNumber = next;
         cfgData.cfg.nextTicketNumber = next >= 200 ? 1 : next + 1;
-        await writeConfig(cfgData);
+        writeJSON(CONFIG_FILE, cfgData);
       }
       if (status === 'cancelado') {
         order.cancelReason = String(cancelReason || '').slice(0, 200) || 'Não informado';
@@ -1320,33 +1476,16 @@ function estimateDeliveryWindow(order, cfg) {
         order.fee = Number(fee) || 0;
         order.total = Math.max(0, Number(order.subtotal || 0) + order.fee - Number(order.discount || 0));
       }
-      await db.saveOrders(orders);
+      writeJSON(ORDERS_FILE, orders);
       broadcast('order-updated', order);
-
-      // Notifica o cliente nas mudanças de status que importam pra ele
-      if (order.phone && ['preparando', 'saiu'].includes(status)) {
-        const { cfg } = await readConfig();
-        const textos = {
-          preparando: `👨‍🍳 Seu pedido ${order.id} entrou em preparo!`,
-          saiu: order.mode === 'retirada'
-            ? `✅ Seu pedido ${order.id} está pronto para retirada!`
-            : `🛵 Seu pedido ${order.id} saiu para entrega!`,
-        };
-        notifications.dispatchToCustomer(
-          order.phone,
-          { title: '🍣 Shogatsu', body: textos[status] },
-          { permitirSmsFallback: true, smsCfg: cfg.sms, sendSMSFn: sendSMS }
-        ).catch(() => {});
-      }
-
       return sendJSON(res, 200, { ok: true, order });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
   if (pathname.startsWith('/api/track/') && req.method === 'GET') {
     const id = pathname.split('/').pop();
-    const orders = await db.getOrders();
+    const orders = readJSON(ORDERS_FILE);
     const order = orders.find(o => o.id === id);
     if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
     const { name, phone, address, ...rest } = order;
@@ -1356,12 +1495,12 @@ function estimateDeliveryWindow(order, cfg) {
   // ── POST /api/orders/:id/received — cliente confirma que recebeu o pedido ──
   if (pathname.match(/^\/api\/orders\/[^/]+\/received$/) && req.method === 'POST') {
     const id = pathname.split('/')[3];
-    const orders = await db.getOrders();
+    const orders = readJSON(ORDERS_FILE);
     const order = orders.find(o => o.id === id);
     if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
     order.receivedByCustomer = true;
     order.receivedAt = new Date().toISOString();
-    await db.saveOrders(orders);
+    writeJSON(ORDERS_FILE, orders);
     return sendJSON(res, 200, { ok: true });
   }
 
@@ -1372,19 +1511,19 @@ function estimateDeliveryWindow(order, cfg) {
       const { stars, comment } = await readBody(req);
       const n = parseInt(stars);
       if (!(n >= 1 && n <= 5)) return sendJSON(res, 400, { error: 'A avaliação precisa ser de 1 a 5 estrelas.' });
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === id);
       if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
       if (order.review) return sendJSON(res, 400, { error: 'Esse pedido já foi avaliado.' });
       order.review = { stars: n, comment: String(comment || '').slice(0, 400), createdAt: new Date().toISOString(), hidden: false };
-      await db.saveOrders(orders);
+      writeJSON(ORDERS_FILE, orders);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/reviews — avaliações públicas e visíveis, pra mostrar no site ──
   if (pathname === '/api/reviews' && req.method === 'GET') {
-    const orders = await db.getOrders();
+    const orders = readJSON(ORDERS_FILE);
     const reviews = orders
       .filter(o => o.review && !o.review.hidden)
       .map(o => ({
@@ -1402,7 +1541,7 @@ function estimateDeliveryWindow(order, cfg) {
   // ── GET /api/admin/reviews — todas as avaliações (inclusive ocultas), pra moderação ──
   if (pathname === '/api/admin/reviews' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver as avaliações.' });
-    const orders = await db.getOrders();
+    const orders = readJSON(ORDERS_FILE);
     const reviews = orders
       .filter(o => o.review)
       .map(o => ({ orderId: o.id, ticketNumber: o.ticketNumber, name: o.name, ...o.review }))
@@ -1416,13 +1555,13 @@ function estimateDeliveryWindow(order, cfg) {
     const orderId = pathname.split('/').pop();
     try {
       const { hidden } = await readBody(req);
-      const orders = await db.getOrders();
+      const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === orderId);
       if (!order || !order.review) return sendJSON(res, 404, { error: 'Avaliação não encontrada.' });
       order.review.hidden = !!hidden;
-      await db.saveOrders(orders);
+      writeJSON(ORDERS_FILE, orders);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/stream — Server-Sent Events (painel em tempo real) ──
@@ -1462,42 +1601,14 @@ function estimateDeliveryWindow(order, cfg) {
   res.writeHead(404); res.end('Not found');
 });
 
-db.initSchema()
-  .then(() => {
-    console.log('🗄️  Conectado ao Postgres — cardápio, configurações, pedidos e clientes 100% no banco (persistem entre reinícios).');
-  })
-  .catch(err => {
-    console.error('⚠️  Erro ao conectar/preparar o banco de dados:', err.message);
-    console.error('   O servidor não pode iniciar sem um banco PostgreSQL funcionando. Confira a variável DATABASE_URL.');
-    process.exit(1);
-  })
-  .then(() => {
-    server.listen(PORT, async () => {
-      console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-      console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
-      const { cfg } = await readConfig();
-      const vapidOk = notifications.configurarVapid(cfg);
-      if (vapidOk) console.log('🔔 Web Push configurado — mensagens pré-programadas podem ser disparadas de graça.');
-      else if (notifications.webpushDisponivel()) console.log('🔕 Web Push instalado mas sem chaves VAPID configuradas (Configurações → Notificações).');
-      else console.log('🔕 Pacote "web-push" não instalado — rode `npm install web-push` para ativar notificações grátis no app.');
-    });
-
-    // ── Agendador de campanhas automáticas (mensagens pré-programadas) ──
-    // Confere a cada minuto se o horário atual bate com algum dos horários
-    // configurados em Configurações → Notificações → "vezes por dia".
-    // Pré-configure os horários e ative/desative mensagens ANTES de deixar
-    // isso rodando sozinho em produção.
-    let ultimoMinutoDisparado = null;
-    setInterval(async () => {
-      const agora = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-      if (agora === ultimoMinutoDisparado) return; // evita disparo duplicado dentro do mesmo minuto
-      const { horarios } = await notifications.readCampaigns();
-      if (horarios.includes(agora)) {
-        ultimoMinutoDisparado = agora;
-        try {
-          const r = await notifications.dispararProximaCampanha();
-          console.log('[campanhas]', r.disparado ? `disparada "${r.mensagem}" para ${r.entregues}/${r.destinatarios} cliente(s)` : `nada disparado (${r.motivo})`);
-        } catch (e) { console.error('[campanhas] erro ao disparar automaticamente:', e.message); }
-      }
-    }, 60 * 1000);
+// Espera a sincronização com o banco (no máximo 8s — se o banco estiver
+// fora do ar ou demorando, o servidor sobe do mesmo jeito com o arquivo
+// local, em vez de deixar todo mundo esperando) e só então começa a aceitar
+// pedidos.
+const dbBootPromise = dbSyncOnBoot().catch((e) => console.error('⚠️  Falha na sincronização inicial com o banco de dados:', e.message));
+Promise.race([dbBootPromise, new Promise((resolve) => setTimeout(resolve, 8000))]).finally(() => {
+  server.listen(PORT, () => {
+    console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+    console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
   });
+});

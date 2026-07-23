@@ -1,43 +1,14 @@
 # 🍣 Shogatsu — Pedidos Online
 
 Sistema de pedidos com cardápio (`/`), pedido enviado direto para a cozinha em
-tempo real, PIX com valor automático, painel do restaurante (`/painel.html`)
-e notificações automáticas pro app do cliente (push grátis + SMS como
-fallback pago).
+tempo real, PIX com valor automático e painel do restaurante (`/painel.html`).
 
-Usa só duas dependências externas: `pg` (conexão com o banco PostgreSQL,
-**obrigatória**) e `web-push` (notificações grátis no app). Rode
-`npm install` antes de `node server.js` na primeira vez.
-
-## Banco de dados (obrigatório)
-
-Cardápio, configurações, pedidos, clientes, campanhas e assinaturas de push
-são gravados **exclusivamente em PostgreSQL** — o sistema não usa mais
-arquivos JSON como armazenamento (isso é o que causava cardápio/config
-"voltando ao padrão" depois de um redeploy em serviços com disco não
-persistente, como o Render no plano gratuito).
-
-1. Crie um banco Postgres gratuito em [Render Postgres](https://render.com),
-   [Supabase](https://supabase.com) ou [Neon](https://neon.tech).
-2. Copie a **connection string** (algo como
-   `postgresql://usuario:senha@host:5432/banco`).
-3. Configure a variável de ambiente `DATABASE_URL` com essa string, tanto
-   localmente quanto no serviço onde for hospedar.
-4. Rode `node server.js` — na primeira vez, as tabelas são criadas
-   automaticamente e, se existir uma pasta `data/` com os arquivos antigos
-   (`config.json`, `orders.json`, `customers.json`, `campaigns.json`,
-   `push-subs.json`), os dados são **migrados automaticamente** pro banco
-   nessa primeira execução. Depois disso, esses arquivos não são mais lidos.
-
-Sem `DATABASE_URL` configurada, o servidor recusa-se a iniciar e mostra uma
-mensagem explicando o que falta — isso é proposital, pra nunca mais rodar
-"quase funcionando" perdendo dados silenciosamente.
+Não usa nenhuma dependência externa (só Node.js puro), então não precisa
+rodar `npm install` — basta ter Node instalado.
 
 ## Rodando localmente
 
 ```bash
-npm install
-export DATABASE_URL="postgresql://usuario:senha@host:5432/banco"
 node server.js
 ```
 
@@ -58,19 +29,57 @@ para começar:
 
 Passo geral:
 1. Suba esta pasta inteira para o serviço escolhido (ou um repositório Git).
-2. Configure a variável de ambiente `DATABASE_URL` no serviço (veja a seção
-   "Banco de dados" acima) — sem ela o servidor não inicia.
-3. Configure o comando de start como `node server.js`.
-4. Aponte seu domínio (ex: `pedido.shogatsu.com.br`) para o serviço.
-5. Acesse `/painel.html` no domínio e troque a senha do restaurante na aba
-   "Cardápio & Config" (ou "Configurações → Usuários", se estiver usando
-   login por usuário).
+2. Configure o comando de start como `node server.js`.
+3. Aponte seu domínio (ex: `pedido.shogatsu.com.br`) para o serviço.
+4. Acesse `/painel.html` no domínio e troque a senha do restaurante (arquivo
+   `data/config.json`, campo `adminPass` — ou peça para eu adicionar uma tela
+   de troca de senha pelo próprio painel).
 
-✅ Como cardápio, configurações, pedidos e clientes agora ficam 100% no
-banco PostgreSQL (e não mais em arquivos JSON no disco), você pode usar
-tranquilamente serviços que apagam o disco a cada deploy (Render free tier,
-por exemplo) — nada se perde, porque nada fica no disco local depois da
-primeira migração.
+⚠️ Importante: a pasta `data/` guarda os pedidos e o cardápio em arquivos
+JSON. Ela precisa estar num disco **persistente** do seu servidor (não use
+serviços "serverless" que apagam o disco a cada deploy, como Vercel/Netlify
+functions puras) — senão os pedidos e o cardápio somem a cada reinício.
+
+## Banco de dados (evita perder pedidos entre deploys)
+
+Por padrão, os dados (pedidos, cardápio, clientes) ficam salvos em arquivos
+JSON dentro da pasta `data/`. Isso funciona bem, mas em hospedagens como o
+**Render**, esse disco é apagado toda vez que você faz um novo deploy (ou às
+vezes num reinício) — ou seja, os pedidos e o cardápio somem.
+
+Pra resolver isso, o servidor agora também sabe salvar uma cópia de tudo num
+banco de dados **Postgres** externo, que é permanente. É opcional: sem
+configurar nada, o sistema continua funcionando exatamente como antes (só com
+o arquivo local).
+
+### Passo a passo (grátis, sem depender do banco pago do Render)
+
+1. Crie uma conta grátis em **[neon.com](https://neon.com)** (ou
+   [supabase.com](https://supabase.com), ambos têm plano gratuito
+   permanente — diferente do banco do próprio Render, que apaga os dados
+   grátis depois de 30 dias).
+2. Crie um projeto/banco novo. Copie a **connection string** (algo como
+   `postgresql://usuario:senha@host/nomedobanco?sslmode=require`).
+3. No painel do Render, vá em **Environment** (do seu Web Service) e adicione
+   uma variável:
+   - Nome: `DATABASE_URL`
+   - Valor: a connection string que você copiou
+4. Salve — o Render faz o redeploy automático. No log vai aparecer:
+   `✅ Banco de dados conectado`.
+5. Rode `npm install` (localmente, ou deixe o Render rodar sozinho no deploy)
+   pra instalar o driver do Postgres (`pg`), que agora é a única dependência
+   do projeto.
+
+A partir daí, toda vez que um pedido, o cardápio ou um cliente for
+salvo, a mesma informação vai automaticamente pro banco em segundo plano
+(sem deixar o site mais lento). E toda vez que o servidor ligar, ele busca a
+versão mais recente no banco antes de aceitar pedidos — então mesmo que o
+Render apague o disco local num deploy, os dados voltam sozinhos.
+
+⚠️ Se o banco cair ou ficar fora do ar por algum motivo, o site **continua
+funcionando normalmente** com o arquivo local (o banco é só uma cópia de
+segurança, não uma dependência obrigatória pro dia a dia) — só aparece um
+aviso no log até a conexão voltar.
 
 ## Como funciona o pagamento por PIX
 
@@ -190,41 +199,6 @@ Pra apagar pedidos antigos do histórico (ex: depois de alguns meses), tem uma
 segunda senha — a **senha master** — separada da senha normal do painel. Ela
 só é pedida nessa ação de exclusão, como uma trava extra pra ninguém apagar
 vendas sem querer. A exclusão é permanente.
-
-## Notificações automáticas (push grátis + 20 mensagens pré-programadas)
-
-O sistema agora avisa o cliente sozinho em 3 momentos, direto no app instalado
-(PWA), **sem custo**: pedido recebido, pedido em preparo, e pedido pronto/saiu
-para entrega. Se o cliente não tiver o app com notificações ativadas, o
-sistema cai automaticamente para SMS (usa a mesma conta Twilio configurada em
-Configurações → SMS acima — isso sim é pago).
-
-### Ativando pela primeira vez
-
-1. Rode `npm install` (instala o pacote `web-push`).
-2. No painel, aba **Configurações → 🔔 Notificações Automáticas**, clique em
-   **"🔑 Gerar chaves automaticamente"** e depois em **"💾 Salvar Tudo"** no
-   topo da página. Isso é só uma vez.
-3. Pronto — quando um cliente fizer login/cadastro ou finalizar um pedido no
-   site, o navegador vai pedir permissão de notificação automaticamente.
-
-### 20 mensagens pré-programadas
-
-Na mesma seção do painel, marque quais das 20 mensagens (descontos,
-aniversário do cliente, reserva, novidades, fidelidade, reengajamento, etc)
-podem ser disparadas automaticamente — isso é a sua **pré-configuração**.
-Mensagens desmarcadas nunca entram no rodízio automático.
-
-### Disparo automático (algumas vezes por dia)
-
-No campo **"Horários de disparo automático"**, defina os horários do dia
-(ex: `11:00, 15:30, 19:00`) e clique em **"💾 Salvar Horários"**. A cada
-horário configurado, o sistema dispara sozinho — todo dia, sem precisar de
-nenhuma ação sua — a próxima mensagem ativa da lista (em rodízio, pra não
-repetir sempre a mesma) para todos os clientes com push cadastrado.
-
-Use o botão **"📤 Disparar Agora"** pra testar manualmente a qualquer momento,
-sem esperar o horário configurado.
 
 ## O que mudou em relação ao arquivo original
 
