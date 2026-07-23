@@ -1,213 +1,465 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Plus, Sparkles, AlertCircle, Info, Star } from 'lucide-react';
-import { MenuCategory, MenuItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { X, MapPin, Truck, Store, QrCode, CreditCard, Banknote, Copy, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { CartItem, CustomerUser, AppConfig } from '../types';
 
-interface ClientMenuProps {
-  categories: MenuCategory[];
-  onAddToCart: (item: MenuItem) => void;
+interface CheckoutModalProps {
   isOpen: boolean;
+  onClose: () => void;
+  cart: CartItem[];
+  subtotal: number;
+  couponCode: string;
+  obs: string;
+  customer: CustomerUser | null;
+  config: AppConfig | null;
+  onOrderCreated: (orderId: string) => void;
 }
 
-export default function ClientMenu({ categories, onAddToCart, isOpen }: ClientMenuProps) {
-  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+export default function CheckoutModal({
+  isOpen,
+  onClose,
+  cart,
+  subtotal,
+  couponCode,
+  obs,
+  customer,
+  config,
+  onOrderCreated
+}: CheckoutModalProps) {
+  const [mode, setMode] = useState<'delivery' | 'retirada'>('delivery');
+  const [name, setName] = useState<string>(customer?.name || '');
+  const [phone, setPhone] = useState<string>(customer?.phone || '');
+  const [cep, setCep] = useState<string>('');
+  const [street, setStreet] = useState<string>('');
+  const [number, setNumber] = useState<string>('');
+  const [hood, setHood] = useState<string>('');
+  const [city, setCity] = useState<string>('Rio das Ostras');
+  const [uf, setUf] = useState<string>('RJ');
+  const [comp, setComp] = useState<string>('');
 
-  const filteredCategories = useMemo(() => {
-    return categories
-      .map((cat) => {
-        const matchesCategory = activeCategoryId === 'all' || cat.id === activeCategoryId;
-        if (!matchesCategory) return null;
+  const [deliveryFee, setDeliveryFee] = useState<number>(config?.fee || 8);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  const [isCalculatingFee, setIsCalculatingFee] = useState<boolean>(false);
 
-        const filteredItems = cat.items.filter((item) => {
-          const q = searchQuery.toLowerCase().trim();
-          if (!q) return true;
-          return (
-            item.name.toLowerCase().includes(q) ||
-            (item.desc && item.desc.toLowerCase().includes(q)) ||
-            (item.badge && item.badge.toLowerCase().includes(q))
-          );
-        });
+  const [payMethod, setPayMethod] = useState<string>('pix');
+  const [troco, setTroco] = useState<string>('');
 
-        if (filteredItems.length === 0) return null;
+  const [pixPayload, setPixPayload] = useState<string | null>(null);
+  const [pixQrImg, setPixQrImg] = useState<string | null>(null);
+  const [copiedPix, setCopiedPix] = useState<boolean>(false);
 
-        return {
-          ...cat,
-          items: filteredItems,
-        };
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Sync customer address if available
+  useEffect(() => {
+    if (customer?.name) setName(customer.name);
+    if (customer?.phone) setPhone(customer.phone);
+    if (customer?.lastAddress) setStreet(customer.lastAddress);
+  }, [customer]);
+
+  // Calculate fee whenever address/cep changes
+  const handleCalculateFee = async () => {
+    if (mode === 'retirada') {
+      setDeliveryFee(0);
+      setDeliveryError(null);
+      return;
+    }
+
+    setIsCalculatingFee(true);
+    setDeliveryError(null);
+
+    try {
+      const res = await fetch('/api/delivery-fee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cep, street, hood, city, uf })
+      });
+      const data = await res.json();
+      if (data.error === 'fora_area') {
+        setDeliveryError(data.message || 'Endereço fora da área de entrega do restaurante.');
+        setDeliveryFee(0);
+      } else {
+        setDeliveryFee(Number(data.fee) || 0);
+      }
+    } catch (e) {
+      setDeliveryFee(config?.fee || 8);
+    } finally {
+      setIsCalculatingFee(false);
+    }
+  };
+
+  // Lookup CEP
+  const handleCepBlur = async () => {
+    if (!cep || cep.replace(/\D/g, '').length !== 8) return;
+    try {
+      const res = await fetch(`/api/cep/${cep}`);
+      const data = await res.json();
+      if (data.ok) {
+        setStreet(data.street || street);
+        setHood(data.hood || hood);
+        setCity(data.city || city);
+        setUf(data.uf || uf);
+        handleCalculateFee();
+      }
+    } catch (e) {}
+  };
+
+  // Generate PIX QR code
+  useEffect(() => {
+    if (payMethod === 'pix') {
+      const totalAmount = subtotal + (mode === 'delivery' ? deliveryFee : 0);
+      fetch('/api/pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: totalAmount, txid: 'PEDIDO' + Date.now().toString(36) })
       })
-      .filter(Boolean) as MenuCategory[];
-  }, [categories, activeCategoryId, searchQuery]);
+        .then(res => res.json())
+        .then(data => {
+          if (data.payload) {
+            setPixPayload(data.payload);
+            setPixQrImg(data.qrImg);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [payMethod, subtotal, deliveryFee, mode]);
+
+  const handleCopyPix = () => {
+    if (pixPayload) {
+      navigator.clipboard.writeText(pixPayload);
+      setCopiedPix(true);
+      setTimeout(() => setCopiedPix(false), 2000);
+    }
+  };
+
+  const handleSubmitOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) { setErrorMsg('Informe seu nome completo.'); return; }
+    if (!phone.trim()) { setErrorMsg('Informe seu telefone de contato.'); return; }
+    if (mode === 'delivery' && !street.trim()) { setErrorMsg('Informe o endereço de entrega (Rua/Avenida).'); return; }
+
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    const fullAddress = mode === 'delivery'
+      ? `${street}, ${number} ${comp ? '(' + comp + ')' : ''} - ${hood}, ${city}/${uf} ${cep ? 'CEP ' + cep : ''}`
+      : 'Retirada no Balcão';
+
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          name,
+          phone,
+          address: fullAddress,
+          items: cart.map(i => ({ name: i.name, qty: i.qtyNum, price: i.price, station: 'cozinha' })),
+          obs,
+          payMethod,
+          troco: payMethod === 'dinheiro' ? troco : '',
+          subtotal,
+          fee: mode === 'delivery' ? deliveryFee : 0,
+          couponCode
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao criar o pedido.');
+      }
+
+      onOrderCreated(data.order.id);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao processar pedido. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const totalAmount = Math.max(0, subtotal + (mode === 'delivery' ? deliveryFee : 0));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      
-      {/* Banner / Notice if Closed */}
-      {!isOpen && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
-          <div className="text-sm">
-            <strong className="font-semibold text-rose-200">Restaurante fechado no momento.</strong> Você pode visualizar o cardápio, mas os pedidos estarão disponíveis durante o horário de funcionamento.
-          </div>
-        </div>
-      )}
-
-      {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-amber-950/40 border border-amber-500/20 p-6 sm:p-10 shadow-2xl">
-        <div className="relative z-10 max-w-2xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            Gastronomia Japonesa de Alta Qualidade
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-black text-white font-serif tracking-tight">
-            Sinta o verdadeiro sabor do Japão na sua casa
-          </h2>
-          <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-            Combinados de salmão fresco, temakis crocantes, yakisoba artesanal e o genuíno Omakase preparado por mestres sushimen.
-          </p>
-        </div>
-        <div className="absolute right-4 bottom-0 opacity-15 pointer-events-none text-9xl">
-          🥢
-        </div>
-      </div>
-
-      {/* Search Bar & Category Filters */}
-      <div className="space-y-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden text-slate-100 my-8">
         
-        {/* Search Input */}
-        <div className="relative max-w-md mx-auto sm:mx-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por sushi, sashimi, yakisoba, ceviche..."
-            className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all"
-          />
+        {/* Modal Header */}
+        <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-bold text-slate-100 font-serif">Finalizar Pedido</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Categories Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <button
-            onClick={() => setActiveCategoryId('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-              activeCategoryId === 'all'
-                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
-                : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
-            }`}
-          >
-            🔥 Todos os Pratos
-          </button>
-          {categories.map((cat) => (
+        <form onSubmit={handleSubmitOrder} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          
+          {errorMsg && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Delivery Mode Toggle */}
+          <div className="grid grid-cols-2 gap-3 p-1 bg-slate-950 rounded-2xl border border-slate-800">
             <button
-              key={cat.id}
-              onClick={() => setActiveCategoryId(cat.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border ${
-                activeCategoryId === cat.id
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
-                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'
+              type="button"
+              onClick={() => { setMode('delivery'); setDeliveryFee(config?.fee || 8); }}
+              className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
+                mode === 'delivery'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <span>{cat.icon}</span>
-              <span>{cat.title}</span>
+              <Truck className="w-4 h-4" />
+              Entrega (Delivery)
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => { setMode('retirada'); setDeliveryFee(0); setDeliveryError(null); }}
+              className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
+                mode === 'retirada'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Store className="w-4 h-4" />
+              Retirar no Balcão
+            </button>
+          </div>
 
-      </div>
+          {/* Customer Personal Details */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Seus Dados
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Nome Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: João Silva"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Telefone / WhatsApp *</label>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(22) 99999-8888"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                />
+              </div>
+            </div>
+          </div>
 
-      {/* Menu Categories & Grid */}
-      {filteredCategories.length === 0 ? (
-        <div className="py-16 text-center space-y-3 bg-slate-900/50 rounded-2xl border border-slate-800">
-          <div className="text-4xl">🔍</div>
-          <h3 className="text-lg font-semibold text-slate-200">Nenhum prato encontrado</h3>
-          <p className="text-xs text-slate-400">Tente buscar por outro termo ou mude a categoria selecionada.</p>
-        </div>
-      ) : (
-        filteredCategories.map((cat) => (
-          <section key={cat.id} className="space-y-4">
-            
-            {/* Category Header */}
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{cat.icon}</span>
+          {/* Address Fields (only if Delivery) */}
+          {mode === 'delivery' && (
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Endereço de Entrega</span>
+                {isCalculatingFee && <span className="text-[10px] text-amber-400 animate-pulse">Calculando taxa...</span>}
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-100 font-serif">{cat.title}</h3>
-                  {cat.note && <p className="text-xs text-amber-400/80 mt-0.5">{cat.note}</p>}
+                  <label className="text-xs text-slate-400 block mb-1">CEP</label>
+                  <input
+                    type="text"
+                    value={cep}
+                    onChange={(e) => setCep(e.target.value)}
+                    onBlur={handleCepBlur}
+                    placeholder="22896-155"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-slate-400 block mb-1">Rua / Avenida *</label>
+                  <input
+                    type="text"
+                    required
+                    value={street}
+                    onChange={(e) => setStreet(e.target.value)}
+                    onBlur={handleCalculateFee}
+                    placeholder="Ex: Av. Governador Roberto Silveira"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                  />
                 </div>
               </div>
-              <span className="text-xs font-semibold text-slate-500 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
-                {cat.items.length} {cat.items.length === 1 ? 'opção' : 'opções'}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Número</label>
+                  <input
+                    type="text"
+                    value={number}
+                    onChange={(e) => setNumber(e.target.value)}
+                    placeholder="109"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Bairro</label>
+                  <input
+                    type="text"
+                    value={hood}
+                    onChange={(e) => setHood(e.target.value)}
+                    onBlur={handleCalculateFee}
+                    placeholder="Costazul"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs text-slate-400 block mb-1">Complemento</label>
+                  <input
+                    type="text"
+                    value={comp}
+                    onChange={(e) => setComp(e.target.value)}
+                    placeholder="Apto 201, Bloco B"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+              </div>
+
+              {deliveryError && (
+                <p className="text-xs text-rose-400 font-medium">{deliveryError}</p>
+              )}
+            </div>
+          )}
+
+          {/* Payment Method */}
+          <div className="space-y-3 pt-2 border-t border-slate-800">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Forma de Pagamento
+            </h4>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPayMethod('pix')}
+                className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all ${
+                  payMethod === 'pix'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <QrCode className="w-5 h-5" />
+                PIX
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPayMethod('cartao')}
+                className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all ${
+                  payMethod === 'cartao'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <CreditCard className="w-5 h-5" />
+                Cartão (Maquininha)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPayMethod('dinheiro')}
+                className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all ${
+                  payMethod === 'dinheiro'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Banknote className="w-5 h-5" />
+                Dinheiro
+              </button>
+            </div>
+
+            {/* PIX QR Code Box */}
+            {payMethod === 'pix' && (
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3">
+                <p className="text-xs text-slate-400">
+                  Escaneie o QR Code abaixo ou copie a chave PIX copia-e-cola com o valor exato:
+                </p>
+
+                {pixQrImg && (
+                  <div className="inline-block p-2 bg-white rounded-xl shadow-md">
+                    <img src={pixQrImg} alt="QR Code PIX" className="w-40 h-40" />
+                  </div>
+                )}
+
+                {pixPayload && (
+                  <button
+                    type="button"
+                    onClick={handleCopyPix}
+                    className="w-full py-2.5 px-3 bg-slate-900 border border-slate-700 hover:border-amber-500/50 rounded-xl text-xs font-semibold text-amber-400 flex items-center justify-center gap-2"
+                  >
+                    {copiedPix ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedPix ? 'Copiado para a área de transferência!' : 'Copiar Chave PIX Copia e Cola'}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Dinheiro Troco Input */}
+            {payMethod === 'dinheiro' && (
+              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                <label className="text-xs text-slate-400 block">Precisa de troco para quanto?</label>
+                <input
+                  type="text"
+                  value={troco}
+                  onChange={(e) => setTroco(e.target.value)}
+                  placeholder="Ex: Troco para R$ 100,00"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-100 focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Order Summary & Confirm */}
+          <div className="pt-4 border-t border-slate-800 space-y-2 text-xs">
+            <div className="flex justify-between text-slate-400">
+              <span>Subtotal dos itens</span>
+              <span>R$ {subtotal.toFixed(2).replace('.', ',')}</span>
+            </div>
+            {mode === 'delivery' && (
+              <div className="flex justify-between text-slate-400">
+                <span>Taxa de entrega</span>
+                <span>R$ {deliveryFee.toFixed(2).replace('.', ',')}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-slate-100 text-base pt-2 border-t border-slate-800">
+              <span>Total do Pedido</span>
+              <span className="text-amber-400">
+                R$ {totalAmount.toFixed(2).replace('.', ',')}
               </span>
             </div>
 
-            {/* Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {cat.items.map((item, idx) => {
-                const isAvailable = item.available !== false;
+            <button
+              type="submit"
+              disabled={isSubmitting || Boolean(deliveryError)}
+              className="w-full mt-4 py-4 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-2xl text-base shadow-xl shadow-amber-500/20 active:scale-[0.99] transition-all disabled:opacity-50"
+            >
+              {isSubmitting ? 'Enviando Pedido...' : 'Confirmar e Enviar Pedido 🚀'}
+            </button>
+          </div>
 
-                return (
-                  <div
-                    key={idx}
-                    className={`group relative flex flex-col justify-between p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-amber-500/30 transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/5 ${
-                      !isAvailable ? 'opacity-50 grayscale pointer-events-none' : ''
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-base font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                          {item.name}
-                        </h4>
-                        {item.badge && (
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 flex-shrink-0">
-                            {item.badge}
-                          </span>
-                        )}
-                      </div>
+        </form>
 
-                      {item.desc && (
-                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                          {item.desc}
-                        </p>
-                      )}
-
-                      {item.qty && (
-                        <p className="text-[11px] font-medium text-slate-500">
-                          Servido em: {item.qty}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/60">
-                      <div>
-                        <span className="text-xs text-slate-500 block">Preço</span>
-                        <span className="text-lg font-black text-amber-400">
-                          R$ {item.price.toFixed(2).replace('.', ',')}
-                        </span>
-                      </div>
-
-                      <button
-                        disabled={!isOpen || !isAvailable}
-                        onClick={() => onAddToCart(item)}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                          isOpen && isAvailable
-                            ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 active:scale-95'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <Plus className="w-4 h-4" />
-                        Adicionar
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-          </section>
-        ))
-      )}
-
+      </div>
     </div>
   );
 }

@@ -1,198 +1,257 @@
-import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, Tag, AlertCircle } from 'lucide-react';
-import { CartItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { X, Clock, CheckCircle2, Truck, Star, Sparkles, AlertCircle, ShoppingBag } from 'lucide-react';
+import { Order } from '../types';
 
-interface CartDrawerProps {
+interface OrderTrackerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  cart: CartItem[];
-  onUpdateQty: (cartId: string, delta: number) => void;
-  onRemoveItem: (cartId: string) => void;
-  onClearCart: () => void;
-  subtotal: number;
-  couponCode: string;
-  setCouponCode: (code: string) => void;
-  appliedCouponMessage: string | null;
-  onValidateCoupon: () => void;
-  onOpenCheckout: () => void;
-  obs: string;
-  setObs: (obs: string) => void;
+  activeOrderId: string | null;
+  phone: string;
 }
 
-export default function CartDrawer({
+export default function OrderTrackerModal({
   isOpen,
   onClose,
-  cart,
-  onUpdateQty,
-  onRemoveItem,
-  onClearCart,
-  subtotal,
-  couponCode,
-  setCouponCode,
-  appliedCouponMessage,
-  onValidateCoupon,
-  onOpenCheckout,
-  obs,
-  setObs
-}: CartDrawerProps) {
+  activeOrderId,
+  phone
+}: OrderTrackerModalProps) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [ratingStars, setRatingStars] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState<string>('');
+  const [ratingSubmitted, setRatingSubmitted] = useState<boolean>(false);
+
+  const fetchMyOrders = async () => {
+    if (!phone && !activeOrderId) return;
+    setLoading(true);
+    try {
+      if (activeOrderId) {
+        const res = await fetch(`/api/track/${activeOrderId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSelectedOrder(data);
+          setOrders([data]);
+        }
+      } else if (phone) {
+        const res = await fetch(`/api/admin/customers/orders?phone=${phone}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOrders(data.orders || []);
+          if (data.orders?.length > 0) {
+            setSelectedOrder(data.orders[0]);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchMyOrders();
+    }
+  }, [isOpen, activeOrderId, phone]);
+
+  const handleSendReview = async () => {
+    if (!selectedOrder) return;
+    try {
+      const res = await fetch(`/api/orders/${selectedOrder.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stars: ratingStars, comment: ratingComment })
+      });
+      if (res.ok) {
+        setRatingSubmitted(true);
+        fetchMyOrders();
+      }
+    } catch (e) {}
+  };
+
   if (!isOpen) return null;
 
+  const getStatusStep = (status: string) => {
+    switch (status) {
+      case 'novo': return 1;
+      case 'preparando': return 2;
+      case 'saiu': return 3;
+      case 'entregue': return 4;
+      case 'cancelado': return -1;
+      default: return 1;
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/80 backdrop-blur-sm transition-opacity">
-      <div className="absolute inset-0" onClick={onClose} />
-
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-slate-900 border-l border-slate-800 text-slate-100 flex flex-col shadow-2xl">
-          
-          {/* Drawer Header */}
-          <div className="px-6 py-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="w-5 h-5 text-amber-400" />
-              <h2 className="text-lg font-bold text-slate-100 font-serif">Seu Carrinho</h2>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
-                {cart.length}
-              </span>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden text-slate-100 my-8">
+        
+        {/* Header */}
+        <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-bold text-slate-100 font-serif">Acompanhar Pedido</h3>
           </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-3 py-12">
-                <div className="w-16 h-16 rounded-2xl bg-slate-800/50 flex items-center justify-center text-3xl text-slate-500">
-                  🛒
+        <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {loading ? (
+            <div className="py-12 text-center text-slate-400 text-sm">Carregando status do pedido...</div>
+          ) : !selectedOrder ? (
+            <div className="py-12 text-center space-y-2">
+              <ShoppingBag className="w-12 h-12 text-slate-600 mx-auto" />
+              <p className="text-sm font-semibold text-slate-300">Nenhum pedido recente localizado</p>
+              <p className="text-xs text-slate-500">Faça login com seu telefone ou crie um novo pedido no cardápio.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              
+              {/* Order Info Badge */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-extrabold text-amber-400 font-mono">
+                      #{selectedOrder.id}
+                    </span>
+                    {selectedOrder.ticketNumber && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs">
+                        Senha Nº {selectedOrder.ticketNumber}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Realizado em {new Date(selectedOrder.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {selectedOrder.mode === 'delivery' ? 'Delivery' : 'Retirada'}
+                  </p>
                 </div>
-                <h3 className="text-base font-semibold text-slate-300">Seu carrinho está vazio</h3>
-                <p className="text-xs text-slate-500 max-w-xs">
-                  Adicione pratos deliciosos do nosso cardápio para fazer o seu pedido.
-                </p>
+                <div className="text-right">
+                  <span className="text-xs text-slate-400 block">Total</span>
+                  <span className="text-lg font-black text-amber-400">
+                    R$ {selectedOrder.total.toFixed(2).replace('.', ',')}
+                  </span>
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs text-slate-400">
-                  <span>Itens selecionados</span>
-                  <button
-                    onClick={onClearCart}
-                    className="text-rose-400 hover:underline flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" /> Limpar tudo
-                  </button>
+
+              {/* Status Progress Bar */}
+              {selectedOrder.status === 'cancelado' ? (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs space-y-1">
+                  <strong className="font-bold block text-sm">Pedido Cancelado</strong>
+                  <p>Motivo: {selectedOrder.cancelReason || 'Não informado pela loja'}</p>
                 </div>
-
-                <div className="space-y-3">
-                  {cart.map((item) => (
+              ) : (
+                <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-6">
+                  <div className="relative flex items-center justify-between">
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-slate-800 w-full z-0" />
                     <div
-                      key={item.cartId}
-                      className="p-4 rounded-xl bg-slate-800/40 border border-slate-800 flex items-center justify-between gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-200 truncate">
-                          {item.name}
-                        </h4>
-                        <div className="text-xs text-amber-400 font-semibold mt-0.5">
-                          R$ {(item.price * item.qtyNum).toFixed(2).replace('.', ',')}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-amber-500 z-0 transition-all duration-500"
+                      style={{
+                        width: `${((getStatusStep(selectedOrder.status) - 1) / 3) * 100}%`
+                      }}
+                    />
+
+                    {[
+                      { step: 1, label: 'Recebido', icon: '📝' },
+                      { step: 2, label: 'Preparo', icon: '👨‍🍳' },
+                      { step: 3, label: selectedOrder.mode === 'delivery' ? 'A Caminho' : 'Pronto', icon: '🛵' },
+                      { step: 4, label: 'Concluído', icon: '✅' },
+                    ].map((st) => {
+                      const currentStep = getStatusStep(selectedOrder.status);
+                      const isDone = currentStep >= st.step;
+                      const isCurrent = currentStep === st.step;
+
+                      return (
+                        <div key={st.step} className="relative z-10 flex flex-col items-center gap-1.5">
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border transition-all ${
+                              isDone
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/30'
+                                : 'bg-slate-900 text-slate-500 border-slate-800'
+                            }`}
+                          >
+                            {st.icon}
+                          </div>
+                          <span className={`text-[11px] font-semibold ${isCurrent ? 'text-amber-400 font-bold' : isDone ? 'text-slate-200' : 'text-slate-500'}`}>
+                            {st.label}
+                          </span>
                         </div>
-                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                      <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/60 rounded-lg p-1">
-                        <button
-                          onClick={() => onUpdateQty(item.cartId, -1)}
-                          className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="text-xs font-bold w-5 text-center text-slate-200">
-                          {item.qtyNum}
-                        </span>
-                        <button
-                          onClick={() => onUpdateQty(item.cartId, 1)}
-                          className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => onRemoveItem(item.cartId)}
-                        className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              {/* Items List */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Itens do Pedido
+                </h4>
+                <div className="space-y-2">
+                  {selectedOrder.items.map((item, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between text-xs">
+                      <span className="font-semibold text-slate-200">
+                        {item.qty}x {item.name}
+                      </span>
+                      <span className="text-amber-400 font-bold">
+                        R$ {(item.price * item.qty).toFixed(2).replace('.', ',')}
+                      </span>
                     </div>
                   ))}
                 </div>
-
-                {/* Coupon Input */}
-                <div className="pt-4 border-t border-slate-800 space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-amber-400" /> Cupom de desconto
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      placeholder="Ex: BEMVINDO10"
-                      className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs uppercase text-slate-100 focus:outline-none focus:border-amber-500/50"
-                    />
-                    <button
-                      onClick={onValidateCoupon}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700"
-                    >
-                      Aplicar
-                    </button>
-                  </div>
-                  {appliedCouponMessage && (
-                    <p className="text-xs text-amber-400 font-medium">
-                      {appliedCouponMessage}
-                    </p>
-                  )}
-                </div>
-
-                {/* Observações / Notes */}
-                <div className="space-y-1.5 pt-2">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Observações do pedido
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={obs}
-                    onChange={(e) => setObs(e.target.value)}
-                    placeholder="Ex: Sem cebolinha, molho tare extra, talheres descartáveis..."
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500/50 resize-none"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Drawer Footer / Checkout */}
-          {cart.length > 0 && (
-            <div className="p-6 bg-slate-950 border-t border-slate-800 space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Subtotal</span>
-                <span className="font-bold text-slate-100 text-base">
-                  R$ {subtotal.toFixed(2).replace('.', ',')}
-                </span>
               </div>
 
-              <button
-                onClick={onOpenCheckout}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-xl text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 active:scale-[0.99] transition-all"
-              >
-                <span>Avançar para Checkout</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {/* Review Section if Delivered */}
+              {selectedOrder.status === 'entregue' && !selectedOrder.review && !ratingSubmitted && (
+                <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                  <h4 className="text-sm font-bold text-amber-300 flex items-center gap-1.5">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    Avalie sua Experiência!
+                  </h4>
+                  <p className="text-xs text-slate-300">Como estava sua refeição?</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setRatingStars(s)}
+                        className={`p-2 text-lg rounded-xl border ${ratingStars >= s ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-slate-900 border-slate-800 text-slate-500'}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={ratingComment}
+                    onChange={(e) => setRatingComment(e.target.value)}
+                    placeholder="Deixe um comentário curto para a cozinha..."
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSendReview}
+                    className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400"
+                  >
+                    Enviar Avaliação
+                  </button>
+                </div>
+              )}
+
+              {(selectedOrder.review || ratingSubmitted) && (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                  Obrigado pela sua avaliação! Sua opinião é muito importante para nós. ❤️
+                </div>
+              )}
+
             </div>
           )}
-
         </div>
+
       </div>
     </div>
   );
