@@ -425,7 +425,7 @@ const server = http.createServer(async (req, res) => {
       broadcast('config-updated', {});
       publicBroadcast('menu-updated', {});
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
@@ -440,7 +440,7 @@ const server = http.createServer(async (req, res) => {
       data.cfg[field] = next;
       await writeConfig(data);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Gerenciamento de usuários do painel (só o usuário master pode mexer) ──
@@ -461,7 +461,7 @@ const server = http.createServer(async (req, res) => {
         catch (e) { results.failed++; if (results.errors.length < 3) results.errors.push(e.message); }
       }
       return sendJSON(res, 200, { ok: true, ...results });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Painel: gera um par de chaves VAPID novo (uma vez, antes de ativar o push) ──
@@ -487,7 +487,7 @@ const server = http.createServer(async (req, res) => {
       if (!phone || !subscription || !subscription.endpoint) return sendJSON(res, 400, { error: 'dados de inscrição inválidos' });
       await notifications.saveSubscription(phone, subscription);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Web Push: cliente cancela as notificações ──
@@ -496,7 +496,7 @@ const server = http.createServer(async (req, res) => {
       const { endpoint } = await readBody(req);
       if (endpoint) await notifications.removeSubscription(endpoint);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Painel: lista as mensagens pré-programadas (20 mensagens do restaurante) ──
@@ -517,7 +517,7 @@ const server = http.createServer(async (req, res) => {
       msg.active = !!active;
       await notifications.writeCampaigns(data);
       return sendJSON(res, 200, { ok: true, mensagem: msg });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Painel: consulta/atualiza os horários de disparo automático (vezes por dia) ──
@@ -537,7 +537,7 @@ const server = http.createServer(async (req, res) => {
       data.horarios = validos;
       await notifications.writeCampaigns(data);
       return sendJSON(res, 200, { ok: true, horarios: validos });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── Painel: dispara uma campanha manualmente agora (fora do agendamento automático) ──
@@ -572,7 +572,7 @@ const server = http.createServer(async (req, res) => {
       }
       await writeConfig(data);
       return sendJSON(res, 200, { ok: true, users: data.cfg.users.map(u => ({ username: u.username, role: u.role })) });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
   if (pathname.startsWith('/api/admin/users/') && req.method === 'DELETE') {
     if (!requireRole(getToken(req, query), 'master')) return sendJSON(res, 403, { error: 'Só o usuário master pode gerenciar usuários.' });
@@ -601,7 +601,7 @@ const server = http.createServer(async (req, res) => {
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       return sendJSON(res, 200, { url: '/uploads/' + filename });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/orders/purge — apaga pedidos antigos (exige senha master) ──
@@ -618,7 +618,7 @@ const server = http.createServer(async (req, res) => {
       orders = orders.filter(o => new Date(o.createdAt).getTime() >= cutoff);
       await db.saveOrders(orders);
       return sendJSON(res, 200, { ok: true, deleted: before - orders.length });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/reports — relatório de vendas (admin) ──
@@ -671,7 +671,7 @@ const server = http.createServer(async (req, res) => {
       if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession('admin', 'admin'), role: 'admin', username: 'admin' });
       if (password === cfg.masterPass) return sendJSON(res, 200, { token: newSession('master', 'master'), role: 'master', username: 'master' });
       return sendJSON(res, 401, { error: 'senha incorreta' });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/pix — gera o copia-e-cola para um valor ──
@@ -685,7 +685,7 @@ const server = http.createServer(async (req, res) => {
       });
       const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
       return sendJSON(res, 200, { payload, qrImg });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/delivery-fee — cliente informa CEP/endereço, taxa é calculada conforme o modo configurado ──
@@ -788,7 +788,7 @@ const server = http.createServer(async (req, res) => {
         // não pode travar o pedido — cai para a taxa padrão configurada.
         return sendJSON(res, 200, { fee: Number(cfg.fee) || 0, mode: 'fixo_fallback', distanceKm: null });
       }
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/admin/detect-usb-printers — procura impressoras USB conectadas ──
@@ -1038,7 +1038,7 @@ function estimateDeliveryWindow(order, cfg) {
       } catch (printErr) {
         return sendJSON(res, 502, { error: `Falha ao imprimir na via "${st}": ${printErr.message}` });
       }
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/print-test — envia um ticket de teste para a impressora de uma via ──
@@ -1085,7 +1085,7 @@ function estimateDeliveryWindow(order, cfg) {
       };
       await customerDB.createCustomer(customer);
       return sendJSON(res, 201, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: '' } });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/login — cliente entra com telefone + senha de 4 dígitos ──
@@ -1098,7 +1098,7 @@ function estimateDeliveryWindow(order, cfg) {
       const orders = await db.getOrders();
       const stats = customerStats(p, orders);
       return sendJSON(res, 200, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: customer.lastAddress, ...stats } });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/recovery-request — gera código e devolve link do WhatsApp da loja ──
@@ -1116,7 +1116,7 @@ function estimateDeliveryWindow(order, cfg) {
       const waText = `Olá! Quero recuperar minha senha do Shogatsu.\nMeu telefone: ${customer.phone}\nCódigo: ${code}`;
       const waUrl = `https://wa.me/${cfg.whats}?text=${encodeURIComponent(waText)}`;
       return sendJSON(res, 200, { ok: true, code, waUrl });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/customer/recovery-set-pin — cliente define nova senha (precisa já ter sido aprovado no painel) ──
@@ -1134,7 +1134,7 @@ function estimateDeliveryWindow(order, cfg) {
       }
       await customerDB.updateCustomer(p, { pinHash: hashPin(p, newPin), recovery: null });
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/admin/customers — lista de clientes com estatísticas (painel, requer nível admin) ──
@@ -1169,7 +1169,7 @@ function estimateDeliveryWindow(order, cfg) {
       customer.recovery.approved = true;
       await customerDB.updateCustomer(p, { recovery: customer.recovery });
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── POST /api/orders — cria um novo pedido (cliente) ──
@@ -1188,7 +1188,7 @@ function estimateDeliveryWindow(order, cfg) {
         freeDelivery: result.freeDelivery,
         message: result.coupon.type === 'frete_gratis' ? 'Frete grátis aplicado! 🎉' : `Desconto de R$ ${result.discount.toFixed(2).replace('.', ',')} aplicado! 🎉`
       });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   if (pathname === '/api/orders' && req.method === 'POST') {
@@ -1268,7 +1268,7 @@ function estimateDeliveryWindow(order, cfg) {
       }
 
       return sendJSON(res, 201, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/orders — lista pedidos (painel, requer auth) ──
@@ -1340,7 +1340,7 @@ function estimateDeliveryWindow(order, cfg) {
       }
 
       return sendJSON(res, 200, { ok: true, order });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
@@ -1379,7 +1379,7 @@ function estimateDeliveryWindow(order, cfg) {
       order.review = { stars: n, comment: String(comment || '').slice(0, 400), createdAt: new Date().toISOString(), hidden: false };
       await db.saveOrders(orders);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/reviews — avaliações públicas e visíveis, pra mostrar no site ──
@@ -1422,7 +1422,7 @@ function estimateDeliveryWindow(order, cfg) {
       order.review.hidden = !!hidden;
       await db.saveOrders(orders);
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+    } catch (e) { console.error('[erro 400]', pathname, e); return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
   // ── GET /api/stream — Server-Sent Events (painel em tempo real) ──

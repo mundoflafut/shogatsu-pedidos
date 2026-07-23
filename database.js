@@ -260,7 +260,26 @@ async function initSchema() {
     );
   `);
 
-  // ── Seed inicial: só roda se a tabela settings ainda não tiver a chave 'cfg',
+  // ── Auto-reparo de schema: como a tabela `customers` já existia numa versão
+  // anterior deste projeto (antes do database.js), "CREATE TABLE IF NOT EXISTS"
+  // não mexe nela se já existir — então garantimos aqui, coluna por coluna, que
+  // tudo que o código precisa está presente, não importa o que já existia antes.
+  await pool.query(`
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_address TEXT DEFAULT '';
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS recovery JSONB;
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+  `);
+
+  // Log de diagnóstico: mostra nos logs do Render exatamente quais colunas a
+  // tabela customers tem agora, pra confirmar (ou descartar) problema de schema.
+  try {
+    const { rows: cols } = await pool.query(
+      `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'customers' ORDER BY ordinal_position`
+    );
+    console.log('🔍 Colunas atuais da tabela customers:', cols.map(c => `${c.column_name}(${c.data_type}${c.is_nullable === 'NO' ? ', obrigatório' : ''})`).join(', '));
+  } catch (e) { console.error('[diagnóstico] não consegui listar colunas de customers:', e.message); }
   // ou seja, só na primeiríssima vez que o banco é preparado. Depois disso,
   // sempre lê/grava só no banco. ──
   const { rows } = await pool.query(`SELECT 1 FROM settings WHERE key = 'cfg'`);
