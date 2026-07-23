@@ -1,0 +1,6 @@
+{
+  "name": "Shogatsu - Pedidos Online",
+  "description": "Sistema completo de pedidos online para restaurante japonês com cardápio, carrinho, PIX, rastreamento e painel da cozinha em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
