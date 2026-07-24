@@ -37,29 +37,3 @@ self.addEventListener('fetch', e => {
     })
   );
 });
-
-// ─── Web Push — recebe e exibe as notificações do Shogatsu (pedidos + campanhas) ───
-self.addEventListener('push', e => {
-  let data = { title: '🍣 Shogatsu', body: 'Você tem uma novidade!' };
-  try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* payload sem JSON, usa o padrão */ }
-
-  e.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/icon-192.png',
-      badge: '/icon-72.png',
-      data: { url: data.url || '/' }
-    })
-  );
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/';
-  e.waitUntil(
-    clients.matchAll({ type: 'window' }).then(list => {
-      for (const c of list) if (c.url.includes(url) && 'focus' in c) return c.focus();
-      if (clients.openWindow) return clients.openWindow(url);
-    })
-  );
-});

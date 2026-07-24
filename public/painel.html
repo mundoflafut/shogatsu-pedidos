@@ -467,12 +467,23 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 
     <!-- ── RELATÓRIOS ── */
     <div class="page" id="page-relatorios">
+      <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
       <div class="report-grid">
         <div class="panel" style="grid-column:1/-1;">
           <div class="panel-header"><span class="panel-title">📈 Faturamento — Últimos 7 dias</span></div>
           <div class="panel-body">
             <div class="chart-bar" id="chart-7d"></div>
           </div>
+        </div>
+      </div>
+      <div class="report-grid" style="grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;">
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">💳 Faturamento por Forma de Pagamento</span></div>
+          <div class="panel-body" id="reports-paymethods"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">🍣 Pratos Mais Pedidos</span></div>
+          <div class="panel-body" id="reports-topitems"></div>
         </div>
       </div>
       <div class="panel">
@@ -553,6 +564,30 @@ input,select,textarea{font-family:'Inter',sans-serif;}
       <div class="settings-section-title">🛵 Entrega e Cupons</div>
       <div class="settings-grid">
         <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">💠 PIX</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Sem a chave PIX preenchida aqui, o cliente não consegue gerar QR Code/copia-e-cola no
+            checkout (o pedido continua indo normal, só o pagamento por PIX fica indisponível).
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Chave PIX</label><input id="cfg-pixKey" placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória"/></div>
+            <div class="field"><label style="font-size:10px;">Nome do recebedor</label><input id="cfg-pixName" placeholder="Nome ou razão social"/></div>
+            <div class="field"><label style="font-size:10px;">Cidade</label><input id="cfg-pixCity" placeholder="RIO DAS OSTRAS"/></div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;">
+              <input type="checkbox" id="cfg-pixgw-enabled"/> ✅ Confirmação automática de PIX (opcional, via Mercado Pago)
+            </label>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+              Sem isso, o PIX continua funcionando igual (QR/copia-e-cola com valor exato) — só que
+              a confirmação de que o dinheiro caiu é manual, com o botão "✅ Marcar como pago" no
+              pedido. Ativando aqui, uma cobrança confirmada no Mercado Pago com o ID do pedido como
+              referência marca o pedido como pago sozinho.
+            </div>
+            <div class="field"><label style="font-size:10px;">Access Token (produção) do Mercado Pago</label><input id="cfg-pixgw-token" type="password" placeholder="APP_USR-••••••••••"/></div>
+          </div>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">💰 Taxa de Entrega</div>
           <div class="field"><label>Como calcular a taxa de entrega?</label>
             <select id="fee-mode" onchange="renderFeeModeUI()">
@@ -572,6 +607,22 @@ input,select,textarea{font-family:'Inter',sans-serif;}
           </div>
           <div id="coupons-list" style="display:flex;flex-direction:column;gap:10px;"></div>
           <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addCoupon()">+ Novo Cupom</button>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">⭐ Fidelidade (Pontos)</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Cliente ganha pontos a cada pedido <b>entregue</b> e troca por desconto no próximo pedido.
+            Calculado automaticamente — não precisa mexer em nada além destes números.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="cfg-loyalty-enabled"/> Programa de fidelidade ativo
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="field"><label>Pontos por R$1 gasto</label><input id="cfg-loyalty-rate" type="number" step="0.1" placeholder="1"/></div>
+            <div class="field"><label>Pedido mínimo p/ resgatar (R$, 0=sem mínimo)</label><input id="cfg-loyalty-minorder" type="number" step="0.01" placeholder="0"/></div>
+            <div class="field"><label>Pontos por bloco de resgate</label><input id="cfg-loyalty-redeempoints" type="number" placeholder="100"/></div>
+            <div class="field"><label>Valor do bloco (R$ de desconto)</label><input id="cfg-loyalty-redeemvalue" type="number" step="0.01" placeholder="10"/></div>
+          </div>
         </div>
         <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📣 Anúncios no Cardápio</div>
@@ -596,6 +647,18 @@ input,select,textarea{font-family:'Inter',sans-serif;}
             <div class="field"><label style="font-size:10px;">Número de origem</label><input id="sms-from" placeholder="+15005550006"/></div>
           </div>
           <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+              <input type="checkbox" id="sms-whatsapp-notify"/> 💬 Notificar cliente automaticamente por WhatsApp a cada mudança de status
+            </label>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+              Usa a MESMA conta Twilio acima (Account SID / Auth Token), só precisa de um número
+              habilitado pra WhatsApp na sua conta Twilio (sandbox pra testar de graça, ou número
+              aprovado em produção). Sem isso preenchido, essa opção simplesmente não faz nada — o
+              painel continua funcionando normal, sem travar em lugar nenhum.
+            </div>
+            <div class="field"><label style="font-size:10px;">Número Twilio habilitado pra WhatsApp</label><input id="sms-whatsapp-from" placeholder="+14155238886"/></div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
             <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:8px;">Mensagem promocional</label>
             <textarea id="sms-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;"></textarea>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
@@ -608,42 +671,6 @@ input,select,textarea{font-family:'Inter',sans-serif;}
             <div id="promo-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
             <button class="btn success" style="margin-top:10px;" onclick="sendPromoSMS()">📤 Enviar Promoção por SMS</button>
             <div id="sms-send-status" style="font-size:12px;margin-top:8px;"></div>
-          </div>
-        </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🔔 Notificações Automáticas (Push grátis no app)</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Manda notificações direto pro app instalado no celular/PC do cliente, de graça —
-            sem custo por mensagem. Se o cliente não tiver o app instalado com notificações
-            ativadas, o sistema cai automaticamente pro SMS (pago, mesma conta Twilio acima)
-            nos avisos de pedido. Campanhas promocionais automáticas usam só o push, pra nunca
-            gerar custo de SMS sem você mandar manualmente.
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Chave pública VAPID</label><input id="vapid-public" placeholder="gerada automaticamente"/></div>
-            <div class="field"><label style="font-size:10px;">Chave privada VAPID</label><input id="vapid-private" type="password" placeholder="gerada automaticamente"/></div>
-          </div>
-          <button type="button" class="btn secondary sm" style="margin-top:6px;" onclick="generateVapidKeys()">🔑 Gerar chaves automaticamente</button>
-          <div id="vapid-status" style="font-size:11px;margin-top:6px;color:var(--muted);"></div>
-
-          <div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <label style="font-size:10px;color:var(--muted);">20 mensagens pré-programadas — marque quais podem disparar sozinhas</label>
-              <span id="campaigns-active-count" style="font-size:10px;color:var(--gold);font-weight:700;"></span>
-            </div>
-            <div id="campaigns-list" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando mensagens...</div>
-          </div>
-
-          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
-            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:8px;">
-              Horários de disparo automático (todo dia, separados por vírgula — ex: 11:00, 15:30, 19:00)
-            </label>
-            <input id="campaign-horarios" placeholder="11:00, 15:30, 19:00" style="width:100%;"/>
-            <div style="display:flex;gap:8px;margin-top:10px;">
-              <button type="button" class="btn secondary sm" onclick="saveCampaignSchedule()">💾 Salvar Horários</button>
-              <button type="button" class="btn success sm" onclick="sendCampaignNow()">📤 Disparar Agora (manual)</button>
-            </div>
-            <div id="campaign-schedule-status" style="font-size:12px;margin-top:8px;"></div>
           </div>
         </div>
       </div>
@@ -959,6 +986,9 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 // ═══════════════════════════════════════════
 // AUTH / SESSION
 // ═══════════════════════════════════════════
+// Escapa dados vindos do cliente (nome, telefone, endereço, obs) antes de jogar em innerHTML —
+// sem isso, um pedido malicioso poderia injetar HTML/JS e rodar no navegador de quem opera o painel.
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let token = localStorage.getItem('shog_token') || null;
 let userRole = localStorage.getItem('shog_role') || 'admin';
 let userName = localStorage.getItem('shog_user') || '';
@@ -1343,13 +1373,13 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
   const time = new Date(order.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
   const bodyHTML = isCaixa ? `
-    <div class="t-row"><b>Cliente:</b> ${order.name}</div>
-    <div class="t-row"><b>Telefone:</b> ${order.phone}</div>
-    ${order.mode==='delivery'?`<div class="t-row"><b>Endereço:</b> ${order.address}</div>`:''}
+    <div class="t-row"><b>Cliente:</b> ${esc(order.name)}</div>
+    <div class="t-row"><b>Telefone:</b> ${esc(order.phone)}</div>
+    ${order.mode==='delivery'?`<div class="t-row"><b>Endereço:</b> ${esc(order.address)}</div>`:''}
     <div class="t-row"><b>${order.mode==='delivery'?'Previsão de entrega':'Previsão de retirada'}:</b> ${deliveryWindow||'—'}</div>
     <div class="t-hr"></div>
     ${items.map(i=>`<div class="t-item"><span>${i.qty}x ${i.name}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
-    ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${order.obs}</div>`:''}
+    ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${esc(order.obs)}</div>`:''}
     <div class="t-hr"></div>
     <div class="t-item"><span>Subtotal</span><span>${money(order.subtotal)}</span></div>
     <div class="t-item"><span>Taxa de entrega</span><span>${money(order.fee)}</span></div>
@@ -1358,7 +1388,7 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-row" style="margin-top:6px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${order.troco})`:''}</div>
   ` : `
     ${items.map(i=>`<div class="t-item" style="font-size:${Math.round(15*(Number(cfg.printSize)||14)/14)}px;font-weight:700;"><span>${i.qty}x ${i.name}</span></div>`).join('')}
-    ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${order.obs}</div>`:''}
+    ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${esc(order.obs)}</div>`:''}
   `;
 
   const win = existingWin || window.open('', '_blank', 'width=380,height=600');
@@ -1599,18 +1629,47 @@ function miniOrderCard(o){
       <span class="order-id">${o.id}</span>
       <span class="order-time">${orderTime(o.createdAt)}</span>
     </div>
-    <div class="order-name">${o.name} ${o.phone?'· '+o.phone:''}</div>
+    <div class="order-name">${esc(o.name)} ${o.phone?'· '+esc(o.phone):''}</div>
     <div class="order-items">${itemsText(o)}</div>
     <div class="order-footer">
       <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')}</span>
       <span class="order-mode ${o.mode}">${o.mode==='delivery'?'🛵 Delivery':'🏪 Retirada'}</span>
+      ${o.payMethod==='pix' ? (o.paid ? `<span style="color:#4ade80;font-size:11px;">✅ Pago${o.paidVia==='gateway'?' (auto)':''}</span>` : `<span style="color:var(--muted);font-size:11px;">⏳ PIX pendente</span>`) : ''}
     </div>
     <div class="order-actions">
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
       <button class="oa-btn" onclick="printOrder('${o.id}', event)" title="Imprimir vias">🖨</button>
+      ${o.phone?`<button class="oa-btn" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬</button>`:''}
+      ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
   </div>`;
+}
+
+// v22: confirmação manual de PIX — funciona sempre, sem depender de nenhum gateway configurado.
+async function markPaid(id) {
+  try {
+    await apiPost(`/api/orders/${id}/mark-paid`, {});
+    loadOrders();
+  } catch (e) { alert('Não consegui marcar como pago: ' + (e.message || 'erro desconhecido')); }
+}
+
+// v21: botão manual de WhatsApp — abre uma conversa já com a mensagem de status pronta.
+// Funciona sempre, de graça, sem precisar de nenhuma conta Twilio configurada (é só um atalho
+// pro app/site do WhatsApp já aberto no computador ou celular de quem está no painel).
+function notifyWhatsApp(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o || !o.phone) return;
+  const msgs = {
+    novo: `Oi ${o.name}! Recebemos seu pedido no ${cfg.name} 🍣`,
+    prep: `🍣 ${cfg.name}\nSeu pedido foi aceito e já está sendo preparado. Previsão: ${cfg.time}.`,
+    pronto: o.mode === 'delivery' ? `🛵 ${cfg.name}\nSeu pedido saiu para entrega!` : `🏪 ${cfg.name}\nSeu pedido está pronto pra retirada!`,
+    entregue: `✅ ${cfg.name}\nPedido entregue! Obrigado pela preferência 🙏`,
+    cancelado: `⛔ ${cfg.name}\nSeu pedido foi cancelado. ${o.cancelReason ? 'Motivo: ' + o.cancelReason : ''}`
+  };
+  const shortStatus = STATUS_FROM_SERVER[o.status] || 'novo';
+  const text = encodeURIComponent(msgs[shortStatus] || `Olá ${o.name}, aqui é do ${cfg.name}.`);
+  window.open(`https://wa.me/55${o.phone.replace(/\D/g,'')}?text=${text}`, '_blank');
 }
 
 // ═══════════════════════════════════════════
@@ -1642,11 +1701,11 @@ function renderOrdersList(){
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-        <div><div class="order-name">${o.name}</div><div style="font-size:11px;color:var(--muted)">${o.phone||'—'}</div></div>
-        <div style="font-size:12px;color:var(--muted)">${o.address||'—'}</div>
+        <div><div class="order-name">${esc(o.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(o.phone)||'—'}</div></div>
+        <div style="font-size:12px;color:var(--muted)">${esc(o.address)||'—'}</div>
       </div>
       <div class="order-items">${itemsText(o)}</div>
-      ${o.obs?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Obs: ${o.obs}</div>`:''}
+      ${o.obs?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Obs: ${esc(o.obs)}</div>`:''}
       ${o.status==='cancelado'&&o.cancelReason?`<div style="font-size:11px;color:var(--red-lt);margin-top:4px;">Cancelado ${o.cancelledBy==='cliente'?'pelo cliente':'pela loja'} · Motivo: ${o.cancelReason}</div>`:''}
       <div class="order-footer" style="margin-top:8px;">
         <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')} · ${o.payMethod||'—'}</span>
@@ -1686,7 +1745,7 @@ function renderKanban(){
         ${colOrders.length===0?'<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">Vazio</div>'
         :colOrders.map(o=>`<div class="k-card">
           <div class="k-card-id">${o.ticketNumber?'#'+o.ticketNumber+' · ':''}${o.id} · ${orderTime(o.createdAt)}</div>
-          <div class="k-card-name">${o.name}</div>
+          <div class="k-card-name">${esc(o.name)}</div>
           <div class="k-card-items">${itemsText(o)}</div>
           <div class="k-card-footer">
             <span class="k-card-total">R$ ${Number(o.total).toFixed(2).replace('.',',')}</span>
@@ -2021,6 +2080,50 @@ async function renderReports(){
   let rep;
   try{ rep = await apiGet(`/api/reports?from=${from}&to=${to}`); }catch(e){ return; }
 
+  // v24: resumo de KPIs dos últimos 7 dias
+  const kpiEl = document.getElementById('reports-kpis');
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div class="settings-card" style="text-align:center;">
+        <div style="font-size:11px;color:var(--muted);">Faturamento (7 dias)</div>
+        <div style="font-size:22px;font-weight:700;color:var(--green-lt);margin-top:4px;">R$ ${(rep.totalRevenue||0).toFixed(2).replace('.',',')}</div>
+      </div>
+      <div class="settings-card" style="text-align:center;">
+        <div style="font-size:11px;color:var(--muted);">Pedidos (7 dias)</div>
+        <div style="font-size:22px;font-weight:700;color:var(--white);margin-top:4px;">${rep.totalOrders||0}</div>
+      </div>
+      <div class="settings-card" style="text-align:center;">
+        <div style="font-size:11px;color:var(--muted);">Ticket médio</div>
+        <div style="font-size:22px;font-weight:700;color:var(--gold);margin-top:4px;">R$ ${(rep.avgTicket||0).toFixed(2).replace('.',',')}</div>
+      </div>`;
+  }
+
+  // v24: formas de pagamento
+  const payEl = document.getElementById('reports-paymethods');
+  if (payEl) {
+    const byPay = rep.byPayMethod || {}; // valor = soma de R$ faturado por forma de pagamento
+    const totalPay = Object.values(byPay).reduce((s,v)=>s+(Number(v)||0),0) || 1;
+    const entries = Object.entries(byPay);
+    payEl.innerHTML = entries.length ? entries.map(([method,revenue])=>{
+      const pct = Math.round(Number(revenue)/totalPay*100);
+      return `<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span>${method||'—'}</span><span style="color:var(--muted);">R$ ${Number(revenue).toFixed(2).replace('.',',')} (${pct}%)</span></div>
+        <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--gold);"></div></div>
+      </div>`;
+    }).join('') : '<div style="color:var(--muted);font-size:12px;">Sem dados no período.</div>';
+  }
+
+  // v24: pratos mais pedidos
+  const topEl = document.getElementById('reports-topitems');
+  if (topEl) {
+    const top = (rep.topItems || []).slice(0, 6);
+    topEl.innerHTML = top.length ? top.map((it,i)=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<top.length-1?'border-bottom:1px solid var(--border);':''}">
+        <span style="font-size:12px;">${i+1}. ${esc(it.name)}</span>
+        <span style="font-size:12px;color:var(--gold);font-weight:600;">${it.qty}x</span>
+      </div>`).join('') : '<div style="color:var(--muted);font-size:12px;">Sem dados no período.</div>';
+  }
+
   const byDayMap = {};
   (rep.byDay||[]).forEach(d=>{ byDayMap[d.date]=d; });
   const days=[];
@@ -2042,7 +2145,7 @@ async function renderReports(){
     const st = STATUS_FROM_SERVER[o.status]||'novo';
     return `<tr>
       <td style="font-weight:600;">${o.id}</td>
-      <td>${o.name}</td>
+      <td>${esc(o.name)}</td>
       <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${itemsText(o)}</td>
       <td style="font-weight:600;color:var(--green-lt)">R$ ${Number(o.total).toFixed(2).replace('.',',')}</td>
       <td>${o.payMethod||'—'}</td>
@@ -2193,6 +2296,18 @@ function loadSettings(){
   document.getElementById('cfg-hours').value=cfg.hours||'';
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
+  const loy = cfg.loyalty || {};
+  const loyEnEl=document.getElementById('cfg-loyalty-enabled'); if(loyEnEl) loyEnEl.checked = loy.enabled!==false;
+  document.getElementById('cfg-pixKey').value = cfg.pixKey||'';
+  document.getElementById('cfg-pixName').value = cfg.pixName||'';
+  document.getElementById('cfg-pixCity').value = cfg.pixCity||'';
+  const pgw = cfg.pixGateway || {};
+  document.getElementById('cfg-pixgw-enabled').checked = !!pgw.enabled;
+  document.getElementById('cfg-pixgw-token').value = pgw.accessToken || '';
+  const loyRateEl=document.getElementById('cfg-loyalty-rate'); if(loyRateEl) loyRateEl.value = loy.pointsPerReal ?? 1;
+  const loyMinEl=document.getElementById('cfg-loyalty-minorder'); if(loyMinEl) loyMinEl.value = loy.minOrderToRedeem ?? 0;
+  const loyRPEl=document.getElementById('cfg-loyalty-redeempoints'); if(loyRPEl) loyRPEl.value = loy.redeemPoints ?? 100;
+  const loyRVEl=document.getElementById('cfg-loyalty-redeemvalue'); if(loyRVEl) loyRVEl.value = loy.redeemValue ?? 10;
   const rpEl=document.getElementById('cfg-reviewPrompt'); if(rpEl) rpEl.value=cfg.reviewPrompt||'';
   document.getElementById('sched-enabled').checked = !!(cfg.schedule&&cfg.schedule.enabled);
   document.getElementById('sched-open').value = cfg.schedule?.openTime||'18:00';
@@ -2212,7 +2327,6 @@ function loadSettings(){
   updatePrintFontPreview();
   loadCoupons();
   loadSmsSettings();
-  loadNotificationSettings();
   loadAnnouncements();
 }
 // ═══════════════════════════════════════════
@@ -2251,82 +2365,9 @@ function loadSmsSettings(){
   document.getElementById('sms-sid').value=cfg.sms?.accountSid||'';
   document.getElementById('sms-token').value=cfg.sms?.authToken||'';
   document.getElementById('sms-from').value=cfg.sms?.fromNumber||'';
+  const waFromEl=document.getElementById('sms-whatsapp-from'); if(waFromEl) waFromEl.value=cfg.sms?.fromWhatsApp||'';
+  const waNotifyEl=document.getElementById('sms-whatsapp-notify'); if(waNotifyEl) waNotifyEl.checked=!!cfg.sms?.notifyWhatsApp;
   loadPromoCustomers();
-}
-
-// ─── Notificações automáticas (Web Push + 20 mensagens pré-programadas) ───
-let campaignsState = { horarios: [], mensagens: [] };
-
-function loadNotificationSettings(){
-  document.getElementById('vapid-public').value = cfg.vapid?.publicKey || '';
-  document.getElementById('vapid-private').value = cfg.vapid?.privateKey || '';
-  loadCampaigns();
-}
-
-async function loadCampaigns(){
-  try {
-    campaignsState = await apiGet('/api/admin/campaigns');
-    renderCampaignsList();
-    document.getElementById('campaign-horarios').value = campaignsState.horarios.join(', ');
-  } catch (e) { document.getElementById('campaigns-list').textContent = 'Erro ao carregar mensagens.'; }
-}
-
-const CATEGORIA_LABEL = { desconto:'DESCONTO', aniversario:'ANIVERSÁRIO', reserva:'RESERVA', novidade:'NOVIDADE', evento:'EVENTO', fidelidade:'FIDELIDADE', feedback:'FEEDBACK', reengajamento:'REENGAJAMENTO', data_comemorativa:'DATA COMEMORATIVA', delivery:'DELIVERY' };
-
-function renderCampaignsList(){
-  const el = document.getElementById('campaigns-list');
-  const ativas = campaignsState.mensagens.filter(m=>m.active).length;
-  document.getElementById('campaigns-active-count').textContent = `${ativas} de ${campaignsState.mensagens.length} ativas`;
-  el.innerHTML = campaignsState.mensagens.map(m=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);${m.active?'':'opacity:.45;'}">
-      <input type="checkbox" ${m.active?'checked':''} onchange="toggleCampaignMessage('${m.id}', this.checked)"/>
-      <span style="font-size:9px;font-weight:700;color:var(--gold);width:110px;flex-shrink:0;text-transform:uppercase;">${CATEGORIA_LABEL[m.categoria]||m.categoria}</span>
-      <span style="font-size:12px;flex:1;">${m.titulo}</span>
-    </div>
-  `).join('');
-}
-
-async function toggleCampaignMessage(id, active){
-  try {
-    await apiPatch(`/api/admin/campaigns/messages/${id}`, { active });
-    const msg = campaignsState.mensagens.find(m=>m.id===id);
-    if (msg) msg.active = active;
-    renderCampaignsList();
-  } catch (e) { alert('Não foi possível atualizar essa mensagem.'); }
-}
-
-async function saveCampaignSchedule(){
-  const horarios = document.getElementById('campaign-horarios').value.split(',').map(h=>h.trim()).filter(Boolean);
-  const statusEl = document.getElementById('campaign-schedule-status');
-  try {
-    const r = await apiPost('/api/admin/campaigns/schedule', { horarios });
-    statusEl.textContent = '✅ Horários salvos — o sistema vai disparar sozinho nesses horários, todo dia.';
-    statusEl.style.color = 'var(--success)';
-  } catch (e) { statusEl.textContent = '❌ ' + (e.message||'Erro ao salvar horários.'); statusEl.style.color = 'var(--danger)'; }
-}
-
-async function sendCampaignNow(){
-  const statusEl = document.getElementById('campaign-schedule-status');
-  statusEl.textContent = 'Disparando...';
-  try {
-    const r = await apiPost('/api/admin/campaigns/send-now', {});
-    statusEl.textContent = r.disparado
-      ? `✅ Disparada "${r.mensagem}" para ${r.entregues} de ${r.destinatarios} cliente(s) com push ativo.`
-      : `⚠️ ${r.motivo}`;
-    statusEl.style.color = 'var(--success)';
-  } catch (e) { statusEl.textContent = '❌ ' + (e.message||'Erro ao disparar.'); statusEl.style.color = 'var(--danger)'; }
-}
-
-async function generateVapidKeys(){
-  const statusEl = document.getElementById('vapid-status');
-  statusEl.textContent = 'Gerando chaves...';
-  try {
-    const r = await apiPost('/api/admin/vapid/generate', {});
-    document.getElementById('vapid-public').value = r.publicKey;
-    document.getElementById('vapid-private').value = r.privateKey;
-    statusEl.textContent = '✅ Chaves geradas — clique em "Salvar Tudo" no topo da página pra confirmar.';
-    statusEl.style.color = 'var(--success)';
-  } catch (e) { statusEl.textContent = '❌ ' + (e.message || 'Instale o pacote "web-push" no servidor pra gerar chaves automaticamente.'); statusEl.style.color = 'var(--danger)'; }
 }
 async function loadPromoCustomers(){
   const res = await apiGet('/api/admin/customers');
@@ -2341,8 +2382,8 @@ function renderPromoCustomersList(){
     : promoCustomers.map((c,i)=>`
       <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px;border-bottom:1px solid var(--border);">
         <input type="checkbox" class="promo-cust-chk" data-phone="${c.phone}"/>
-        <span style="flex:1;">${c.name}</span>
-        <span style="color:var(--muted);font-size:10px;">${c.orderCount} pedido${c.orderCount!==1?'s':''}</span>
+        <span style="flex:1;">${esc(c.name)}</span>
+        <span style="color:var(--muted);font-size:10px;">${c.orderCount} pedido${c.orderCount!==1?'s':''}${c.loyaltyPoints?' · ⭐'+c.loyaltyPoints:''}</span>
       </label>`).join('');
 }
 function selectAllPromoCustomers(checked){
@@ -2581,6 +2622,21 @@ async function saveAllSettings(){
   cfg.hours  = document.getElementById('cfg-hours').value.trim();
   cfg.name   = document.getElementById('cfg-name').value.trim();
   cfg.days   = document.getElementById('cfg-days').value.trim();
+  cfg.loyalty = {
+    enabled: document.getElementById('cfg-loyalty-enabled')?.checked !== false,
+    pointsPerReal: parseFloat(document.getElementById('cfg-loyalty-rate')?.value) || 0,
+    minOrderToRedeem: parseFloat(document.getElementById('cfg-loyalty-minorder')?.value) || 0,
+    redeemPoints: parseInt(document.getElementById('cfg-loyalty-redeempoints')?.value) || 100,
+    redeemValue: parseFloat(document.getElementById('cfg-loyalty-redeemvalue')?.value) || 0
+  };
+  cfg.pixKey = document.getElementById('cfg-pixKey').value.trim();
+  cfg.pixName = document.getElementById('cfg-pixName').value.trim();
+  cfg.pixCity = document.getElementById('cfg-pixCity').value.trim();
+  cfg.pixGateway = {
+    enabled: document.getElementById('cfg-pixgw-enabled').checked,
+    provider: 'mercadopago',
+    accessToken: document.getElementById('cfg-pixgw-token').value.trim()
+  };
   const rpEl2=document.getElementById('cfg-reviewPrompt'); if(rpEl2) cfg.reviewPrompt = rpEl2.value.trim();
   cfg.schedule = {
     enabled: document.getElementById('sched-enabled').checked,
@@ -2621,13 +2677,9 @@ async function saveAllSettings(){
   cfg.sms = {
     accountSid: document.getElementById('sms-sid').value.trim(),
     authToken: document.getElementById('sms-token').value.trim(),
-    fromNumber: document.getElementById('sms-from').value.trim()
-  };
-
-  // Web Push (notificações grátis no app)
-  cfg.vapid = {
-    publicKey: document.getElementById('vapid-public').value.trim(),
-    privateKey: document.getElementById('vapid-private').value.trim()
+    fromNumber: document.getElementById('sms-from').value.trim(),
+    fromWhatsApp: document.getElementById('sms-whatsapp-from')?.value.trim() || '',
+    notifyWhatsApp: document.getElementById('sms-whatsapp-notify')?.checked || false
   };
 
   // Fonte de impressão (impressoras em si já ficam salvas em cfg.stations, atualizado ao digitar)
