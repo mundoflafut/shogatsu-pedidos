@@ -93,8 +93,9 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 .panel-body{padding:16px;}
 
 /* ── ORDER CARDS ── */
-.order-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;position:relative;}
-.order-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
+.order-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:box-shadow .15s,transform .15s;}
+.order-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.order-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px;}
 .order-card.novo::before{background:var(--red);}
 .order-card.prep::before{background:var(--orange);}
 .order-card.pronto::before{background:var(--green);}
@@ -107,13 +108,14 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 .order-time{font-size:11px;color:var(--muted);}
 .order-name{font-size:13px;font-weight:500;margin-bottom:4px;}
 .order-items{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-.order-footer{display:flex;align-items:center;justify-content:space-between;}
+.order-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;}
 .order-total{font-size:15px;font-weight:700;color:var(--green-lt);}
 .order-mode{font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:20px;}
 .order-mode.delivery{background:var(--blue-bg);color:var(--blue);}
 .order-mode.retirada{background:var(--gold-bg);color:var(--gold);}
-.order-actions{display:flex;gap:6px;margin-top:10px;}
-.oa-btn{flex:1;border:none;border-radius:5px;padding:7px;font-size:11px;font-weight:500;letter-spacing:.5px;transition:all .15s;}
+.order-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.oa-btn{flex:1;min-width:90px;border:1px solid var(--border2);background:var(--card);color:var(--white);border-radius:6px;padding:8px;font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .15s;cursor:pointer;}
+.oa-btn:hover{background:var(--border2);}
 @keyframes printSpin{0%{transform:rotate(0deg);}50%{transform:rotate(-12deg) scale(1.15);}100%{transform:rotate(0deg);}}
 .printing{animation:printSpin .6s ease-in-out infinite;pointer-events:none;opacity:.7;}
 .oa-btn.accept{background:var(--green-bg);color:var(--green-lt);border:1px solid var(--green);}
@@ -329,6 +331,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
     <button class="nav-item active" onclick="goPage('dashboard')"><span class="ni">📊</span> Dashboard</button>
     <button class="nav-item" onclick="goPage('pedidos')"><span class="ni">🛒</span> Pedidos <span class="nb" id="nb-pedidos" style="display:none">0</span></button>
     <button class="nav-item" onclick="goPage('kanban')"><span class="ni">📋</span> Kanban</button>
+    <button class="nav-item" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
     <div class="nav-section" data-min-role="admin">Gestão</div>
     <button class="nav-item" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
     <button class="nav-item" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
@@ -438,6 +441,17 @@ input,select,textarea{font-family:'Inter',sans-serif;}
     <!-- ── KANBAN ── -->
     <div class="page" id="page-kanban">
       <div class="kanban" id="kanban-board"></div>
+    </div>
+
+    <!-- ── RESERVAS DE MESA ── -->
+    <div class="page" id="page-reservas">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="topbar-btn active" id="rsvfilter-todos" onclick="filterReservations('todos')" style="border-color:var(--red);color:var(--red-lt)">Todas</button>
+        <button class="topbar-btn" id="rsvfilter-pendente" onclick="filterReservations('pendente')">🕐 Pendentes</button>
+        <button class="topbar-btn" id="rsvfilter-confirmada" onclick="filterReservations('confirmada')">✅ Confirmadas</button>
+        <button class="topbar-btn" id="rsvfilter-recusada" onclick="filterReservations('recusada')">✕ Recusadas/Canceladas</button>
+      </div>
+      <div id="reservations-list"></div>
     </div>
 
     <!-- ── CARDÁPIO ── -->
@@ -672,6 +686,30 @@ input,select,textarea{font-family:'Inter',sans-serif;}
             <button class="btn success" style="margin-top:10px;" onclick="sendPromoSMS()">📤 Enviar Promoção por SMS</button>
             <div id="sms-send-status" style="font-size:12px;margin-top:8px;"></div>
           </div>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🔔 Notificações Push</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Manda a notificação direto no navegador do cliente (celular ou computador), mesmo com o
+            site fechado — sem custo nenhum, sem precisar de app nem de conta em serviço pago. Só
+            alcança quem já ativou as notificações em "Minha Conta" no cardápio.
+            <span id="push-subs-count" style="display:block;margin-top:6px;color:var(--gold);"></span>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
+            <input type="checkbox" id="push-send-all"/> 📢 Enviar pra TODOS os inscritos (ignora a lista abaixo — inclui quem ativou sem ter conta)
+          </label>
+          <div class="field"><label style="font-size:10px;">Título da notificação</label><input id="push-title" placeholder="Ex: Shogatsu"/></div>
+          <textarea id="push-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;margin-top:8px;"></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
+            <label style="font-size:10px;color:var(--muted);">Clientes cadastrados (que também ativaram push)</label>
+            <div>
+              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(true)">Selecionar todos</button>
+              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(false)">Limpar</button>
+            </div>
+          </div>
+          <div id="push-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
+          <button class="btn success" style="margin-top:10px;" onclick="sendPushCampaign()">📤 Enviar Notificação Push</button>
+          <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
       </div>
 
@@ -1094,6 +1132,8 @@ async function boot(){
   applyRoleUI();
   goPage('dashboard');
   connectSSE();
+  loadReservations();
+  setInterval(loadReservations, 30000);
 }
 const ROLE_RANK_CLIENT = { vendas:1, admin:2, master:3 };
 function hasRole(minRole){ return (ROLE_RANK_CLIENT[userRole]||0) >= (ROLE_RANK_CLIENT[minRole]||99); }
@@ -1169,7 +1209,7 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={dashboard:'Dashboard',pedidos:'Gerenciar Pedidos',kanban:'Kanban de Pedidos',cardapio:'Editar Cardápio',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
+const pageTitles={dashboard:'Dashboard',pedidos:'Gerenciar Pedidos',kanban:'Kanban de Pedidos',reservas:'Reserva de Mesas',cardapio:'Editar Cardápio',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
 const PAGE_MIN_ROLE = { cardapio:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
@@ -1184,6 +1224,7 @@ function goPage(id, silent){
   if(id==='dashboard')renderDashboard();
   if(id==='pedidos')renderOrdersList();
   if(id==='kanban')renderKanban();
+  if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
@@ -1700,6 +1741,7 @@ function renderOrdersList(){
           <span class="order-time">${orderTime(o.createdAt)}</span>
         </div>
       </div>
+      ${o.scheduledFor?`<div style="font-size:11px;font-weight:700;color:var(--gold);background:rgba(201,168,76,.12);border:1px solid var(--gold);border-radius:6px;padding:4px 8px;margin-bottom:8px;display:inline-block;">🕐 Agendado para ${new Date(o.scheduledFor).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
         <div><div class="order-name">${esc(o.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(o.phone)||'—'}</div></div>
         <div style="font-size:12px;color:var(--muted)">${esc(o.address)||'—'}</div>
@@ -1710,12 +1752,15 @@ function renderOrdersList(){
       <div class="order-footer" style="margin-top:8px;">
         <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')} · ${o.payMethod||'—'}</span>
         <span class="order-mode ${o.mode}">${o.mode==='delivery'?'🛵 Delivery':'🏪 Retirada'}</span>
+        ${o.payMethod==='pix' ? (o.paid ? `<span style="color:#4ade80;font-size:11px;">✅ Pago${o.paidVia==='gateway'?' (auto)':''}</span>` : `<span style="color:var(--muted);font-size:11px;">⏳ PIX pendente</span>`) : ''}
       </div>
       <div class="order-actions">
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
         <button class="oa-btn" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
+        ${o.phone?`<button class="oa-btn" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
+        ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
       </div>
     </div>`).join('');
 }
@@ -1723,6 +1768,64 @@ function renderOrdersList(){
 // ═══════════════════════════════════════════
 // KANBAN
 // ═══════════════════════════════════════════
+let reservations = [];
+let reservationFilter = 'todos';
+async function loadReservations(){
+  try{ const d = await apiGet('/api/reservations'); reservations = d.reservations||[]; }catch(e){}
+  const pending = reservations.filter(r=>r.status==='pendente').length;
+  const nb = document.getElementById('nb-reservas');
+  if(nb){ nb.style.display = pending?'inline-block':'none'; nb.textContent = pending; }
+}
+function filterReservations(f){
+  reservationFilter = f;
+  document.querySelectorAll('[id^="rsvfilter-"]').forEach(b=>{b.classList.remove('active');b.style.borderColor='';b.style.color='';});
+  const btn = document.getElementById('rsvfilter-'+f);
+  btn.classList.add('active'); btn.style.borderColor='var(--red)'; btn.style.color='var(--red-lt)';
+  renderReservationsList();
+}
+async function renderReservationsList(){
+  await loadReservations();
+  let list = reservations;
+  if(reservationFilter==='pendente') list = list.filter(r=>r.status==='pendente');
+  if(reservationFilter==='confirmada') list = list.filter(r=>r.status==='confirmada');
+  if(reservationFilter==='recusada') list = list.filter(r=>r.status==='recusada'||r.status==='cancelada');
+  const div = document.getElementById('reservations-list');
+  const rsvStatusLabel = {pendente:'🕐 Pendente', confirmada:'✅ Confirmada', recusada:'✕ Recusada', cancelada:'✕ Cancelada'};
+  div.innerHTML = list.length===0
+    ? '<div style="text-align:center;padding:60px;color:var(--muted);">Nenhuma reserva encontrada</div>'
+    : list.map(r=>`
+    <div class="order-card" style="margin-bottom:10px;">
+      <div class="order-header">
+        <span class="order-id">${r.id}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="status-badge ${r.status==='confirmada'?'pronto':r.status==='pendente'?'novo':'cancelado'}">${rsvStatusLabel[r.status]||r.status}</span>
+          <span class="order-time">${orderTime(r.createdAt)}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div><div class="order-name">${esc(r.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(r.phone)}</div></div>
+        <div style="font-size:12px;color:var(--muted)">📅 ${r.date?new Date(r.date+'T00:00').toLocaleDateString('pt-BR'):''} às ${esc(r.time)} · 👥 ${r.people} pessoa(s)</div>
+      </div>
+      ${r.notes?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Obs: ${esc(r.notes)}</div>`:''}
+      ${r.status==='pendente'?`
+      <div class="order-actions">
+        <button class="oa-btn accept" onclick="updateReservationStatus('${r.id}','confirmada')">✓ Confirmar</button>
+        <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','recusada')">✕ Recusar</button>
+        ${r.phone?`<button class="oa-btn" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
+      </div>`:r.status==='confirmada'?`
+      <div class="order-actions">
+        <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','cancelada')">✕ Cancelar</button>
+        ${r.phone?`<button class="oa-btn" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
+      </div>`:''}
+    </div>`).join('');
+}
+async function updateReservationStatus(id, status){
+  const r = await apiPost(`/api/reservations/${encodeURIComponent(id)}/status`, { status });
+  if(!r.ok){ showToast('Erro', r.data.error||'Não foi possível atualizar a reserva.'); return; }
+  showToast('Reserva atualizada', status==='confirmada'?'Reserva confirmada!':status==='recusada'?'Reserva recusada.':'Reserva cancelada.');
+  renderReservationsList();
+}
+
 function getKanbanCols(){
   const l=cfg.labels||{};
   return [
@@ -2368,12 +2471,14 @@ function loadSmsSettings(){
   const waFromEl=document.getElementById('sms-whatsapp-from'); if(waFromEl) waFromEl.value=cfg.sms?.fromWhatsApp||'';
   const waNotifyEl=document.getElementById('sms-whatsapp-notify'); if(waNotifyEl) waNotifyEl.checked=!!cfg.sms?.notifyWhatsApp;
   loadPromoCustomers();
+  loadPushSubsCount();
 }
 async function loadPromoCustomers(){
   const res = await apiGet('/api/admin/customers');
   if(!Array.isArray(res?.customers)){ document.getElementById('promo-customers-list').innerHTML=`<div style="font-size:12px;color:var(--red-lt);">${res?.error||'Não foi possível carregar os clientes.'}</div>`; return; }
   promoCustomers = res.customers;
   renderPromoCustomersList();
+  renderPushCustomersList();
 }
 function renderPromoCustomersList(){
   const el=document.getElementById('promo-customers-list');
@@ -2403,6 +2508,47 @@ async function sendPromoSMS(){
   statusEl.style.color = d.failed>0 ? 'var(--orange)' : '#50c878';
   statusEl.textContent = `✅ ${d.sent} enviado(s)${d.failed>0?`, ⚠️ ${d.failed} falharam${d.errors?.length?': '+d.errors[0]:''}`:''}.`;
 }
+function renderPushCustomersList(){
+  const el=document.getElementById('push-customers-list');
+  if(!el) return;
+  el.innerHTML = promoCustomers.length===0
+    ? '<div style="font-size:12px;color:var(--muted);">Nenhum cliente cadastrado ainda.</div>'
+    : promoCustomers.map((c,i)=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px;border-bottom:1px solid var(--border);">
+        <input type="checkbox" class="push-cust-chk" data-phone="${c.phone}"/>
+        <span style="flex:1;">${esc(c.name)}</span>
+        <span style="color:var(--muted);font-size:10px;">${c.orderCount} pedido${c.orderCount!==1?'s':''}${c.loyaltyPoints?' · ⭐'+c.loyaltyPoints:''}</span>
+      </label>`).join('');
+}
+function selectAllPushCustomers(checked){
+  document.querySelectorAll('.push-cust-chk').forEach(el=>el.checked=checked);
+}
+async function loadPushSubsCount(){
+  const el = document.getElementById('push-subs-count');
+  if(!el) return;
+  try{
+    const r = await apiGet('/api/admin/push-subscribers');
+    el.textContent = `📲 ${r.total} inscrito(s) no total (${r.withPhone} vinculado(s) a uma conta).`;
+  }catch(e){ el.textContent=''; }
+}
+async function sendPushCampaign(){
+  const sendAll = document.getElementById('push-send-all').checked;
+  const phones = sendAll ? null : [...document.querySelectorAll('.push-cust-chk:checked')].map(el=>el.dataset.phone);
+  const title = document.getElementById('push-title').value.trim();
+  const message = document.getElementById('push-message').value.trim();
+  const statusEl = document.getElementById('push-send-status');
+  if(!sendAll && !phones.length){ alert('Selecione pelo menos um cliente, ou marque "Enviar pra todos os inscritos".'); return; }
+  if(!message){ alert('Escreva a mensagem da notificação.'); return; }
+  statusEl.style.color='var(--muted)';
+  statusEl.textContent='Enviando...';
+  const res = await apiPost('/api/admin/send-push', { phones: sendAll?undefined:phones, title, message });
+  if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data.error||'Erro ao enviar.'; return; }
+  const d=res.data;
+  statusEl.style.color = d.failed>0 ? 'var(--orange)' : '#50c878';
+  statusEl.textContent = `✅ ${d.sent} enviado(s)${d.failed>0?`, ⚠️ ${d.failed} falharam`:''} de ${d.total} inscrito(s).`;
+  loadPushSubsCount();
+}
+
 function updatePrintFontPreview(){
   const el=document.getElementById('print-font-preview');
   if(!el)return;

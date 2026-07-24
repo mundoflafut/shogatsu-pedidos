@@ -37,3 +37,28 @@ self.addEventListener('fetch', e => {
     })
   );
 });
+
+// ─── Notificações Push (promoções, cupons, novidades) ───
+self.addEventListener('push', e => {
+  let data = { title: 'Shogatsu', body: 'Você tem uma novidade!', url: '/' };
+  try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* usa os valores padrão acima */ }
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/icon-192.png',
+      badge: '/icon-72.png',
+      data: { url: data.url || '/' }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) { if (c.url.includes(url) && 'focus' in c) return c.focus(); }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});

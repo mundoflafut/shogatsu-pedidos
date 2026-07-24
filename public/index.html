@@ -27,6 +27,8 @@ body[data-theme="light"]{
 body[data-theme="light"] .item-card,body[data-theme="light"] .cover-slider,
 body[data-theme="light"] .drawer,body[data-theme="light"] .screen{box-shadow:0 1px 4px rgba(0,0,0,.06);}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{overflow-x:hidden;width:100%;}
+img{max-width:100%;}
 body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;}
 a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
@@ -43,13 +45,14 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .cart-btn:hover{background:var(--red-lt);}
 .cart-count{background:#fff;color:var(--red);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
 
-.cover-slider{position:relative;width:100%;aspect-ratio:16/6;max-height:340px;overflow:hidden;background:var(--black);}
-.cover-slider-track{display:flex;height:100%;transition:transform .5s ease;}
+.cover-slider{position:relative;width:100%;height:88vh;max-height:720px;min-height:380px;overflow:hidden;background:var(--black);}
+.cover-slider-track{display:flex;height:100%;transition:transform .7s cubic-bezier(.4,0,.2,1);}
 .cover-slide{flex:0 0 100%;height:100%;background-size:cover;background-position:center;}
-.cover-slider-dots{position:absolute;bottom:12px;left:0;right:0;display:flex;justify-content:center;gap:6px;}
+.cover-slider::after{content:'';position:absolute;left:0;right:0;bottom:0;height:45%;background:linear-gradient(to top, rgba(0,0,0,.75), transparent);pointer-events:none;}
+.cover-slider-dots{position:absolute;bottom:20px;left:0;right:0;display:flex;justify-content:center;gap:6px;z-index:2;}
 .cover-slider-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);cursor:pointer;transition:background .2s;}
 .cover-slider-dots span.active{background:var(--gold);width:20px;border-radius:4px;}
-@media (max-width:600px){.cover-slider{aspect-ratio:16/9;max-height:220px;}}
+@media (max-width:600px){.cover-slider{height:62vh;min-height:320px;max-height:520px;}}
 .hero-strip{background:linear-gradient(135deg,#1a0e0a 0%,#2a1008 100%);border-bottom:1px solid var(--border);padding:20px 16px;}
 .hero-strip-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
 .hero-info h2{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,5vw,28px);font-weight:400;color:var(--cream);margin-bottom:4px;}
@@ -90,6 +93,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .item-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .item-price{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--red-lt);}
 .item-badge{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--red-lt);border:1px solid var(--red-dk);padding:2px 8px;border-radius:20px;margin-bottom:6px;display:inline-block;}
+.item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
 .add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .1s;}
 .add-btn:hover{background:var(--red-lt);}
@@ -124,11 +128,11 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .btn-order-here{width:100%;background:linear-gradient(90deg,var(--red),var(--red-dk));border:none;color:#fff;border-radius:8px;padding:16px;margin-top:16px;font-size:15px;font-weight:700;letter-spacing:1px;box-shadow:0 6px 20px rgba(192,57,43,.35);}
 .btn-received{width:100%;background:var(--green);border:none;color:#fff;border-radius:8px;padding:14px;margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:.5px;}
 .star-picker{display:flex;justify-content:center;gap:10px;margin:16px 0 20px;}
-.star-picker .star{font-size:40px;cursor:pointer;filter:grayscale(100%);opacity:.4;transition:all .15s;}
-.star-picker .star.on{filter:grayscale(0%);opacity:1;transform:scale(1.05);}
+.star-picker .star{font-size:40px;cursor:pointer;color:#5a5248;opacity:.55;transition:all .15s;}
+.star-picker .star.on{color:#FFC300;opacity:1;transform:scale(1.08);text-shadow:0 0 12px rgba(255,195,0,.6);}
 .review-avg{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px;}
 .review-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;}
-.review-card .rv-stars{color:var(--gold);font-size:14px;margin-bottom:4px;}
+.review-card .rv-stars{color:#FFC300;font-size:14px;margin-bottom:4px;text-shadow:0 0 8px rgba(255,195,0,.35);}
 .review-card .rv-name{font-weight:600;font-size:12px;}
 .review-card .rv-date{font-size:10px;color:var(--muted);}
 .review-card .rv-comment{font-size:13px;margin-top:6px;color:var(--white);}
@@ -214,6 +218,9 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .pix-code{background:var(--black);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:11px;word-break:break-all;color:var(--muted);margin-bottom:10px;text-align:left;}
 .pix-copy-btn{background:var(--red);border:none;border-radius:6px;padding:10px 20px;color:#fff;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
 .pix-copy-btn.done{background:var(--green);}
+
+.mini-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--white);box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);transition:transform .3s ease;pointer-events:none;}
+.mini-toast.visible{transform:translateX(-50%) translateY(0);}
 
 .success-screen{display:none;position:fixed;inset:0;z-index:700;background:var(--black);align-items:center;justify-content:center;text-align:center;padding:40px;overflow-y:auto;}
 .success-screen.open{display:flex;flex-direction:column;}
@@ -405,7 +412,26 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
         <p class="hint" id="account-stats-display" style="margin-top:8px;"></p>
         <p class="hint" id="account-loyalty-display" style="margin-top:4px;color:var(--gold);"></p>
         <button class="btn-order-here" onclick="closeAccountScreen()">🍽️ Peça Aqui</button>
+        <button style="width:100%;background:none;border:1px solid var(--border);color:var(--white);border-radius:8px;padding:12px;margin-top:10px;font-size:13px;" onclick="toggleAccountPanel('history')">📦 Meus Pedidos</button>
+        <button style="width:100%;background:none;border:1px solid var(--border);color:var(--white);border-radius:8px;padding:12px;margin-top:8px;font-size:13px;" onclick="toggleAccountPanel('edit')">✏️ Editar Cadastro</button>
+        <button id="account-push-btn" style="width:100%;background:none;border:1px solid var(--border);color:var(--white);border-radius:8px;padding:12px;margin-top:8px;font-size:13px;" onclick="togglePushSubscription()">🔔 Ativar notificações de promoções</button>
         <button style="width:100%;background:none;border:1px solid var(--red-dk);color:var(--red-lt);border-radius:8px;padding:14px;margin-top:10px;" onclick="doLogout()">Sair da conta</button>
+      </div>
+
+      <div class="form-section" id="account-history-panel" style="display:none;">
+        <div class="form-section-title">📦 Meus Pedidos</div>
+        <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-history-pin" placeholder="••••"/></div>
+        <button class="btn secondary sm" style="margin-bottom:10px;" onclick="loadAccountHistory()">🔍 Ver meus pedidos</button>
+        <div id="account-history-list"></div>
+      </div>
+
+      <div class="form-section" id="account-edit-panel" style="display:none;">
+        <div class="form-section-title">✏️ Editar Cadastro</div>
+        <div class="form-group"><label>Nome completo</label><input type="text" id="acc-edit-name"/></div>
+        <div class="form-group"><label>Endereço salvo</label><input type="text" id="acc-edit-address" placeholder="Rua, número, bairro"/></div>
+        <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-edit-pin" placeholder="••••"/></div>
+        <p class="hint" id="account-edit-status" style="color:var(--red-lt);font-size:12px;"></p>
+        <button class="place-btn" style="position:static;" onclick="saveAccountEdit()">Salvar alterações</button>
       </div>
     </div>
 
@@ -476,6 +502,20 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
       </div>
     </div>
 
+    <div class="form-section" id="schedule-section" style="display:none;">
+      <div class="form-section-title">🕐 Agendar Pedido</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px;">
+        <input type="checkbox" id="f-schedule-toggle" onchange="toggleScheduleFields()"/> Quero agendar pra outro horário (em vez de "o quanto antes")
+      </label>
+      <div id="schedule-fields" style="display:none;">
+        <div class="form-row">
+          <div class="form-group"><label>Data</label><input type="date" id="f-schedule-date"/></div>
+          <div class="form-group"><label>Horário</label><input type="time" id="f-schedule-time"/></div>
+        </div>
+        <p class="hint" id="schedule-hint" style="font-size:11px;"></p>
+      </div>
+    </div>
+
     <button class="place-btn" id="place-btn" onclick="placeOrder()">✅ Confirmar Pedido</button>
   </div>
 </div>
@@ -508,6 +548,31 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
   <div class="screen-body" id="review-body"></div>
 </div>
 
+<div class="screen" id="reservation-screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeReservationScreen()">←</button>
+    <span class="screen-title">📅 Reservar Mesa</span>
+  </div>
+  <div class="screen-body">
+    <div class="form-section">
+      <div class="form-section-title">📅 Dados da Reserva</div>
+      <div class="form-group"><label>Nome completo *</label><input type="text" id="rsv-name"/></div>
+      <div class="form-group"><label>WhatsApp / Telefone *</label><input type="tel" id="rsv-phone" placeholder="(22) 99999-9999"/></div>
+      <div class="form-row">
+        <div class="form-group"><label>Data *</label><input type="date" id="rsv-date"/></div>
+        <div class="form-group"><label>Horário *</label><input type="time" id="rsv-time"/></div>
+      </div>
+      <div class="form-group"><label>Quantas pessoas? *</label><input type="number" min="1" id="rsv-people" placeholder="ex: 4"/></div>
+      <div class="form-group"><label>Observações</label><textarea id="rsv-notes" placeholder="Aniversário, preferência de mesa, restrições..."></textarea></div>
+      <p class="hint" id="reservation-status" style="color:var(--red-lt);font-size:12px;"></p>
+      <button class="place-btn" style="position:static;" onclick="submitReservation()">✅ Solicitar Reserva</button>
+      <p class="hint" style="margin-top:10px;">A reserva fica pendente até a loja confirmar. Você será avisado pelo WhatsApp.</p>
+    </div>
+  </div>
+</div>
+
+<div class="mini-toast" id="mini-toast"></div>
+
 <script>
 // ═══════════════════════════════════════════
 // STATE
@@ -515,6 +580,26 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 // Escapa texto vindo de outros clientes (avaliações) antes de inserir no HTML —
 // sem isso, uma avaliação maliciosa rodaria HTML/JS no navegador de qualquer visitante do site.
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let miniToastTimer = null;
+function showMiniToast(msg, ms){
+  const el = document.getElementById('mini-toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('visible');
+  if(miniToastTimer) clearTimeout(miniToastTimer);
+  miniToastTimer = setTimeout(()=>el.classList.remove('visible'), ms||3200);
+}
+// BUG CORRIGIDO: entrar, sair ou criar conta não limpava o carrinho — em aparelhos compartilhados
+// (ex: tablet da loja, celular da família), os itens de uma conta continuavam aparecendo pro
+// próximo cliente que trocasse de conta no mesmo navegador. Agora toda troca de identidade
+// começa com o carrinho vazio, com um aviso quando havia itens sendo descartados.
+function clearCartOnAccountSwitch(){
+  const hadItems = Object.keys(cart).length > 0;
+  cart = {};
+  updateCartUI();
+  if(document.getElementById('cart-drawer').classList.contains('open')) closeCart();
+  if(hadItems) showMiniToast('🛒 Seu carrinho foi esvaziado ao trocar de conta.');
+}
 let cfg = {}, menu = [];
 let cart = {};
 let mode = 'delivery';
@@ -681,6 +766,130 @@ function openAccountScreen() {
 }
 function closeAccountScreen() { document.getElementById('account-screen').classList.remove('open'); }
 
+// ═══════════════════════════════════════════
+// AGENDAMENTO DE PEDIDOS
+// ═══════════════════════════════════════════
+function initScheduleSection() {
+  const sec = document.getElementById('schedule-section');
+  if (!sec) return;
+  const enabled = cfg.scheduling && cfg.scheduling.enabled;
+  sec.style.display = enabled ? 'block' : 'none';
+  if (!enabled) { document.getElementById('f-schedule-toggle').checked = false; toggleScheduleFields(); return; }
+  const minMin = Number(cfg.scheduling.minMinutesAhead) || 60;
+  const maxDays = Number(cfg.scheduling.maxDaysAhead) || 7;
+  const minDate = new Date(Date.now() + minMin * 60000);
+  const maxDate = new Date(Date.now() + maxDays * 86400000);
+  document.getElementById('f-schedule-date').min = minDate.toISOString().slice(0,10);
+  document.getElementById('f-schedule-date').max = maxDate.toISOString().slice(0,10);
+  document.getElementById('schedule-hint').textContent = `Escolha um horário a partir de ${minDate.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}, em até ${maxDays} dia(s).`;
+}
+function toggleScheduleFields() {
+  const on = document.getElementById('f-schedule-toggle').checked;
+  document.getElementById('schedule-fields').style.display = on ? 'block' : 'none';
+}
+function getScheduledForValue() {
+  if (!document.getElementById('f-schedule-toggle') || !document.getElementById('f-schedule-toggle').checked) return null;
+  const date = document.getElementById('f-schedule-date').value;
+  const time = document.getElementById('f-schedule-time').value;
+  if (!date || !time) return null;
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
+// ═══════════════════════════════════════════
+// RESERVA DE MESAS
+// ═══════════════════════════════════════════
+function openReservationScreen() {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('rsv-date').min = today;
+  if (customer) {
+    if(!document.getElementById('rsv-name').value) document.getElementById('rsv-name').value = customer.name;
+    if(!document.getElementById('rsv-phone').value) document.getElementById('rsv-phone').value = customer.phone;
+  }
+  document.getElementById('reservation-screen').classList.add('open');
+}
+function closeReservationScreen() { document.getElementById('reservation-screen').classList.remove('open'); }
+async function submitReservation() {
+  const name = document.getElementById('rsv-name').value.trim();
+  const phone = document.getElementById('rsv-phone').value.trim();
+  const date = document.getElementById('rsv-date').value;
+  const time = document.getElementById('rsv-time').value;
+  const people = document.getElementById('rsv-people').value;
+  const notes = document.getElementById('rsv-notes').value.trim();
+  const statusEl = document.getElementById('reservation-status');
+  if (!name || !phone || !date || !time || !people) { statusEl.textContent = 'Preencha todos os campos obrigatórios.'; return; }
+  statusEl.textContent = '';
+  try {
+    const r = await fetch('/api/reservations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone, date, time, people, notes })
+    });
+    const data = await r.json();
+    if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível reservar.'; return; }
+    closeReservationScreen();
+    showMiniToast('✅ Reserva solicitada! Aguarde a confirmação da loja.', 4000);
+    ['rsv-notes'].forEach(id => document.getElementById(id).value = '');
+  } catch (e) { statusEl.textContent = 'Erro de conexão.'; }
+}
+
+function toggleAccountPanel(which) {
+  const histP = document.getElementById('account-history-panel'), editP = document.getElementById('account-edit-panel');
+  const showHist = which === 'history' && histP.style.display === 'none';
+  const showEdit = which === 'edit' && editP.style.display === 'none';
+  histP.style.display = showHist ? 'block' : 'none';
+  editP.style.display = showEdit ? 'block' : 'none';
+  if (showEdit && customer) {
+    document.getElementById('acc-edit-name').value = customer.name || '';
+    document.getElementById('acc-edit-address').value = customer.lastAddress || '';
+  }
+}
+
+async function loadAccountHistory() {
+  const pin = document.getElementById('acc-history-pin').value.trim();
+  const listEl = document.getElementById('account-history-list');
+  if (!customer || pin.length !== 4) { listEl.innerHTML = '<p class="hint" style="color:var(--red-lt);">Digite sua senha de 4 dígitos.</p>'; return; }
+  listEl.innerHTML = '<p class="hint">Carregando...</p>';
+  try {
+    const r = await fetch(`/api/customer/orders?phone=${encodeURIComponent(customer.phone)}&pin=${encodeURIComponent(pin)}`);
+    const data = await r.json();
+    if (!r.ok) { listEl.innerHTML = `<p class="hint" style="color:var(--red-lt);">${esc(data.error||'Senha incorreta.')}</p>`; return; }
+    if (!data.orders.length) { listEl.innerHTML = '<p class="hint">Você ainda não fez nenhum pedido.</p>'; return; }
+    const statusLabel = { novo:'🆕 Recebido', preparando:'👨‍🍳 Preparando', pronto:'🛵 A caminho / pronto', entregue:'✅ Entregue', cancelado:'⛔ Cancelado' };
+    listEl.innerHTML = data.orders.map(o => `
+      <div style="border-bottom:1px solid var(--border);padding:10px 0;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
+          <span>${new Date(o.createdAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+          <span>${statusLabel[o.status]||o.status}</span>
+        </div>
+        <div style="font-size:13px;margin:4px 0;">${(o.items||[]).map(i=>`${i.qty}x ${esc(i.name)}`).join(', ')}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--gold);">R$ ${Number(o.total).toFixed(2).replace('.', ',')}</div>
+      </div>`).join('');
+  } catch (e) { listEl.innerHTML = '<p class="hint" style="color:var(--red-lt);">Erro de conexão.</p>'; }
+}
+
+async function saveAccountEdit() {
+  const name = document.getElementById('acc-edit-name').value.trim();
+  const lastAddress = document.getElementById('acc-edit-address').value.trim();
+  const pin = document.getElementById('acc-edit-pin').value.trim();
+  const statusEl = document.getElementById('account-edit-status');
+  if (!customer || pin.length !== 4) { statusEl.textContent = 'Digite sua senha de 4 dígitos pra confirmar.'; return; }
+  statusEl.textContent = '';
+  try {
+    const r = await fetch('/api/customer/update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: customer.phone, pin, name, lastAddress })
+    });
+    const data = await r.json();
+    if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível salvar.'; return; }
+    customer = { ...customer, name: data.customer.name, lastAddress: data.customer.lastAddress };
+    saveCustomerSession();
+    updateAccountUI();
+    document.getElementById('account-name-display').textContent = customer.name;
+    document.getElementById('acc-edit-pin').value = '';
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = '✅ Dados atualizados!';
+  } catch (e) { statusEl.textContent = 'Erro de conexão.'; }
+}
+
 async function doLogin() {
   const phone = document.getElementById('acc-login-phone').value.trim();
   const pin = document.getElementById('acc-login-pin').value.trim();
@@ -694,6 +903,7 @@ async function doLogin() {
     const data = await r.json();
     if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível entrar.'; return; }
     customer = data.customer;
+    clearCartOnAccountSwitch();
     saveCustomerSession();
     updateAccountUI();
     openAccountScreen();
@@ -717,6 +927,7 @@ async function doRegister() {
     const data = await r.json();
     if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível criar a conta.'; return; }
     customer = { ...data.customer, orderCount: 0, lastOrderAt: null };
+    clearCartOnAccountSwitch();
     saveCustomerSession();
     updateAccountUI();
     openAccountScreen();
@@ -725,6 +936,7 @@ async function doRegister() {
 
 function doLogout() {
   customer = null;
+  clearCartOnAccountSwitch();
   saveCustomerSession();
   updateAccountUI();
   closeAccountScreen();
@@ -931,7 +1143,7 @@ async function loadReviews(){
     const section = document.getElementById('reviews-section');
     if(!data.reviews || !data.reviews.length){ section.style.display='none'; return; }
     section.style.display='block';
-    document.getElementById('review-avg').innerHTML = `<span style="font-size:28px;font-weight:800;color:var(--gold);">${data.average}</span><span style="color:var(--gold);font-size:20px;">${'★'.repeat(Math.round(data.average))}${'☆'.repeat(5-Math.round(data.average))}</span><span style="font-size:12px;color:var(--muted);">(${data.count} avaliações)</span>`;
+    document.getElementById('review-avg').innerHTML = `<span style="font-size:28px;font-weight:800;color:#FFC300;">${data.average}</span><span style="color:#FFC300;font-size:20px;text-shadow:0 0 8px rgba(255,195,0,.35);">${'★'.repeat(Math.round(data.average))}${'☆'.repeat(5-Math.round(data.average))}</span><span style="font-size:12px;color:var(--muted);">(${data.count} avaliações)</span>`;
     document.getElementById('reviews-list').innerHTML = data.reviews.slice(0,20).map(rv=>`
       <div class="review-card">
         <div class="rv-stars">${'★'.repeat(rv.stars)}${'☆'.repeat(5-rv.stars)}</div>
@@ -989,8 +1201,9 @@ function openContactSheet(){
   if(phoneDigits) options.push({icon:'📞', name:'Ligar', sub:cfg.storePhone||formatPhoneDisplay(phoneDigits), href:`tel:+55${phoneDigits.length<=11?phoneDigits:phoneDigits.slice(-11)}`});
   if(phoneDigits) options.push({icon:'✉️', name:'Enviar SMS', sub:'Mensagem de texto', href:`sms:+55${phoneDigits.length<=11?phoneDigits:phoneDigits.slice(-11)}?body=${msg}`});
   if(whatsDigits) options.push({icon:'💬', name:'WhatsApp', sub:'Resposta mais rápida', href:`https://wa.me/${whatsDigits}?text=${msg}`});
+  if(cfg.reservations && cfg.reservations.enabled) options.push({icon:'📅', name:'Reservar uma mesa', sub:'Escolha data e horário', onclick:'closeContactSheet();openReservationScreen();'});
   document.getElementById('contact-body').innerHTML = options.map(o=>`
-    <a class="contact-opt" href="${o.href}" target="_blank" rel="noopener">
+    <a class="contact-opt" ${o.href?`href="${o.href}" target="_blank" rel="noopener"`:`href="javascript:void(0)" onclick="${o.onclick}"`}>
       <span class="co-icon">${o.icon}</span>
       <div><div class="co-name">${o.name}</div><div class="co-sub">${o.sub}</div></div>
     </a>`).join('');
@@ -1204,6 +1417,7 @@ function renderMenu() {
                 : `<button class="add-btn" onclick="addToCart('${key}')" data-key="${key}">+</button>`
               }
             </div>
+            ${item.badge && isAvail ? `<div class="item-promo-tag">🏷️ ${item.badge}</div>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -1414,6 +1628,7 @@ function closeCart() {
 // ═══════════════════════════════════════════
 function openCheckout(silent) {
   if (!silent) closeCart();
+  initScheduleSection();
   const fee = getFee();
   const subtotal = cartTotal();
   const effectiveFee = (appliedCoupon && appliedCoupon.freeDelivery) ? 0 : fee;
@@ -1625,6 +1840,7 @@ async function placeOrder() {
   const items = Object.values(cart).map(c => ({ name: c.name, qty: c.qty, price: c.price, stations: c.stations && c.stations.length ? c.stations : ['cozinha'] }));
   const obs = document.getElementById('cart-obs')?.value || '';
   const troco = payMethod === 'dinheiro' ? (document.getElementById('f-troco').value || '') : '';
+  const scheduledFor = getScheduledForValue();
 
   const placeBtn = document.getElementById('place-btn');
   placeBtn.disabled = true; placeBtn.textContent = 'Enviando...';
@@ -1633,7 +1849,7 @@ async function placeOrder() {
   try {
     const r = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, name, phone, address, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points })
+      body: JSON.stringify({ mode, name, phone, address, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points, scheduledFor })
     });
     const data = await r.json();
     if (!r.ok) { alert(data.error || 'Não foi possível enviar o pedido.'); placeBtn.disabled = false; placeBtn.textContent = '✅ Confirmar Pedido'; return; }
@@ -1873,6 +2089,55 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+// ═══════════════════════════════════════════
+// NOTIFICAÇÕES PUSH — promoções, cupons e novidades direto no navegador, de graça
+// ═══════════════════════════════════════════
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+async function updatePushButtonState() {
+  const btn = document.getElementById('account-push-btn');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { btn.style.display = 'none'; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    btn.textContent = sub ? '🔕 Desativar notificações' : '🔔 Ativar notificações de promoções';
+  } catch (e) { /* silencioso — botão continua com o texto padrão */ }
+}
+async function togglePushSubscription() {
+  const btn = document.getElementById('account-push-btn');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { showMiniToast('Seu navegador não suporta notificações push.'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: existing.endpoint }) }).catch(() => {});
+      await existing.unsubscribe();
+      showMiniToast('🔕 Notificações desativadas.');
+      updatePushButtonState();
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { showMiniToast('Permissão de notificações negada.'); return; }
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) { showMiniToast('Notificações indisponíveis no momento.'); return; }
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    await fetch('/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON(), phone: customer ? customer.phone : '' })
+    });
+    showMiniToast('🔔 Notificações ativadas! Você vai receber nossas promoções.');
+    updatePushButtonState();
+  } catch (e) { showMiniToast('Não foi possível ativar as notificações agora.'); }
+}
+updatePushButtonState();
+
 </script>
 </body>
 </html>
