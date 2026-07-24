@@ -1,4 +1,54 @@
-# v19 a v24 — Segurança, Fidelidade, WhatsApp, PIX automático, Favoritos, Relatórios
+# v26 — Bug do carrinho, botão de WhatsApp sumido, push, reservas e agendamento
+
+**Bugs reais encontrados e corrigidos:**
+- **Carrinho não esvaziava ao trocar de conta**: `doLogin`, `doRegister` e `doLogout` nunca
+  limpavam o `cart`. Em aparelho compartilhado (tablet da loja, celular da família), os itens
+  de uma conta continuavam aparecendo pro próximo cliente que entrasse com outra conta no
+  mesmo navegador. Agora toda troca de identidade esvazia o carrinho, com aviso visual.
+- **Botão de WhatsApp sumido na tela principal de Pedidos**: existia só no card do Dashboard
+  (`miniOrderCard`), mas nunca foi adicionado na tela "Pedidos" (`renderOrdersList`) — só
+  tinha o botão de Imprimir lá. Adicionado.
+- **Botões sem estilo (Imprimir/WhatsApp)**: a classe `.oa-btn` base não tinha nenhum
+  `background`/`border` definido — esses botões ficavam "soltos" na tela, sem parecer
+  clicáveis. Agora têm contorno e fundo consistentes com os outros.
+- **Estrelas de avaliação sem cor**: `.star-picker .star.on` só tinha `filter:grayscale(0)`, e
+  sem uma cor de base as estrelas "selecionadas" apareciam na cor do texto padrão, não
+  douradas. Corrigido com cor vibrante (`#FFC300`) e brilho.
+
+**Novidades:**
+- Notificações push de verdade (Web Push + VAPID), implementadas do zero em `webpush.js` só
+  com o `crypto` nativo do Node — sem dependência paga nem serviço de terceiros. Composer de
+  campanha segmentada em Configurações → 🔔 Notificações Push.
+- Reserva de Mesas: tela no cardápio (via 📞 Falar com o restaurante → Reservar uma mesa) +
+  aba "📅 Reservas" no painel pra confirmar/recusar.
+- Agendamento de Pedidos: opção no checkout pra escolher data/hora futura em vez de "o quanto
+  antes", respeitando janela mínima/máxima configurável.
+- Minha Conta: histórico de pedidos ("📦 Meus Pedidos") e edição de cadastro ("✏️ Editar
+  Cadastro"), ambos protegidos por confirmação de senha (a senha nunca fica salva no
+  navegador).
+- Banner do cardápio virou hero em tela cheia (88vh) com transição mais suave.
+- Selo de promoção/benefício abaixo do preço nos cards de produto.
+
+**⚠️ Importante pra notificação push funcionar:** o navegador só permite inscrição em push
+num site com HTTPS (exceto `localhost`). Teste isso só depois de publicar no domínio real —
+localmente ele carrega, mas o navegador bloqueia a inscrição.
+
+---
+
+# v25 — Backup automático no Supabase (persistência gratuita no Render)
+
+Como o Disco Persistente do Render só existe em plano pago, adicionei sincronização
+automática com uma tabela no Supabase (plano gratuito permanente): toda escrita local
+(pedido, config, cliente) dispara um backup assíncrono pro Supabase, sem travar a
+resposta; e ao ligar, o servidor busca lá o último estado antes de aceitar pedidos —
+o que resolve o problema de perder tudo a cada deploy, de graça. Testado: com Supabase
+mal configurado ou fora do ar, o servidor sobe normal e os pedidos continuam sendo
+criados em milissegundos (erro fica só no log, nunca trava nada). Ver `README.md` pra
+configurar (leva uns 5 minutos) e `supabase-setup.sql` pra criar a tabela.
+
+---
+
+
 
 ## v19 — Bugs reais encontrados e corrigidos
 - **XSS armazenado no painel**: nome/telefone/endereço/observação do pedido eram inseridos

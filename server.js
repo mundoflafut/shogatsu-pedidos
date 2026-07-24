@@ -12,12 +12,19 @@ const url = require('url');
 const os = require('os');
 
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+// IMPORTANTE: por padrão os dados ficam numa pasta ao lado do server.js, que é APAGADA a cada novo
+// deploy no Render (o disco do serviço web não é persistente). Pra não perder pedidos/clientes/
+// configurações, configure um Disco Persistente no Render e aponte DATA_DIR pra ele (veja instruções
+// no README.md, seção "Persistência de dados no Render").
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const UPLOADS_DIR = path.join(PUBLIC_DIR, 'uploads');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(PUBLIC_DIR, 'uploads');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
+const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subs.json');
+const webpush = require('./webpush');
 
 // ─── Config / Menu padrão (usados só na primeira execução) ───
 const DEFAULT_CFG = {
@@ -119,7 +126,15 @@ const DEFAULT_CFG = {
     'Voltarei a pedir com certeza! 🙌'
   ],
   // ── Anúncios/promoções — aparecem pra QUALQUER pessoa que abrir o cardápio, sem precisar de conta ──
-  announcements: []  // [{id, title, message, active, expiresAt}]
+  announcements: [],  // [{id, title, message, active, expiresAt}]
+  // ── Notificações Push (promoções/cupons/novidades direto no navegador do cliente, de graça) ──
+  // As chaves VAPID são geradas sozinhas na primeira vez que o servidor liga (ver bootstrap abaixo)
+  // e ficam salvas aqui — não apague nem troque manualmente, ou as inscrições já feitas param de funcionar.
+  vapid: { publicKey: '', privateKeyJwk: null, subject: 'mailto:contato@shogatsu.com.br' },
+  // ── Reserva de Mesas ──
+  reservations: { enabled: true, maxPeoplePerTable: 12, note: '' },
+  // ── Agendamento de Pedidos (cliente escolhe um horário futuro pra retirada/entrega) ──
+  scheduling: { enabled: true, minMinutesAhead: 60, maxDaysAhead: 7 }
 };
 const DEFAULT_MENU = require('./default-menu.json');
 
@@ -131,9 +146,101 @@ if (!fs.existsSync(CONFIG_FILE)) {
 }
 if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
 if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
+if (!fs.existsSync(RESERVATIONS_FILE)) fs.writeFileSync(RESERVATIONS_FILE, '[]');
+if (!fs.existsSync(PUSH_SUBS_FILE)) fs.writeFileSync(PUSH_SUBS_FILE, '[]');
+
+// Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
+// e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
+function ensureVapidKeys() {
+  try {
+    const data = readJSON(CONFIG_FILE);
+    if (!data.cfg.vapid || !data.cfg.vapid.publicKey) {
+      const keys = webpush.generateVapidKeys();
+      data.cfg.vapid = { publicKey: keys.publicKey, privateKeyJwk: keys.privateKeyJwk, subject: (data.cfg.vapid && data.cfg.vapid.subject) || DEFAULT_CFG.vapid.subject };
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2));
+      console.log('🔔 Chaves VAPID geradas (primeira execução) — notificação push já pode ser usada.');
+    }
+  } catch (e) { console.error('⚠️  Não consegui gerar as chaves VAPID:', e.message); }
+}
+ensureVapidKeys();
 
 function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-function writeJSON(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  syncToSupabase(file, data); // fire-and-forget — nunca trava nem quebra a resposta ao usuário
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUPABASE — backup automático pra sobreviver a deploys no Render
+// ═══════════════════════════════════════════════════════════
+// O disco local (pasta data/) continua sendo usado pra tudo — é rápido e simples. O Supabase
+// funciona como uma cópia de segurança: toda vez que orders.json/config.json/customers.json
+// muda, mandamos uma cópia pra lá; e quando o servidor liga (ex: depois de um deploy que apagou
+// o disco local), a gente PRIMEIRO tenta trazer de volta o que tiver salvo no Supabase antes de
+// aceitar qualquer pedido novo.
+// Configure em Environment no Render: SUPABASE_URL e SUPABASE_SERVICE_KEY (a "service_role key",
+// não a "anon" — precisa de permissão de escrita). Sem essas duas variáveis, tudo funciona igual
+// a antes, só sem o backup (o app nunca quebra por falta disso).
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs' };
+
+function supabaseRequest(method, subpath, body) {
+  return new Promise((resolve, reject) => {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return reject(new Error('Supabase não configurado'));
+    const payload = body ? JSON.stringify(body) : null;
+    const u = new URL(`${SUPABASE_URL}/rest/v1/${subpath}`);
+    const req = https.request(u, {
+      method,
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=representation',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
+      },
+      timeout: 8000
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try { resolve(data ? JSON.parse(data) : null); } catch (e) { resolve(null); }
+        } else reject(new Error(`Supabase HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function syncToSupabase(file, data) {
+  const key = FILE_TO_KEY[file];
+  if (!key || !SUPABASE_URL || !SUPABASE_KEY) return;
+  supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: data, updated_at: new Date().toISOString() })
+    .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message));
+}
+
+// Roda uma vez, ao ligar o servidor: se tiver Supabase configurado, traz de volta o último
+// estado salvo (útil logo depois de um deploy que apagou o disco local do Render).
+async function restoreFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  console.log('☁️  Verificando backup no Supabase...');
+  await Promise.allSettled(Object.entries(FILE_TO_KEY).map(async ([file, key]) => {
+    try {
+      const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=eq.${key}&select=value`);
+      if (rows && rows[0] && rows[0].value !== undefined) {
+        fs.writeFileSync(file, JSON.stringify(rows[0].value, null, 2));
+        console.log(`   ✓ "${key}" restaurado do Supabase`);
+      }
+    } catch (err) {
+      console.error(`   ⚠️  Não consegui restaurar "${key}" do Supabase:`, err.message);
+    }
+  }));
+}
 
 // Confere se o horário atual está dentro da janela configurada (ex: 18:00–23:00).
 // Usa sempre o horário de Brasília, independente de em qual fuso o servidor
@@ -166,7 +273,10 @@ function readConfig() {
     slides: data.cfg.slides || DEFAULT_CFG.slides,
     users: (Array.isArray(data.cfg.users) && data.cfg.users.length) ? data.cfg.users : DEFAULT_CFG.users,
     sms: { ...DEFAULT_CFG.sms, ...(data.cfg.sms || {}) },
-    schedule: { ...DEFAULT_CFG.schedule, ...(data.cfg.schedule || {}) }
+    schedule: { ...DEFAULT_CFG.schedule, ...(data.cfg.schedule || {}) },
+    vapid: { ...DEFAULT_CFG.vapid, ...(data.cfg.vapid || {}) },
+    reservations: { ...DEFAULT_CFG.reservations, ...(data.cfg.reservations || {}) },
+    scheduling: { ...DEFAULT_CFG.scheduling, ...(data.cfg.scheduling || {}) }
   };
   // Se a auto-programação de horário estiver ativada, o status aberto/fechado
   // passa a ser calculado sozinho a partir do horário configurado — o toggle
@@ -593,6 +703,18 @@ const MIME = {
 };
 
 function serveStatic(req, res, pathname) {
+  // Uploads (logo, fotos de prato) podem morar fora de public/ quando configurados num disco
+  // persistente (UPLOADS_DIR via variável de ambiente) — por isso tem rota própria aqui.
+  if (pathname.startsWith('/uploads/')) {
+    const uploadPath = path.join(UPLOADS_DIR, pathname.slice('/uploads/'.length));
+    if (!uploadPath.startsWith(UPLOADS_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
+    return fs.readFile(uploadPath, (err, data) => {
+      if (err) { res.writeHead(404); return res.end('Not found'); }
+      const ext = path.extname(uploadPath);
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+      res.end(data);
+    });
+  }
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
   if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(filePath, (err, data) => {
@@ -1375,6 +1497,153 @@ function estimateDeliveryWindow(order, cfg) {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
+  // ── GET /api/customer/orders?phone=...&pin=... — o PRÓPRIO cliente vê seu histórico de pedidos
+  // (usado na tela "Minha Conta"). Exige telefone + senha (mesma checagem do login) — não é público
+  // como o /api/loyalty, porque o histórico expõe endereço e itens comprados.
+  if (pathname === '/api/customer/orders' && req.method === 'GET') {
+    const p = normalizePhone(query.phone);
+    const customers = readJSON(CUSTOMERS_FILE);
+    const customer = findCustomer(customers, p);
+    if (!customer || customer.pinHash !== hashPin(p, query.pin)) return sendJSON(res, 401, { error: 'Não autorizado.' });
+    const orders = readJSON(ORDERS_FILE).filter(o => normalizePhone(o.phone) === p)
+      .map(o => ({ id: o.id, ticketNumber: o.ticketNumber, createdAt: o.createdAt, status: o.status, items: o.items, total: o.total, mode: o.mode, payMethod: o.payMethod }));
+    return sendJSON(res, 200, { orders });
+  }
+
+  // ── POST /api/customer/update — cliente edita o próprio cadastro (nome / endereço salvo) ──
+  if (pathname === '/api/customer/update' && req.method === 'POST') {
+    try {
+      const { phone, pin, name, lastAddress } = await readBody(req);
+      const p = normalizePhone(phone);
+      const customers = readJSON(CUSTOMERS_FILE);
+      const customer = findCustomer(customers, p);
+      if (!customer || customer.pinHash !== hashPin(p, pin)) return sendJSON(res, 401, { error: 'Não autorizado.' });
+      if (name && name.trim()) customer.name = String(name).trim().slice(0, 80);
+      if (lastAddress !== undefined) customer.lastAddress = lastAddress ? String(lastAddress).slice(0, 200) : customer.lastAddress;
+      writeJSON(CUSTOMERS_FILE, customers);
+      return sendJSON(res, 200, { ok: true, customer: { phone: customer.phone, name: customer.name, lastAddress: customer.lastAddress } });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ═══════════════════════════════════════════
+  // NOTIFICAÇÕES PUSH (promoções/cupons/novidades) — VAPID + Web Push nativo, sem custo
+  // ═══════════════════════════════════════════
+  // ── GET /api/push/vapid-public-key — chave pública que o navegador do cliente precisa pra se inscrever ──
+  if (pathname === '/api/push/vapid-public-key' && req.method === 'GET') {
+    const { cfg } = readConfig();
+    return sendJSON(res, 200, { publicKey: cfg.vapid.publicKey });
+  }
+  // ── POST /api/push/subscribe — navegador do cliente se inscreve (telefone é opcional, usado pra segmentar) ──
+  if (pathname === '/api/push/subscribe' && req.method === 'POST') {
+    try {
+      const { subscription, phone } = await readBody(req);
+      if (!subscription || !subscription.endpoint || !subscription.keys) return sendJSON(res, 400, { error: 'Inscrição inválida.' });
+      const subs = readJSON(PUSH_SUBS_FILE);
+      const existing = subs.findIndex(s => s.endpoint === subscription.endpoint);
+      const entry = { endpoint: subscription.endpoint, keys: subscription.keys, phone: phone ? normalizePhone(phone) : '', createdAt: new Date().toISOString() };
+      if (existing === -1) subs.push(entry); else subs[existing] = entry;
+      writeJSON(PUSH_SUBS_FILE, subs);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/push/unsubscribe ──
+  if (pathname === '/api/push/unsubscribe' && req.method === 'POST') {
+    try {
+      const { endpoint } = await readBody(req);
+      const subs = readJSON(PUSH_SUBS_FILE).filter(s => s.endpoint !== endpoint);
+      writeJSON(PUSH_SUBS_FILE, subs);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── GET /api/admin/push-subscribers — quantos clientes têm push ativo (pra mostrar no painel) ──
+  if (pathname === '/api/admin/push-subscribers' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const subs = readJSON(PUSH_SUBS_FILE);
+    return sendJSON(res, 200, { total: subs.length, withPhone: subs.filter(s => s.phone).length });
+  }
+  // ── POST /api/admin/send-push — envia campanha push segmentada (todos, ou só telefones escolhidos) ──
+  if (pathname === '/api/admin/send-push' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra enviar notificações.' });
+    try {
+      const { phones, title, message, url: targetUrl } = await readBody(req);
+      const { cfg } = readConfig();
+      if (!cfg.vapid || !cfg.vapid.publicKey || !cfg.vapid.privateKeyJwk) return sendJSON(res, 400, { error: 'Chaves VAPID ainda não configuradas — reinicie o servidor.' });
+      const msg = String(message || '').slice(0, 200).trim();
+      const ttl = String(title || cfg.name || 'Shogatsu').slice(0, 80).trim();
+      if (!msg) return sendJSON(res, 400, { error: 'Digite a mensagem.' });
+      let subs = readJSON(PUSH_SUBS_FILE);
+      const segment = Array.isArray(phones) && phones.length ? new Set(phones.map(normalizePhone)) : null;
+      const targets = segment ? subs.filter(s => segment.has(s.phone)) : subs;
+      if (!targets.length) return sendJSON(res, 400, { error: 'Nenhum inscrito encontrado pra esse envio.' });
+      const payload = { title: ttl, body: msg, url: targetUrl || '/', icon: '/icon-192.png' };
+      const results = { sent: 0, failed: 0, errors: [] };
+      const expiredEndpoints = [];
+      for (const sub of targets) {
+        const r = await webpush.sendWebPush(sub, payload, cfg.vapid, cfg.vapid.subject);
+        if (r.ok) results.sent++;
+        else { results.failed++; if (results.errors.length < 3) results.errors.push(`HTTP ${r.status || 0}`); if (r.expired) expiredEndpoints.push(sub.endpoint); }
+      }
+      if (expiredEndpoints.length) {
+        subs = subs.filter(s => !expiredEndpoints.includes(s.endpoint));
+        writeJSON(PUSH_SUBS_FILE, subs);
+      }
+      return sendJSON(res, 200, { ok: true, ...results, total: targets.length });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ═══════════════════════════════════════════
+  // RESERVA DE MESAS
+  // ═══════════════════════════════════════════
+  // ── POST /api/reservations — cliente pede uma reserva (fica pendente até a loja confirmar) ──
+  if (pathname === '/api/reservations' && req.method === 'POST') {
+    try {
+      const { cfg } = readConfig();
+      if (!cfg.reservations || !cfg.reservations.enabled) return sendJSON(res, 400, { error: 'Reserva de mesas está desativada no momento.' });
+      const body = await readBody(req);
+      const name = String(body.name || '').trim().slice(0, 80);
+      const phone = String(body.phone || '').trim().slice(0, 30);
+      const people = Math.max(1, parseInt(body.people) || 0);
+      const date = String(body.date || '').slice(0, 10);
+      const time = String(body.time || '').slice(0, 5);
+      if (!name || !phone) return sendJSON(res, 400, { error: 'Informe nome e telefone.' });
+      if (!date || !time) return sendJSON(res, 400, { error: 'Escolha data e horário.' });
+      if (!people) return sendJSON(res, 400, { error: 'Informe quantas pessoas.' });
+      const maxP = Number(cfg.reservations.maxPeoplePerTable) || 12;
+      if (people > maxP) return sendJSON(res, 400, { error: `Pra grupos maiores que ${maxP} pessoas, fale direto com a loja pelo WhatsApp.` });
+      const list = readJSON(RESERVATIONS_FILE);
+      const reservation = {
+        id: 'RS' + Date.now().toString(36).toUpperCase(),
+        createdAt: new Date().toISOString(),
+        status: 'pendente', // pendente → confirmada / recusada / cancelada
+        name, phone, people, date, time,
+        notes: String(body.notes || '').slice(0, 200)
+      };
+      list.unshift(reservation);
+      writeJSON(RESERVATIONS_FILE, list);
+      return sendJSON(res, 201, { ok: true, reservation });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── GET /api/reservations — painel lista as reservas ──
+  if (pathname === '/api/reservations' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    return sendJSON(res, 200, { reservations: readJSON(RESERVATIONS_FILE) });
+  }
+  // ── POST /api/reservations/:id/status — painel confirma/recusa/cancela uma reserva ──
+  if (pathname.match(/^\/api\/reservations\/[^/]+\/status$/) && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const id = decodeURIComponent(pathname.split('/')[3]);
+      const { status } = await readBody(req);
+      if (!['pendente', 'confirmada', 'recusada', 'cancelada'].includes(status)) return sendJSON(res, 400, { error: 'Status inválido.' });
+      const list = readJSON(RESERVATIONS_FILE);
+      const r = list.find(x => x.id === id);
+      if (!r) return sendJSON(res, 404, { error: 'Reserva não encontrada.' });
+      r.status = status;
+      writeJSON(RESERVATIONS_FILE, list);
+      return sendJSON(res, 200, { ok: true, reservation: r });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
   // ── POST /api/orders — cria um novo pedido (cliente) ──
   // ── POST /api/coupon/validate — cliente digita um cupom no checkout, servidor confere ──
   if (pathname === '/api/coupon/validate' && req.method === 'POST') {
@@ -1473,6 +1742,19 @@ function estimateDeliveryWindow(order, cfg) {
           };
         }),
         obs: String(body.obs || '').slice(0, 300),
+        // v26: agendamento — cliente escolhe um horário futuro pra retirada/entrega em vez de "o quanto antes".
+        // Validado contra a janela configurada (mínimo de antecedência e máximo de dias); fora da janela, ignora
+        // o agendamento e o pedido segue como "o quanto antes" (nunca bloqueia o pedido por causa disso).
+        scheduledFor: (() => {
+          if (!body.scheduledFor) return null;
+          const d = new Date(body.scheduledFor);
+          if (isNaN(d.getTime())) return null;
+          const sc = cfg.scheduling || {};
+          const minAt = Date.now() + (Number(sc.minMinutesAhead) || 0) * 60000;
+          const maxAt = Date.now() + (Number(sc.maxDaysAhead) || 7) * 86400000;
+          if (d.getTime() < minAt || d.getTime() > maxAt) return null;
+          return d.toISOString();
+        })(),
         payMethod: String(body.payMethod || '').slice(0, 20),
         troco: String(body.troco || '').slice(0, 20),
         subtotal: subtotalNum,
@@ -1698,7 +1980,9 @@ function estimateDeliveryWindow(order, cfg) {
   res.writeHead(404); res.end('Not found');
 });
 
-server.listen(PORT, () => {
-  console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-  console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+restoreFromSupabase().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+    console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+  });
 });

@@ -6,6 +6,53 @@ tempo real, PIX com valor automático e painel do restaurante (`/painel.html`).
 Não usa nenhuma dependência externa (só Node.js puro), então não precisa
 rodar `npm install` — basta ter Node instalado.
 
+## ⚠️ Persistência de dados no Render (leia antes de publicar!)
+
+Por padrão, os pedidos, clientes e configurações ficam salvos numa pasta `data/`
+ao lado do `server.js`. **No Render, essa pasta é apagada toda vez que você faz
+um novo deploy** — o disco do serviço web é temporário. O Disco Persistente do
+Render resolveria isso, mas só existe em planos pagos (a partir do Starter,
+~$7/mês) — **não está disponível no plano Free**.
+
+### Solução gratuita: backup automático no Supabase
+
+O servidor já vem pronto pra sincronizar automaticamente com uma tabela no
+Supabase (que tem plano gratuito permanente, sem expirar como o Postgres do
+próprio Render). Funciona assim: toda vez que algo muda (pedido novo, config
+salva, etc.), o servidor manda uma cópia pro Supabase; quando ele liga de novo
+depois de um deploy, primeiro busca lá o último estado salvo antes de aceitar
+qualquer pedido.
+
+**Como configurar (5 minutos, uma vez só):**
+
+1. Crie uma conta grátis em [supabase.com](https://supabase.com) e um novo projeto
+2. No projeto, vá em **SQL Editor** → cole o conteúdo do arquivo `supabase-setup.sql`
+   (vem junto neste pacote) → **Run**
+3. Vá em **Project Settings → API** e copie:
+   - **Project URL**
+   - **service_role key** (não é a "anon" — precisa ser a "service_role", que tem
+     permissão de escrita; fica visível clicando em "Reveal")
+4. No Render: **Environment** → adicione:
+   - `SUPABASE_URL` = a Project URL que você copiou
+   - `SUPABASE_SERVICE_KEY` = a service_role key
+5. Salve — o Render reinicia o serviço sozinho
+
+No log do serviço (aba **Logs** no Render), você deve ver `☁️ Verificando
+backup no Supabase...` toda vez que reiniciar. Sem essas duas variáveis
+configuradas, o sistema continua funcionando normal (bom pra testar
+localmente), só que sem esse backup.
+
+### Alternativa: Disco Persistente (se algum dia migrar pra um plano pago)
+
+Se no futuro você assinar um plano pago no Render, também dá pra usar disco
+persistente de verdade, sem depender do Supabase:
+1. **Settings → Disks → Add Disk**, Mount Path `/var/data`
+2. **Environment** → `DATA_DIR=/var/data` e `UPLOADS_DIR=/var/data/uploads`
+
+Os dois métodos (Supabase e Disco) podem ficar configurados ao mesmo tempo sem
+problema — o disco vira o armazenamento principal, e o Supabase segue como
+backup extra.
+
 ## Rodando localmente
 
 ```bash
