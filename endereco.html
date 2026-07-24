@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shogatsu — Endereço de Entrega</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=Poppins:wght@600&display=swap" rel="stylesheet">
+<script src="https://maps.googleapis.com/maps/api/js?key=SUA_CHAVE_AQUI&libraries=places&language=pt-BR"></script>
+<style>
+:root{
+  --black:#0a0a0a;--panel:#161412;--card:#1e1a16;--border:#2a2420;
+  --red:#c0392b;--red-lt:#e05a4a;--red-dk:#8a1f15;
+  --gold:#c9a84c;--gold-dk:#a08030;--cream:#f5ede0;--muted:#7a6a60;--white:#f0e8e0;
+  --green:#27ae60;--green-lt:#2ecc71;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--black);color:var(--white);font-family:'Inter',sans-serif;min-height:100vh;padding:24px 14px 60px;}
+.wrap{max-width:640px;margin:0 auto;}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;opacity:0;transform:translateY(14px);animation:riseIn .55s ease forwards;}
+@keyframes riseIn{to{opacity:1;transform:translateY(0);}}
+.card + .card{margin-top:14px;}
+.card.d1{animation-delay:.05s;} .card.d2{animation-delay:.15s;} .card.d3{animation-delay:.25s;}
+
+.sec-title{font-family:'Playfair Display',serif;font-weight:600;font-size:15px;color:var(--white);padding:16px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.sec-body{padding:18px 20px 20px;}
+
+.hero{padding:30px 24px 22px;text-align:center;position:relative;background:radial-gradient(ellipse at top, rgba(201,168,76,.08), transparent 70%);}
+.hero h1{font-family:'Playfair Display',serif;font-weight:700;font-size:24px;color:var(--cream);letter-spacing:.3px;}
+.hero p{font-size:13px;color:var(--muted);margin-top:4px;}
+
+.input-group{margin-bottom:16px;}
+.input-group label{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;font-weight:600;}
+.input-group input, .input-group textarea{
+  width:100%;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:12px;
+  font-size:15px;color:var(--cream);font-family:'Inter',sans-serif;transition:border-color .2s;
+}
+.input-group input:focus, .input-group textarea:focus{outline:none;border-color:var(--gold);}
+.input-group input::placeholder, .input-group textarea::placeholder{color:var(--muted);}
+.input-group textarea{resize:vertical;min-height:60px;}
+
+.pac-container{
+  background:var(--card)!important;border:1px solid var(--border)!important;border-radius:12px!important;
+  margin-top:4px!important;box-shadow:0 8px 30px rgba(0,0,0,.5)!important;font-family:'Inter',sans-serif!important;
+}
+.pac-item{padding:12px 16px!important;font-size:14px!important;color:var(--cream)!important;border-bottom:1px solid var(--border)!important;}
+.pac-item:hover{background:var(--border)!important;}
+.pac-item-query{color:var(--white)!important;font-weight:500;}
+.pac-matched{color:var(--gold)!important;}
+.pac-icon{display:none!important;}
+
+.delivery-info{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px;display:none;}
+.delivery-info.active{display:block;animation:riseIn .4s ease;}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+.info-row:last-child{border-bottom:none;}
+.info-label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.info-value{font-size:14px;font-weight:600;color:var(--cream);}
+.fee-highlight{color:var(--gold);font-size:20px;font-family:'Playfair Display',serif;}
+.free-delivery{color:var(--green-lt);font-size:18px;font-weight:700;}
+
+.breakdown{margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);}
+.breakdown-item{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:3px 0;}
+.breakdown-item span:first-child{display:flex;align-items:center;gap:4px;}
+
+.not-available{
+  background:rgba(192,57,43,.1);border:1px solid var(--red-dk);border-radius:12px;
+  padding:20px;text-align:center;color:var(--red-lt);font-weight:500;display:none;margin-top:12px;
+}
+.not-available.active{display:block;animation:riseIn .4s ease;}
+.not-available div{font-size:13px;margin-top:8px;font-weight:normal;color:var(--muted);}
+
+.loading{display:none;text-align:center;padding:20px;color:var(--muted);}
+.loading.active{display:block;}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.minimum-warning{
+  background:rgba(201,168,76,.08);border:1px solid var(--gold-dk);border-radius:8px;
+  padding:10px 14px;font-size:13px;color:var(--gold);margin-top:10px;display:none;
+}
+.minimum-warning.active{display:block;}
+
+.cart-item{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
+.cart-item-name{font-size:14px;color:var(--cream);}
+.cart-item-price{font-size:14px;font-weight:600;color:var(--cream);}
+.cart-total{display:flex;justify-content:space-between;padding:16px 0;font-size:18px;font-weight:700;border-top:2px solid var(--gold);margin-top:8px;}
+.cart-total span:first-child{font-family:'Playfair Display',serif;color:var(--cream);}
+.cart-total span:last-child{color:var(--gold);font-family:'Playfair Display',serif;font-size:22px;}
+
+.btn{
+  width:100%;padding:16px;border:none;border-radius:12px;font-size:15px;font-weight:600;
+  cursor:pointer;transition:all .2s;font-family:'Poppins',sans-serif;letter-spacing:.3px;
+}
+.btn-primary{
+  background:linear-gradient(135deg, var(--gold), var(--gold-dk));color:#1a1408;
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(201,168,76,.3);}
+.btn-primary:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;transform:none;box-shadow:none;}
+
+.zone-badge{
+  display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--gold);
+  background:rgba(201,168,76,.1);padding:4px 10px;border-radius:20px;border:1px solid var(--gold-dk);
+}
+
+.saved-addresses{margin-top:12px;}
+.saved-addr{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;
+  transition:all .2s;
+}
+.saved-addr:hover{border-color:var(--gold);background:rgba(201,168,76,.05);}
+.saved-addr .icon{font-size:18px;}
+.saved-addr .info{flex:1;}
+.saved-addr .info b{font-size:13px;color:var(--cream);display:block;}
+.saved-addr .info span{font-size:11px;color:var(--muted);}
+
+.g-title{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
+.g-name{font-size:13px;font-weight:600;color:var(--cream);}
+.g-line{font-size:12px;color:var(--muted);line-height:1.5;}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;}
+.grid2 > div{padding:16px 18px;}
+.grid2 > div:first-child{border-right:1px solid var(--border);}
+@media (max-width:480px){
+  .grid2{grid-template-columns:1fr;}
+  .grid2 > div:first-child{border-right:none;border-bottom:1px solid var(--border);}
+}
+
+.map-preview{height:120px;border-radius:10px;margin-top:14px;border:1px solid var(--border);overflow:hidden;position:relative;}
+.map-preview iframe{width:100%;height:100%;border:none;filter:grayscale(.3) sepia(.1);}
+.map-overlay{position:absolute;bottom:8px;left:8px;background:rgba(10,10,10,.8);padding:4px 10px;border-radius:6px;font-size:11px;color:var(--gold);border:1px solid var(--gold-dk);}
+
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--red-lt);animation:pulse 1.4s infinite;display:inline-block;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(224,90,74,.5);}50%{box-shadow:0 0 0 7px rgba(224,90,74,0);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="card d1 hero">
+    <h1>📍 Endereço de Entrega</h1>
+    <p>Informe onde quer receber seu pedido</p>
+  </div>
+
+  <!-- ENDEREÇO -->
+  <div class="card d2">
+    <div class="sec-title">Local de entrega</div>
+    <div class="sec-body">
+      <div class="input-group">
+        <label>Endereço completo</label>
+        <input type="text" id="address-input" placeholder="Ex: Av. Gov. Roberto Silveira, 109, Rio das Ostras" autocomplete="off">
+      </div>
+
+      <div class="grid2" style="margin-bottom:16px;">
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Número</label>
+          <input type="text" id="address-number" placeholder="123">
+        </div>
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Complemento</label>
+          <input type="text" id="address-comp" placeholder="Apto 101">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Ponto de referência</label>
+        <textarea id="address-ref" placeholder="Próximo ao mercado, portão azul..."></textarea>
+      </div>
+
+      <!-- Loading -->
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div>Calculando rota e taxa de entrega...</div>
+      </div>
+
+      <!-- Não entrega -->
+      <div class="not-available" id="not-available">
+        ❌ Não entregamos nessa região
+        <div>Tente um endereço mais próximo do restaurante</div>
+      </div>
+
+      <!-- Info de entrega -->
+      <div class="delivery-info" id="delivery-info">
+        <div class="info-row">
+          <span class="info-label">📏 Distância</span>
+          <span class="info-value" id="distance">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">⏱️ Tempo estimado</span>
+          <span class="info-value" id="duration">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">🚚 Taxa de entrega</span>
+          <span class="info-value" id="fee">-</span>
+        </div>
+        <div class="breakdown" id="breakdown"></div>
+        <div class="minimum-warning" id="minimum-warning"></div>
+
+        <div class="map-preview" id="map-preview" style="display:none;">
+          <iframe id="map-frame" src="" loading="lazy"></iframe>
+          <div class="map-overlay"><span class="pulse-dot"></span> Restaurante → Você</div>
+        </div>
+      </div>
+
+      <!-- Endereços salvos -->
+      <div class="saved-addresses" id="saved-addresses" style="display:none;">
+        <div class="g-title" style="margin-top:16px;">Endereços salvos</div>
+        <div id="saved-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESUMO DO PEDIDO -->
+  <div class="card d3">
+    <div class="sec-title">Resumo do pedido</div>
+    <div class="sec-body">
+      <div id="cart-items">
+        <div class="cart-item">
+          <span class="cart-item-name">1x Temaki de Salmão</span>
+          <span class="cart-item-price">R$ 18,90</span>
+        </div>
+        <div class="cart-item">
+          <span class="cart-item-name">1x Combo Executivo</span>
+          <span class="cart-item-price">R$ 35,00</span>
+        </div>
+        <div class="cart-item">
+          <span class="cart-item-name">1x Coca-Cola 350ml</span>
+          <span class="cart-item-price">R$ 6,00</span>
+        </div>
+      </div>
+      <div class="cart-item" style="border-bottom:2px solid var(--gold);margin-top:8px;">
+        <span class="cart-item-name">Subtotal</span>
+        <span class="cart-item-price" id="subtotal">R$ 59,90</span>
+      </div>
+      <div class="cart-item" id="delivery-fee-row">
+        <span class="cart-item-name">Taxa de entrega</span>
+        <span class="cart-item-price" id="delivery-fee-display" style="color:var(--muted);">A calcular</span>
+      </div>
+      <div class="cart-total">
+        <span>Total</span>
+        <span id="total">R$ 59,90</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTÃO -->
+  <div class="card d3" style="border:none;background:transparent;">
+    <button class="btn btn-primary" id="btn-finish" disabled>
+      Continuar para pagamento
+    </button>
+  </div>
+
+</div>
+
+<script>
+// ============ CONFIGURAÇÃO ============
+const API_URL = 'http://localhost:3000/api';
+const SUBTOTAL = 59.90;
+let currentDeliveryFee = 0;
+let deliveryAvailable = false;
+let currentAddress = null;
+
+// ============ GOOGLE PLACES AUTOCOMPLETE ============
+const addressInput = document.getElementById('address-input');
+const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+  componentRestrictions: { country: 'br' },
+  fields: ['formatted_address', 'geometry', 'place_id'],
+  types: ['address']
+});
+
+autocomplete.addListener('place_changed', onPlaceChanged);
+
+async function onPlaceChanged() {
+  const place = autocomplete.getPlace();
+  if (!place.geometry) {
+    showError('Selecione um endereço da lista');
+    return;
+  }
+
+  const lat = place.geometry.location.lat();
+  const lng = place.geometry.location.lng();
+  const address = place.formatted_address;
+
+  currentAddress = { lat, lng, address };
+  saveAddress({ lat, lng, address });
+  await calculateDelivery(lat, lng, address);
+}
+
+// ============ CALCULAR ENTREGA ============
+async function calculateDelivery(lat, lng, address) {
+  showLoading(true);
+  hideDeliveryInfo();
+  hideNotAvailable();
+
+  try {
+    const response = await fetch(`${API_URL}/delivery/calculate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, address, orderValue: SUBTOTAL })
+    });
+
+    const data = await response.json();
+    showLoading(false);
+
+    if (!data.success) {
+      showError(data.error || 'Erro ao calcular');
+      return;
+    }
+
+    if (!data.available) {
+      showNotAvailable(data.reason, data.message);
+      updateCart(0, false);
+      return;
+    }
+
+    showDeliveryInfo(data);
+    updateCart(data.fee.amount, true);
+    showMap(data.restaurantLocation, data.customerLocation);
+
+  } catch (error) {
+    showLoading(false);
+    showError('Erro de conexão. Verifique se a API está rodando.');
+    console.error(error);
+  }
+}
+
+// ============ MOSTRAR INFO ============
+function showDeliveryInfo(data) {
+  const info = document.getElementById('delivery-info');
+  document.getElementById('distance').textContent = data.distance.text;
+  document.getElementById('duration').textContent = data.duration.text;
+
+  const feeEl = document.getElementById('fee');
+  if (data.freeDelivery) {
+    feeEl.innerHTML = '<span class="free-delivery">GRÁTIS</span>';
+  } else {
+    feeEl.innerHTML = `<span class="fee-highlight">${data.fee.formatted}</span>`;
+  }
+
+  // Breakdown
+  const breakdownEl = document.getElementById('breakdown');
+  if (data.breakdown && data.breakdown.adjustments.length > 0) {
+    breakdownEl.innerHTML = data.breakdown.adjustments.map(adj => {
+      if (adj.type === 'FREE_DELIVERY') {
+        return `<div class="breakdown-item"><span>✅ ${adj.description}</span></div>`;
+      }
+      if (adj.type === 'SURGE') {
+        return `<div class="breakdown-item"><span>⚡ ${adj.description} (+${Math.round((adj.multiplier - 1) * 100)}%)</span></div>`;
+      }
+      return `<div class="breakdown-item"><span>• ${adj.description}</span><span>${adj.amount ? 'R$ ' + adj.amount.toFixed(2).replace('.', ',') : ''}</span></div>`;
+    }).join('');
+  } else {
+    breakdownEl.innerHTML = '';
+  }
+
+  // Aviso de valor mínimo
+  const minWarning = document.getElementById('minimum-warning');
+  if (!data.rules.meetsMinimum) {
+    const missing = (data.rules.minimumOrderValue - SUBTOTAL).toFixed(2);
+    minWarning.innerHTML = `⚠️ Faltam <strong>R$ ${missing.replace('.', ',')}</strong> para atingir o valor mínimo de R$ ${data.rules.minimumOrderValue.toFixed(2).replace('.', ',')}`;
+    minWarning.classList.add('active');
+    document.getElementById('btn-finish').disabled = true;
+  } else {
+    minWarning.classList.remove('active');
+    document.getElementById('btn-finish').disabled = false;
+  }
+
+  info.classList.add('active');
+}
+
+function hideDeliveryInfo() {
+  document.getElementById('delivery-info').classList.remove('active');
+  document.getElementById('map-preview').style.display = 'none';
+}
+
+function showNotAvailable(reason, message) {
+  const el = document.getElementById('not-available');
+  el.querySelector('div').textContent = message || 'Tente um endereço mais próximo do restaurante';
+  el.classList.add('active');
+}
+
+function hideNotAvailable() {
+  document.getElementById('not-available').classList.remove('active');
+}
+
+function showLoading(show) {
+  document.getElementById('loading').classList.toggle('active', show);
+}
+
+function showError(msg) {
+  // Toast simples
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--red-dk);color:var(--cream);padding:12px 20px;border-radius:10px;z-index:100;font-size:13px;border:1px solid var(--red);animation:riseIn .3s ease;';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ============ MAPA ============
+function showMap(restaurant, customer) {
+  const preview = document.getElementById('map-preview');
+  const frame = document.getElementById('map-frame');
+
+  // Usa Google Maps Static API para preview
+  const apiKey = 'SUA_CHAVE_AQUI';
+  const url = `https://maps.googleapis.com/maps/api/staticmap?size=600x200&markers=color:gold|label:R|${restaurant.lat},${restaurant.lng}&markers=color:red|label:V|${customer.lat},${customer.lng}&path=color:0xc9a84c|weight:3|${restaurant.lat},${restaurant.lng}|${customer.lat},${customer.lng}&style=feature:all|element:all|saturation:-100|invert_lightness:true&key=${apiKey}`;
+
+  frame.src = url;
+  preview.style.display = 'block';
+}
+
+// ============ ATUALIZAR CARRINHO ============
+function updateCart(fee, available) {
+  currentDeliveryFee = fee;
+  deliveryAvailable = available;
+
+  const feeDisplay = document.getElementById('delivery-fee-display');
+  const totalEl = document.getElementById('total');
+  const btn = document.getElementById('btn-finish');
+
+  if (!available) {
+    feeDisplay.textContent = 'Não disponível';
+    feeDisplay.style.color = 'var(--muted)';
+    totalEl.textContent = `R$ ${SUBTOTAL.toFixed(2).replace('.', ',')}`;
+    btn.disabled = true;
+    return;
+  }
+
+  if (fee === 0) {
+    feeDisplay.innerHTML = '<span style="color:var(--green-lt);font-weight:700;">GRÁTIS</span>';
+  } else {
+    feeDisplay.textContent = `R$ ${fee.toFixed(2).replace('.', ',')}`;
+    feeDisplay.style.color = 'var(--cream)';
+  }
+
+  const total = SUBTOTAL + fee;
+  totalEl.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+}
+
+// ============ ENDEREÇOS SALVOS ============
+function saveAddress(addr) {
+  let saved = JSON.parse(localStorage.getItem('shogatsuAddresses') || '[]');
+  // Evita duplicados
+  saved = saved.filter(a => a.address !== addr.address);
+  saved.unshift(addr);
+  if (saved.length > 3) saved = saved.slice(0, 3);
+  localStorage.setItem('shogatsuAddresses', JSON.stringify(saved));
+  renderSavedAddresses();
+}
+
+function renderSavedAddresses() {
+  const saved = JSON.parse(localStorage.getItem('shogatsuAddresses') || '[]');
+  const container = document.getElementById('saved-addresses');
+  const list = document.getElementById('saved-list');
+
+  if (saved.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  list.innerHTML = saved.map((addr, i) => `
+    <div class="saved-addr" onclick="useSavedAddress(${i})">
+      <div class="icon">📍</div>
+      <div class="info">
+        <b>${addr.address.split(',')[0]}</b>
+        <span>${addr.address.split(',').slice(1).join(',').trim()}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function useSavedAddress(index) {
+  const saved = JSON.parse(localStorage.getItem('shogatsuAddresses') || '[]');
+  const addr = saved[index];
+  if (!addr) return;
+
+  addressInput.value = addr.address;
+  currentAddress = addr;
+  calculateDelivery(addr.lat, addr.lng, addr.address);
+}
+
+// ============ INICIAR ============
+document.addEventListener('DOMContentLoaded', () => {
+  renderSavedAddresses();
+
+  // Carrega endereço atual se existir
+  const current = localStorage.getItem('shogatsuCurrentAddress');
+  if (current) {
+    const addr = JSON.parse(current);
+    addressInput.value = addr.address;
+    currentAddress = addr;
+    calculateDelivery(addr.lat, addr.lng, addr.address);
+  }
+
+  document.getElementById('btn-finish').addEventListener('click', () => {
+    if (!deliveryAvailable || !currentAddress) return;
+
+    // Salva endereço completo com número, complemento, referência
+    const fullAddress = {
+      ...currentAddress,
+      number: document.getElementById('address-number').value,
+      complement: document.getElementById('address-comp').value,
+      reference: document.getElementById('address-ref').value,
+      fee: currentDeliveryFee
+    };
+    localStorage.setItem('shogatsuCurrentAddress', JSON.stringify(fullAddress));
+
+    // Redireciona para pagamento
+    window.location.href = '/pagamento.html';
+  });
+});
+</script>
+</body>
+</html>
