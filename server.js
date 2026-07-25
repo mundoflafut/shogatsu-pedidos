@@ -24,26 +24,7 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subs.json');
-// v30 (C1): sessões do painel passam a ser persistidas em disco (e, se configurado, no Supabase),
-// em vez de ficarem só na memória do processo — assim um restart do servidor (deploy, ou o site
-// "acordando" no plano Free do Render) não derruba mais todo mundo que estava logado.
-const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
-// v30 (M3): número do pedido (ticket) ganha um arquivo próprio, separado do config.json/cardápio —
-// antes, atribuir um número relia e regravava o arquivo inteiro do cardápio, o que era frágil.
-const TICKET_FILE = path.join(DATA_DIR, 'ticket-counter.json');
 const webpush = require('./webpush');
-
-// ═══════════════════════════════════════════════════════════
-// LOGGER — v30 (B1): ponto único pra logs de integrações externas (Twilio, Mercado Pago,
-// Supabase, geocodificação), com carimbo de hora e contexto, pra facilitar auditoria depois.
-// Continua indo pro mesmo lugar de sempre (console/log do Render), só que padronizado.
-// ═══════════════════════════════════════════════════════════
-function log(level, context, msg, extra) {
-  const ts = new Date().toISOString();
-  const line = `[${ts}] [${String(level).toUpperCase()}] [${context}] ${msg}`;
-  const fn = level === 'error' ? console.error : (level === 'warn' ? console.warn : console.log);
-  if (extra !== undefined) fn(line, extra); else fn(line);
-}
 
 // ─── Config / Menu padrão (usados só na primeira execução) ───
 const DEFAULT_CFG = {
@@ -167,20 +148,6 @@ if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
 if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 if (!fs.existsSync(RESERVATIONS_FILE)) fs.writeFileSync(RESERVATIONS_FILE, '[]');
 if (!fs.existsSync(PUSH_SUBS_FILE)) fs.writeFileSync(PUSH_SUBS_FILE, '[]');
-if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '{}');
-if (!fs.existsSync(TICKET_FILE)) {
-  // v30 (M3): se já existia um config.json com um nextTicketNumber (versão anterior), migra esse
-  // valor pro novo arquivo em vez de resetar o ciclo pra 1.
-  let seed = 1;
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const prev = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-      const n = Number(prev.cfg && prev.cfg.nextTicketNumber);
-      if (n >= 1 && n <= 200) seed = n;
-    }
-  } catch (e) { /* mantém seed = 1 */ }
-  fs.writeFileSync(TICKET_FILE, JSON.stringify({ nextTicketNumber: seed }));
-}
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -191,26 +158,13 @@ function ensureVapidKeys() {
       const keys = webpush.generateVapidKeys();
       data.cfg.vapid = { publicKey: keys.publicKey, privateKeyJwk: keys.privateKeyJwk, subject: (data.cfg.vapid && data.cfg.vapid.subject) || DEFAULT_CFG.vapid.subject };
       fs.writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2));
-      log('info', 'vapid', 'Chaves VAPID geradas (primeira execução) — notificação push já pode ser usada.');
+      console.log('🔔 Chaves VAPID geradas (primeira execução) — notificação push já pode ser usada.');
     }
-  } catch (e) { log('error', 'vapid', 'Não consegui gerar as chaves VAPID', e.message); }
+  } catch (e) { console.error('⚠️  Não consegui gerar as chaves VAPID:', e.message); }
 }
 ensureVapidKeys();
 
 function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-// v30 (M3): contador de número de pedido isolado num arquivo próprio — antes ele vivia dentro do
-// config.json (junto do cardápio inteiro), e atribuir um número relia/regravava o arquivo todo,
-// o que abria uma janela (mínima, mas real) pra uma escrita concorrente sobrescrever a outra.
-function readTicketCounter() {
-  try {
-    const data = readJSON(TICKET_FILE);
-    const n = Number(data.nextTicketNumber);
-    return (n >= 1 && n <= 200) ? n : 1;
-  } catch (e) { return 1; }
-}
-function writeTicketCounter(next) {
-  writeJSON(TICKET_FILE, { nextTicketNumber: next });
-}
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
   syncToSupabase(file, data); // fire-and-forget — nunca trava nem quebra a resposta ao usuário
@@ -230,7 +184,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [SESSIONS_FILE]: 'sessions', [TICKET_FILE]: 'ticket_counter' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -267,23 +221,23 @@ function syncToSupabase(file, data) {
   const key = FILE_TO_KEY[file];
   if (!key || !SUPABASE_URL || !SUPABASE_KEY) return;
   supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: data, updated_at: new Date().toISOString() })
-    .catch(err => log('error', 'supabase', `Falha ao sincronizar "${key}" com o Supabase`, err.message));
+    .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message));
 }
 
 // Roda uma vez, ao ligar o servidor: se tiver Supabase configurado, traz de volta o último
 // estado salvo (útil logo depois de um deploy que apagou o disco local do Render).
 async function restoreFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
-  log('info', 'supabase', 'Verificando backup no Supabase...');
+  console.log('☁️  Verificando backup no Supabase...');
   await Promise.allSettled(Object.entries(FILE_TO_KEY).map(async ([file, key]) => {
     try {
       const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=eq.${key}&select=value`);
       if (rows && rows[0] && rows[0].value !== undefined) {
         fs.writeFileSync(file, JSON.stringify(rows[0].value, null, 2));
-        log('info', 'supabase', `"${key}" restaurado do Supabase`);
+        console.log(`   ✓ "${key}" restaurado do Supabase`);
       }
     } catch (err) {
-      log('error', 'supabase', `Não consegui restaurar "${key}" do Supabase`, err.message);
+      console.error(`   ⚠️  Não consegui restaurar "${key}" do Supabase:`, err.message);
     }
   }));
 }
@@ -333,58 +287,20 @@ function readConfig() {
   return { cfg, menu: normalizeMenu(data.menu) };
 }
 
-// ─── Sessões admin ───
-// v30 (C1): antes, isso ficava só na memória do processo — qualquer restart do servidor (novo
-// deploy, ou o site "acordando" de novo no plano Free do Render) apagava todo mundo que estava
-// logado, sem aviso, e a conexão em tempo real do painel (/api/stream) parava de funcionar
-// silenciosamente. Agora as sessões são salvas em disco (e sincronizadas no Supabase, se
-// configurado) toda vez que mudam, e recarregadas quando o servidor liga de novo.
+// ─── Sessões admin (em memória) ───
 const sessions = new Map(); // token -> { expiresAt, role, username }
-function persistSessions() {
-  const obj = {};
-  for (const [token, s] of sessions.entries()) obj[token] = s;
-  try { writeJSON(SESSIONS_FILE, obj); } catch (e) { log('error', 'sessions', 'Não consegui salvar sessões em disco', e.message); }
-}
-function loadSessionsFromDisk() {
-  try {
-    const obj = readJSON(SESSIONS_FILE);
-    const now = Date.now();
-    let loaded = 0;
-    for (const [token, s] of Object.entries(obj || {})) {
-      if (s && s.expiresAt > now) { sessions.set(token, s); loaded++; }
-    }
-    if (loaded) log('info', 'sessions', `${loaded} sessão(ões) restaurada(s) — ninguém precisa logar de novo por causa do restart.`);
-  } catch (e) { log('warn', 'sessions', 'Não encontrei sessões salvas em disco (normal na primeira execução).'); }
-}
 function newSession(role, username) {
   const token = crypto.randomBytes(24).toString('hex');
   sessions.set(token, { expiresAt: Date.now() + 1000 * 60 * 60 * 12, role: role || 'admin', username: username || 'admin' }); // 12h
-  persistSessions();
   return token;
-}
-function destroySession(token) {
-  if (sessions.delete(token)) persistSessions();
 }
 function getSession(token) {
   if (!token) return null;
   const s = sessions.get(token);
-  if (!s || s.expiresAt < Date.now()) {
-    const existed = sessions.delete(token);
-    if (existed) persistSessions();
-    return null;
-  }
+  if (!s || s.expiresAt < Date.now()) { sessions.delete(token); return null; }
   return s;
 }
 function checkAuth(token) { return !!getSession(token); }
-// Limpeza periódica das sessões expiradas, pra o arquivo/tabela não crescer indefinidamente.
-setInterval(() => {
-  const now = Date.now();
-  let removed = false;
-  for (const [token, s] of sessions.entries()) {
-    if (s.expiresAt < now) { sessions.delete(token); removed = true; }
-  }
-  if (removed) persistSessions();
-}, 1000 * 60 * 30);
 // master > admin > vendas — checa se a sessão tem o nível mínimo pedido
 const ROLE_RANK = { vendas: 1, admin: 2, master: 3 };
 function requireRole(token, minRole) {
@@ -803,24 +719,9 @@ function sendJSON(res, status, obj) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let chunks = '';
-    let tooLarge = false;
-    req.on('data', c => {
-      if (tooLarge) return;
-      chunks += c;
-      if (chunks.length > 8e6) {
-        tooLarge = true;
-        // v30 (A3): antes, req.destroy() aqui não disparava nem 'end' nem 'error' — a Promise
-        // nunca era resolvida nem rejeitada, e a conexão ficava pendurada até dar timeout.
-        // Agora rejeitamos explicitamente com uma mensagem clara.
-        reject(new Error('payload too large'));
-        req.destroy();
-      }
-    });
-    req.on('end', () => {
-      if (tooLarge) return; // já rejeitado acima
-      try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { reject(e); }
-    });
-    req.on('error', (e) => { if (!tooLarge) reject(e); });
+    req.on('data', c => { chunks += c; if (chunks.length > 8e6) req.destroy(); });
+    req.on('end', () => { try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { reject(e); } });
+    req.on('error', reject);
   });
 }
 function getToken(req, query) {
@@ -828,57 +729,6 @@ function getToken(req, query) {
   if (h && h.startsWith('Bearer ')) return h.slice(7);
   return query.token || null;
 }
-// Pega o IP de quem fez a requisição — no Render (atrás de proxy) o IP real vem no
-// cabeçalho x-forwarded-for; localmente usa o socket direto.
-function getClientIP(req) {
-  const fwd = req.headers['x-forwarded-for'];
-  if (fwd) return String(fwd).split(',')[0].trim();
-  return req.socket && req.socket.remoteAddress || 'desconhecido';
-}
-
-// ═══════════════════════════════════════════════════════════
-// PROTEÇÃO CONTRA FORÇA BRUTA NO LOGIN — v30 (A1)
-// ═══════════════════════════════════════════════════════════
-// Antes não existia nenhum limite: um script podia tentar milhares de senhas por minuto.
-// Agora, por IP: depois de 5 tentativas erradas em 10 minutos, bloqueia temporariamente com
-// atraso crescente (30s, 1min, 2min, 4min... até um teto de 15min), resetando ao acertar a senha.
-const loginAttempts = new Map(); // ip -> { count, firstAttemptAt, lockedUntil }
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 1000 * 60 * 10;
-const LOGIN_BASE_LOCK_MS = 1000 * 30;
-const LOGIN_MAX_LOCK_MS = 1000 * 60 * 15;
-function loginRateLimit(ip) {
-  const now = Date.now();
-  const rec = loginAttempts.get(ip);
-  if (!rec) return { blocked: false };
-  if (rec.lockedUntil && rec.lockedUntil > now) {
-    return { blocked: true, retryAfterSec: Math.ceil((rec.lockedUntil - now) / 1000) };
-  }
-  if (rec.firstAttemptAt < now - LOGIN_WINDOW_MS) { loginAttempts.delete(ip); return { blocked: false }; }
-  return { blocked: false };
-}
-function registerLoginFailure(ip) {
-  const now = Date.now();
-  let rec = loginAttempts.get(ip);
-  if (!rec || rec.firstAttemptAt < now - LOGIN_WINDOW_MS) rec = { count: 0, firstAttemptAt: now, lockedUntil: 0, lockLevel: 0 };
-  rec.count++;
-  if (rec.count >= LOGIN_MAX_ATTEMPTS) {
-    const lockMs = Math.min(LOGIN_BASE_LOCK_MS * Math.pow(2, rec.lockLevel), LOGIN_MAX_LOCK_MS);
-    rec.lockedUntil = now + lockMs;
-    rec.lockLevel++;
-    rec.count = 0;
-    rec.firstAttemptAt = now;
-  }
-  loginAttempts.set(ip, rec);
-}
-function registerLoginSuccess(ip) { loginAttempts.delete(ip); }
-// Limpeza periódica pra o Map não crescer indefinidamente com IPs antigos.
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, rec] of loginAttempts.entries()) {
-    if ((!rec.lockedUntil || rec.lockedUntil < now) && rec.firstAttemptAt < now - LOGIN_WINDOW_MS) loginAttempts.delete(ip);
-  }
-}, 1000 * 60 * 30);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
@@ -1107,13 +957,6 @@ const server = http.createServer(async (req, res) => {
 
   // ── POST /api/login — autenticação do painel (usuário + senha, com nível de acesso) ──
   if (pathname === '/api/login' && req.method === 'POST') {
-    const ip = getClientIP(req);
-    // v30 (A1): bloqueia tentativas repetidas antes de sequer olhar usuário/senha.
-    const rl = loginRateLimit(ip);
-    if (rl.blocked) {
-      res.setHeader('Retry-After', String(rl.retryAfterSec));
-      return sendJSON(res, 429, { error: `Muitas tentativas de login. Tente de novo em ${rl.retryAfterSec}s.` });
-    }
     try {
       const { username, password } = await readBody(req);
       const { cfg } = readConfig();
@@ -1122,33 +965,16 @@ const server = http.createServer(async (req, res) => {
       if (uname) {
         const user = (cfg.users || []).find(u => String(u.username || '').toLowerCase() === uname);
         if (user && password === user.password) {
-          registerLoginSuccess(ip);
           return sendJSON(res, 200, { token: newSession(user.role, user.username), role: user.role, username: user.username });
         }
-        registerLoginFailure(ip);
         return sendJSON(res, 401, { error: 'Usuário ou senha incorretos.' });
       }
 
       // Compatibilidade: login sem usuário (só senha) continua funcionando como antes.
-      if (password === cfg.adminPass) { registerLoginSuccess(ip); return sendJSON(res, 200, { token: newSession('admin', 'admin'), role: 'admin', username: 'admin' }); }
-      if (password === cfg.masterPass) { registerLoginSuccess(ip); return sendJSON(res, 200, { token: newSession('master', 'master'), role: 'master', username: 'master' }); }
-      registerLoginFailure(ip);
+      if (password === cfg.adminPass) return sendJSON(res, 200, { token: newSession('admin', 'admin'), role: 'admin', username: 'admin' });
+      if (password === cfg.masterPass) return sendJSON(res, 200, { token: newSession('master', 'master'), role: 'master', username: 'master' });
       return sendJSON(res, 401, { error: 'senha incorreta' });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ── POST /api/logout — encerra a sessão atual no servidor (não só no navegador) ──
-  if (pathname === '/api/logout' && req.method === 'POST') {
-    destroySession(getToken(req, query));
-    return sendJSON(res, 200, { ok: true });
-  }
-
-  // ── GET /api/whoami — checagem leve de sessão (usada pelo painel pra confirmar se o token
-  // ainda é válido quando a conexão em tempo real cai, ver C2) ──
-  if (pathname === '/api/whoami' && req.method === 'GET') {
-    const s = getSession(getToken(req, query));
-    if (!s) return sendJSON(res, 401, { error: 'unauthorized' });
-    return sendJSON(res, 200, { role: s.role, username: s.username, expiresAt: s.expiresAt });
   }
 
   // ── POST /api/pix — gera o copia-e-cola para um valor ──
@@ -1197,7 +1023,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       return sendJSON(res, 200, { ok: true });
-    } catch (e) { log('error', 'mercadopago', 'Falha ao processar webhook PIX', e.message); return sendJSON(res, 200, { ok: true }); } // webhook sempre responde 200 (padrão do provedor), erro só fica no log
+    } catch (e) { return sendJSON(res, 200, { ok: true }); } // webhook sempre responde 200 (padrão do provedor), erro só fica no log
   }
 
   if (pathname === '/api/pix' && req.method === 'POST') {
@@ -1368,54 +1194,6 @@ const server = http.createServer(async (req, res) => {
   }
 
 
-  // ── POST /api/admin/geocode-by-cep — localiza a loja a partir do CEP, usando a BrasilAPI
-  // (serviço brasileiro, com infraestrutura própria — não sofre do bloqueio de IP compartilhado
-  // que o Nominatim às vezes aplica em servidores como o Render). Quando a BrasilAPI já tem a
-  // coordenada cadastrada pro CEP, usa direto; senão, monta o endereço a partir do CEP e cai no
-  // mesmo fluxo de geocodificação por texto (Nominatim → Photon) como último recurso. ──
-  if (pathname === '/api/admin/geocode-by-cep' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    try {
-      const body = await readBody(req);
-      const cep = String(body.cep || '').replace(/\D/g, '');
-      if (cep.length !== 8) return sendJSON(res, 400, { error: 'Digite um CEP válido, com 8 dígitos (ex: 28890-000).' });
-
-      let cepData = null;
-      try {
-        cepData = await httpsGetJSON(`https://brasilapi.com.br/api/cep/v2/${cep}`, {}, 8000);
-      } catch (e) {
-        log('warn', 'geocode', `BrasilAPI não respondeu pro CEP ${cep}`, e.message);
-      }
-      if (!cepData) return sendJSON(res, 404, { error: 'CEP não encontrado. Confira se digitou certo, ou use o campo de coordenadas manuais abaixo.' });
-
-      // A BrasilAPI às vezes já vem com a coordenada pronta pra esse CEP — o caminho mais rápido e confiável
-      const coords = cepData.location && cepData.location.coordinates;
-      if (coords && coords.latitude && coords.longitude) {
-        const { cfg } = readConfig();
-        cfg.storeLat = parseFloat(coords.latitude);
-        cfg.storeLng = parseFloat(coords.longitude);
-        writeJSON(CONFIG_FILE, cfg);
-        return sendJSON(res, 200, {
-          lat: cfg.storeLat, lng: cfg.storeLng,
-          label: [cepData.street, cepData.neighborhood, cepData.city, cepData.state].filter(Boolean).join(', '),
-          source: 'brasilapi-direto'
-        });
-      }
-
-      // Sem coordenada pronta: monta o endereço a partir do que o CEP devolveu e tenta geocodificar o texto
-      const addressFromCep = [cepData.street, cepData.neighborhood, cepData.city, cepData.state, 'Brasil'].filter(Boolean).join(', ');
-      const geo = await geocodeAddress(addressFromCep);
-      if (!geo) return sendJSON(res, 404, { error: `Achamos o endereço do CEP (${addressFromCep}), mas não conseguimos converter em coordenadas agora. Use o campo de coordenadas manuais abaixo.` });
-      const { cfg } = readConfig();
-      cfg.storeLat = geo.lat; cfg.storeLng = geo.lng;
-      writeJSON(CONFIG_FILE, cfg);
-      return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label || addressFromCep, source: 'geocoded' });
-    } catch (e) {
-      log('error', 'geocode', 'Falha ao geocodificar por CEP', e.message);
-      return sendJSON(res, 500, { error: 'Não conseguimos processar esse CEP agora. Use o campo de coordenadas manuais abaixo.' });
-    }
-  }
-
   if (pathname === '/api/admin/geocode-store' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
@@ -1430,7 +1208,7 @@ const server = http.createServer(async (req, res) => {
       writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
     } catch (e) {
-      log('error', 'geocode', 'Falha ao geocodificar endereço da loja', e.message);
+      console.error('❌ Falha ao geocodificar endereço da loja:', e.message);
       const isBlocked = /HTTP 429/.test(e.message);
       return sendJSON(res, 500, {
         error: isBlocked
@@ -2108,11 +1886,13 @@ function estimateDeliveryWindow(order, cfg) {
       } else if (status === 'preparando' && !order.ticketNumber) {
         // Loja aceitou o pedido sem escolher um número manualmente — atribui o próximo da fila (1 a 200, cíclico),
         // pulando qualquer número que já esteja em uso por outro pedido ainda em andamento.
-        let next = readTicketCounter();
+        const cfgData = readConfig();
+        let next = Number(cfgData.cfg.nextTicketNumber) >= 1 && Number(cfgData.cfg.nextTicketNumber) <= 200 ? Number(cfgData.cfg.nextTicketNumber) : 1;
         const activeNumbers = new Set(orders.filter(o => o.id !== id && o.ticketNumber && !['entregue', 'cancelado'].includes(o.status)).map(o => o.ticketNumber));
         for (let i = 0; i < 200 && activeNumbers.has(next); i++) next = next >= 200 ? 1 : next + 1;
         order.ticketNumber = next;
-        writeTicketCounter(next >= 200 ? 1 : next + 1);
+        cfgData.cfg.nextTicketNumber = next >= 200 ? 1 : next + 1;
+        writeJSON(CONFIG_FILE, cfgData);
       }
       if (status === 'cancelado') {
         order.cancelReason = String(cancelReason || '').slice(0, 200) || 'Não informado';
@@ -2130,7 +1910,7 @@ function estimateDeliveryWindow(order, cfg) {
       const notifCfg = readConfig().cfg;
       if (notifCfg.sms && notifCfg.sms.notifyWhatsApp && WHATSAPP_STATUS_MESSAGES[order.status] && order.phone) {
         const msg = WHATSAPP_STATUS_MESSAGES[order.status](order, notifCfg);
-        sendWhatsApp(order.phone, msg, notifCfg.sms).catch(e => log('warn', 'twilio', `Falha ao enviar WhatsApp automático pro pedido ${order.id}`, e.message));
+        sendWhatsApp(order.phone, msg, notifCfg.sms).catch(() => {});
       }
       // v27: notificação push automática quando o status muda (independente do WhatsApp) —
       // só alcança quem ativou notificações E tem o telefone vinculado à inscrição.
@@ -2191,12 +1971,9 @@ function estimateDeliveryWindow(order, cfg) {
   }
 
   // ── GET /api/reviews — avaliações públicas e visíveis, pra mostrar no site ──
-  // v30 (B4): agora paginado (?offset=&limit=, limit máx 20) em vez de mandar até 50 de uma vez só
-  // pro navegador — a média e o total (average/count) continuam batendo com TODAS as avaliações
-  // visíveis, só a lista da página é que vem limitada.
   if (pathname === '/api/reviews' && req.method === 'GET') {
     const orders = readJSON(ORDERS_FILE);
-    const allReviews = orders
+    const reviews = orders
       .filter(o => o.review && !o.review.hidden)
       .map(o => ({
         name: String(o.name || 'Cliente').trim().split(' ')[0], // só o primeiro nome, por privacidade
@@ -2204,12 +1981,10 @@ function estimateDeliveryWindow(order, cfg) {
         comment: o.review.comment,
         createdAt: o.review.createdAt
       }))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const offset = Math.max(0, parseInt(query.offset) || 0);
-    const limit = Math.min(20, Math.max(1, parseInt(query.limit) || 20));
-    const page = allReviews.slice(offset, offset + limit);
-    const avg = allReviews.length ? Math.round((allReviews.reduce((s, r) => s + r.stars, 0) / allReviews.length) * 10) / 10 : null;
-    return sendJSON(res, 200, { reviews: page, average: avg, count: allReviews.length, hasMore: offset + limit < allReviews.length });
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 50);
+    const avg = reviews.length ? Math.round((reviews.reduce((s, r) => s + r.stars, 0) / reviews.length) * 10) / 10 : null;
+    return sendJSON(res, 200, { reviews, average: avg, count: reviews.length });
   }
 
   // ── GET /api/admin/reviews — todas as avaliações (inclusive ocultas), pra moderação ──
@@ -2276,9 +2051,8 @@ function estimateDeliveryWindow(order, cfg) {
 });
 
 restoreFromSupabase().finally(() => {
-  loadSessionsFromDisk(); // v30 (C1): recarrega sessões salvas — depois de restaurar do Supabase, se houver
   server.listen(PORT, () => {
-    log('info', 'server', `🍣 Shogatsu rodando em http://localhost:${PORT}`);
-    log('info', 'server', `   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+    console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+    console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
   });
 });
