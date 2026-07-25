@@ -388,16 +388,28 @@ async function lookupCEP(cep) {
   return { street: data.logradouro || '', hood: data.bairro || '', city: data.localidade || '', uf: data.uf || '' };
 }
 
-// Endereço em texto → { lat, lng } via Nominatim/OpenStreetMap (gratuito, sem chave)
-async function geocodeAddress(addressText) {
+// Endereço em texto → { lat, lng } via Nominatim/OpenStreetMap (gratuito, sem chave).
+// IPs de servidores na nuvem (Render, etc.) costumam ser compartilhados por muitos outros
+// projetos batendo no mesmo serviço gratuito, então de vez em quando ele responde "429 - limite
+// de requisições" mesmo sem essa loja ter abusado. Por isso, tenta de novo uma vez, esperando
+// um pouco (respeitando a política de no máx. 1 requisição/segundo do próprio Nominatim).
+async function geocodeAddress(addressText, isRetry) {
   const q = encodeURIComponent(addressText);
-  const data = await httpsGetJSON(
-    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${q}`,
-    { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' },
-    10000
-  );
-  if (!Array.isArray(data) || !data.length) return null;
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+  try {
+    const data = await httpsGetJSON(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${q}`,
+      { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' },
+      10000
+    );
+    if (!Array.isArray(data) || !data.length) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+  } catch (e) {
+    if (!isRetry && /HTTP 429/.test(e.message)) {
+      await new Promise(r => setTimeout(r, 1500));
+      return geocodeAddress(addressText, true);
+    }
+    throw e;
+  }
 }
 
 // Geocodificação reversa: lat/lng (do GPS do navegador do cliente) -> endereço.
