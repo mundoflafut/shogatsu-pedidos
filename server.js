@@ -537,6 +537,13 @@ const WHATSAPP_STATUS_MESSAGES = {
   entregue: (o, cfg) => `✅ *${cfg.name}*\nPedido entregue! Obrigado pela preferência 🙏${o.pointsEarned ? ` Você ganhou ${o.pointsEarned} pontos de fidelidade.` : ''}`,
   cancelado: (o, cfg) => `⛔ *${cfg.name}*\nSeu pedido foi cancelado. Motivo: ${o.cancelReason || 'não informado'}. Qualquer dúvida, chama a gente!`
 };
+// v27: mesmas mensagens de status, só que pra notificação push (title/body curtos, sem markdown)
+const PUSH_STATUS_MESSAGES = {
+  preparando: (o, cfg) => ({ title: cfg.name, body: `Seu pedido foi aceito e já está sendo preparado. Previsão: ${cfg.time}.` }),
+  saiu: (o, cfg) => ({ title: cfg.name, body: o.mode === 'delivery' ? '🛵 Seu pedido saiu para entrega!' : '🏪 Seu pedido está pronto para retirada!' }),
+  entregue: (o, cfg) => ({ title: cfg.name, body: '✅ Pedido entregue! Obrigado pela preferência.' }),
+  cancelado: (o, cfg) => ({ title: cfg.name, body: `⛔ Seu pedido foi cancelado. Motivo: ${o.cancelReason || 'não informado'}.` })
+};
 // Usa https puro (sem dependências) fazendo POST form-urlencoded com Basic Auth.
 function sendSMS(toPhone, body, smsCfg) {
   return new Promise((resolve, reject) => {
@@ -1770,8 +1777,19 @@ function estimateDeliveryWindow(order, cfg) {
         // do ponto de vista do fluxo, já que são conferidas na hora da entrega, não antes.
         paid: body.payMethod !== 'pix',
         paidAt: null,
-        paidVia: null
+        paidVia: null,
+        // v27: coordenadas do endereço de entrega, pra mostrar no mapa da tela de acompanhamento.
+        // Busca melhor-esforço — se a geocodificação falhar (endereço incompleto, serviço fora do ar),
+        // o pedido segue normal, só sem o marcador do cliente no mapa.
+        customerLat: null,
+        customerLng: null
       };
+      if (order.mode === 'delivery' && order.address) {
+        try {
+          const geo = await geocodeAddress(order.address + ', Brasil');
+          if (geo) { order.customerLat = geo.lat; order.customerLng = geo.lng; }
+        } catch (e) { /* mapa fica sem o marcador do cliente, sem afetar o pedido */ }
+      }
       orders.unshift(order);
       writeJSON(ORDERS_FILE, orders);
 
@@ -1808,13 +1826,16 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const id = pathname.split('/').pop();
     try {
-      const { status, fee, cancelReason, cancelledBy, ticketNumber } = await readBody(req);
+      const { status, fee, cancelReason, cancelledBy, ticketNumber, courierName } = await readBody(req);
       const valid = ['novo', 'preparando', 'saiu', 'entregue', 'cancelado'];
       if (!valid.includes(status)) return sendJSON(res, 400, { error: 'status inválido' });
       const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === id);
       if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
+      const statusChanged = order.status !== status;
       order.status = status;
+      // v27: nome do entregador (opcional) — aparece pro cliente na tela de acompanhamento quando o pedido sai.
+      if (courierName !== undefined) order.courierName = String(courierName || '').slice(0, 60) || null;
       if (ticketNumber !== undefined && ticketNumber !== null && ticketNumber !== '') {
         const n = parseInt(ticketNumber);
         if (n >= 1 && n <= 200) {
@@ -1855,6 +1876,20 @@ function estimateDeliveryWindow(order, cfg) {
       if (notifCfg.sms && notifCfg.sms.notifyWhatsApp && WHATSAPP_STATUS_MESSAGES[order.status] && order.phone) {
         const msg = WHATSAPP_STATUS_MESSAGES[order.status](order, notifCfg);
         sendWhatsApp(order.phone, msg, notifCfg.sms).catch(() => {});
+      }
+      // v27: notificação push automática quando o status muda (independente do WhatsApp) —
+      // só alcança quem ativou notificações E tem o telefone vinculado à inscrição.
+      if (statusChanged && PUSH_STATUS_MESSAGES[order.status] && order.phone && notifCfg.vapid && notifCfg.vapid.publicKey) {
+        (async () => {
+          try {
+            const p = normalizePhone(order.phone);
+            const subs = readJSON(PUSH_SUBS_FILE).filter(s => s.phone === p);
+            if (!subs.length) return;
+            const { title, body } = PUSH_STATUS_MESSAGES[order.status](order, notifCfg);
+            const payload = { title, body, url: '/?track=' + order.id, icon: '/icon-192.png' };
+            for (const sub of subs) await webpush.sendWebPush(sub, payload, notifCfg.vapid, notifCfg.vapid.subject);
+          } catch (e) { /* nunca deve derrubar a atualização do pedido por causa disso */ }
+        })();
       }
 
       return sendJSON(res, 200, { ok: true, order });

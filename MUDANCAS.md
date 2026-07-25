@@ -1,3 +1,37 @@
+# v27 — Tela de Acompanhamento do Pedido totalmente nova
+
+**Nova tela de acompanhamento** (aparece depois de confirmar o pedido), com tema próprio
+mantendo a paleta de cores do Shogatsu:
+- Cabeçalho em Playfair Display, corpo em Inter, botões em Poppins SemiBold (só nessa tela —
+  o resto do site continua em Cormorant Garamond + Jost).
+- Check verde desenhado com animação de traço + cards entrando em fade-in sequencial.
+- Barra de progresso animada com 4 etapas (Recebido → Em preparo → Saiu para entrega →
+  Entregue) + contagem regressiva do tempo estimado.
+- Barra de status fixa no topo ao rolar a tela, e indicador "atualizado há Xs" mostrando que
+  o acompanhamento é mesmo em tempo real.
+- Mapa com OpenStreetMap (gratuito, sem chave de API) mostrando o endereço da loja e do
+  cliente — geocodificado automaticamente na hora do pedido.
+- Nome do entregador aparece quando o pedido sai pra entrega (o painel agora pergunta o nome
+  ao avançar o status).
+- Pagamento mostra só o método escolhido (em vez de listar os que não foram usados) + PIX com
+  QR code, copiar chave e selo de "pago" / "a receber".
+- Itens e total do pedido visíveis na própria tela (antes só iam pela mensagem de WhatsApp).
+- Confete e som de confirmação — só na primeira abertura de cada pedido, não repete se
+  minimizar e voltar.
+- Avaliação por estrelas, repetir pedido com 1 clique, e compartilhar (Web Share API, com
+  fallback pro WhatsApp).
+- Notificação push automática pro cliente sempre que o status do pedido muda (reaproveitando
+  a infraestrutura de push da v26), além do WhatsApp que já existia.
+- Responsivo: as colunas do layout empilham sozinhas em telas pequenas.
+
+**⚠️ Sobre o mapa:** a geocodificação do endereço (transformar texto em coordenadas) usa o
+Nominatim/OpenStreetMap, que exige acesso à internet — funciona normal assim que publicado
+num servidor com internet; num ambiente sem rede o pedido continua funcionando 100%, só sem
+o marcador do cliente no mapa (a loja aparece de qualquer forma se a loja já foi geocodificada
+nas Configurações).
+
+---
+
 # v26 — Bug do carrinho, botão de WhatsApp sumido, push, reservas e agendamento
 
 **Bugs reais encontrados e corrigidos:**
