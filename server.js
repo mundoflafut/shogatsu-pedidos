@@ -1194,6 +1194,54 @@ const server = http.createServer(async (req, res) => {
   }
 
 
+  // ── POST /api/admin/geocode-by-cep — localiza a loja a partir do CEP, usando a BrasilAPI
+  // (serviço brasileiro, com infraestrutura própria — não sofre do bloqueio de IP compartilhado
+  // que o Nominatim às vezes aplica em servidores como o Render). Quando a BrasilAPI já tem a
+  // coordenada cadastrada pro CEP, usa direto; senão, monta o endereço a partir do CEP e cai no
+  // mesmo fluxo de geocodificação por texto (Nominatim → Photon) como último recurso. ──
+  if (pathname === '/api/admin/geocode-by-cep' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const body = await readBody(req);
+      const cep = String(body.cep || '').replace(/\D/g, '');
+      if (cep.length !== 8) return sendJSON(res, 400, { error: 'Digite um CEP válido, com 8 dígitos (ex: 28890-000).' });
+
+      let cepData = null;
+      try {
+        cepData = await httpsGetJSON(`https://brasilapi.com.br/api/cep/v2/${cep}`, {}, 8000);
+      } catch (e) {
+        console.error('⚠️  BrasilAPI não respondeu pro CEP', cep, ':', e.message);
+      }
+      if (!cepData) return sendJSON(res, 404, { error: 'CEP não encontrado. Confira se digitou certo, ou use o campo de coordenadas manuais abaixo.' });
+
+      // A BrasilAPI às vezes já vem com a coordenada pronta pra esse CEP — o caminho mais rápido e confiável
+      const coords = cepData.location && cepData.location.coordinates;
+      if (coords && coords.latitude && coords.longitude) {
+        const { cfg } = readConfig();
+        cfg.storeLat = parseFloat(coords.latitude);
+        cfg.storeLng = parseFloat(coords.longitude);
+        writeJSON(CONFIG_FILE, cfg);
+        return sendJSON(res, 200, {
+          lat: cfg.storeLat, lng: cfg.storeLng,
+          label: [cepData.street, cepData.neighborhood, cepData.city, cepData.state].filter(Boolean).join(', '),
+          source: 'brasilapi-direto'
+        });
+      }
+
+      // Sem coordenada pronta: monta o endereço a partir do que o CEP devolveu e tenta geocodificar o texto
+      const addressFromCep = [cepData.street, cepData.neighborhood, cepData.city, cepData.state, 'Brasil'].filter(Boolean).join(', ');
+      const geo = await geocodeAddress(addressFromCep);
+      if (!geo) return sendJSON(res, 404, { error: `Achamos o endereço do CEP (${addressFromCep}), mas não conseguimos converter em coordenadas agora. Use o campo de coordenadas manuais abaixo.` });
+      const { cfg } = readConfig();
+      cfg.storeLat = geo.lat; cfg.storeLng = geo.lng;
+      writeJSON(CONFIG_FILE, cfg);
+      return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label || addressFromCep, source: 'geocoded' });
+    } catch (e) {
+      console.error('❌ Falha ao geocodificar por CEP:', e.message);
+      return sendJSON(res, 500, { error: 'Não conseguimos processar esse CEP agora. Use o campo de coordenadas manuais abaixo.' });
+    }
+  }
+
   if (pathname === '/api/admin/geocode-store' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
