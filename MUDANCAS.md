@@ -1,4 +1,45 @@
-# v27 — Tela de Acompanhamento do Pedido totalmente nova
+# v28 — Impressão automática, foto do modal, dashboard sem dado falso, reserva visível, botão voltar
+
+**1.2 — Impressão automática no recebimento do pedido.** Como o servidor na nuvem (Render) não
+tem impressora física conectada — isso vale pra qualquer sistema do tipo, não só este — criei um
+agente local (`print-agent/`) que roda num computador dentro da loja, escuta os pedidos em tempo
+real e imprime sozinho, sem abrir navegador/PDF/diálogo. Testado de ponta a ponta: pedido criado →
+detectado e "impresso" (modo teste) em 32ms. Erros ficam registrados em `print-agent.log`; sucesso
+retorna sem travar nada. Ver `print-agent/README.md` pra instalar.
+
+**1.1 — Bug real corrigido: placeholder da foto no modal de item.** A causa era usar `display:flex`
+numa tag `<img>` vazia tentando centralizar um emoji — `<img>` não tem conteúdo interno pra
+centralizar, então sem foto aparecia só uma caixa cinza, sem ícone nenhum. Trocado por um elemento
+separado que aparece/some corretamente. Upload, substituição e salvamento já estavam certos.
+
+**Bug real corrigido: nota "4.8" do Dashboard era fixa no código**, nunca refletia as avaliações
+reais dos clientes. Agora é calculada ao vivo a partir das avaliações de verdade (testado: avaliação
+de 5 estrelas → dashboard mostra 5.0; sem nenhuma avaliação → mostra "—" em vez de inventar um
+número).
+
+**Banner (itens 1 e 4):** já existia rolagem automática e tela cheia — faltava zoom suave (efeito
+Ken Burns) e deslizar com o dedo no celular. Adicionado os dois, sem mexer no resto do banner.
+
+**Botão de Reserva de Mesa (item 8) agora visível direto na tela principal** do cardápio do
+cliente (ao lado de Delivery/Retirada), em vez de escondido dentro do menu "Falar com o
+restaurante". Só aparece se reservas estiverem ativadas nas Configurações.
+
+**Botão voltar do navegador evoluído** (em vez de removido, que não é tecnicamente possível):
+agora fecha a tela ou modal aberta (carrinho, checkout, conta, avaliação, reserva, personalização
+de item) em vez de sair do site — implementado de forma genérica com um observador de mudanças de
+classe, sem precisar alterar cada uma das ~27 telas manualmente. **Importante:** essa parte mexe
+com navegação do navegador e não dá pra testar 100% sem abrir num navegador de verdade — testei a
+lógica e a sintaxe, mas peço que você confirme o comportamento depois de publicar.
+
+**Itens ainda pendentes de mais detalhes** (2, 3, 5, 6, 7 completo, 10, cor "destaque"): pedem
+"corrigir bugs" de forma genérica num sistema já grande e funcionando — preferi não arriscar
+alterações às cegas. Muitos sub-itens já existem (reserva, agendamento, categoria fixa ao rolar,
+sincronização em tempo real via SSE). Me manda um exemplo concreto do que está quebrado em cada um
+e eu resolvo certeiro.
+
+---
+
+
 
 **Nova tela de acompanhamento** (aparece depois de confirmar o pedido), com tema próprio
 mantendo a paleta de cores do Shogatsu:
