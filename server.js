@@ -393,7 +393,8 @@ async function geocodeAddress(addressText) {
   const q = encodeURIComponent(addressText);
   const data = await httpsGetJSON(
     `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${q}`,
-    { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' }
+    { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' },
+    10000
   );
   if (!Array.isArray(data) || !data.length) return null;
   return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
@@ -1180,7 +1181,10 @@ const server = http.createServer(async (req, res) => {
       data.cfg.storeLng = geo.lng;
       writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
-    } catch (e) { return sendJSON(res, 500, { error: 'Erro ao localizar endereço. Tente novamente.' }); }
+    } catch (e) {
+      console.error('❌ Falha ao geocodificar endereço da loja:', e.message);
+      return sendJSON(res, 500, { error: 'Não conseguimos falar com o serviço de mapas agora (' + e.message + '). Tente de novo em alguns segundos — se persistir, o endereço pode estar descrevendo o lugar de um jeito que o serviço não reconhece.' });
+    }
   }
 
   // ── GET /api/admin/backup — exporta os dados em vários formatos de arquivo ──
