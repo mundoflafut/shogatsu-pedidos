@@ -405,8 +405,22 @@ async function geocodeAddress(addressText, isRetry) {
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
   } catch (e) {
     if (!isRetry && /HTTP 429/.test(e.message)) {
-      await new Promise(r => setTimeout(r, 1500));
-      return geocodeAddress(addressText, true);
+      // Nominatim bloqueou — tenta um provedor DIFERENTE (Photon, também gratuito e sem chave,
+      // mas com infraestrutura própria, então não sofre do mesmo bloqueio de IP compartilhado).
+      try {
+        const alt = await httpsGetJSON(
+          `https://photon.komoot.io/api/?limit=1&q=${q}`,
+          { 'User-Agent': 'ShogatsuPedidosOnline/1.0 (contato via painel do restaurante)' },
+          10000
+        );
+        const feat = alt && alt.features && alt.features[0];
+        if (feat && feat.geometry && feat.geometry.coordinates) {
+          const [lng, lat] = feat.geometry.coordinates;
+          const p = feat.properties || {};
+          const label = [p.name, p.street, p.city, p.state].filter(Boolean).join(', ');
+          return { lat, lng, label };
+        }
+      } catch (e2) { /* os dois provedores falharam — segue pro erro normal abaixo */ }
     }
     throw e;
   }
@@ -1195,7 +1209,12 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { lat: geo.lat, lng: geo.lng, label: geo.label });
     } catch (e) {
       console.error('❌ Falha ao geocodificar endereço da loja:', e.message);
-      return sendJSON(res, 500, { error: 'Não conseguimos falar com o serviço de mapas agora (' + e.message + '). Tente de novo em alguns segundos — se persistir, o endereço pode estar descrevendo o lugar de um jeito que o serviço não reconhece.' });
+      const isBlocked = /HTTP 429/.test(e.message);
+      return sendJSON(res, 500, {
+        error: isBlocked
+          ? 'O serviço gratuito de mapas está limitando as requisições vindas deste servidor no momento (isso é comum em hospedagens compartilhadas como o Render, e pode continuar acontecendo). Em vez de ficar tentando de novo, digite as coordenadas manualmente no campo ao lado — pegue elas no Google Maps: clique com o botão direito no local exato da loja e copie os dois números que aparecem.'
+          : 'Não conseguimos falar com o serviço de mapas agora (' + e.message + '). Digite as coordenadas manualmente no campo ao lado, ou tente de novo em alguns instantes.'
+      });
     }
   }
 
