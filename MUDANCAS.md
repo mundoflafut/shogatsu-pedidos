@@ -1,4 +1,31 @@
-# v32 — Motoboys, exclusão de pedidos, bug do carrinho preso e tela de pedido
+# v36 — Bug real do Service Worker, sidebar recolhível/redimensionável, cardápio do rodízio e divulgação
+
+**Bug real corrigido: painel ficava preso numa versão antiga (cache do Service Worker).**
+O `sw.js` usava "cache primeiro" pra **todo** arquivo HTML, inclusive o `painel.html` — uma vez
+que o navegador guardava uma cópia, ele nunca mais buscava a versão nova sozinho no servidor,
+mesmo pra quem era master. Corrigido: páginas HTML agora usam "rede primeiro" (sempre busca a
+versão mais nova; só cai pro cache se estiver offline de verdade); ícones/fontes continuam em
+cache primeiro, que é mais rápido e não tem esse risco. Versão do cache subiu pra limpar o que
+já estava guardado em todo mundo. O painel também ganhou um aviso automático ("🔄 Nova versão
+disponível") quando detecta uma atualização, já que costuma ficar aberto numa aba o dia todo.
+
+**Painel: sidebar recolhível e redimensionável por arraste.** Primeiro passo da modernização
+visual pedida — feito só em CSS/JS de layout, sem tocar em nenhuma lógica de pedidos/config.
+Botão ◀ recolhe a barra lateral pra só ícones; a borda direita dá pra arrastar pra redimensionar;
+largura e estado (recolhida ou não) ficam salvos e voltam do jeito que a pessoa deixou da última
+vez. Também entraram ajustes de responsividade — em telas menores nada corta mais, a sidebar
+vira um menu por cima e as grades se reorganizam sozinhas.
+
+**Novo: cardápio do Rodízio Popular, avaliação específica e página de divulgação.** Três páginas
+novas e independentes em `/public`: `cardapio-rodizio-popular.html` (cardápio completo do rodízio
+de terça a domingo, com preços por grupo de dias, destaques do dia e espaços de foto editáveis),
+`avaliar-rodizio.html` (avaliação específica pro rodízio presencial — estrelas por categoria,
+manda formatado pro WhatsApp da loja) e `divulgacao-rodizio.html` (o link único pra colocar na
+bio do Instagram/Facebook, com frases chamativas e botões de ação).
+
+---
+
+
 
 **Bug real corrigido: produto ficava "preso" no carrinho.** Três lugares (`placeOrder`,
 `clearCartOnAccountSwitch`, `repeatOrder`) zeravam ou trocavam o carrinho e atualizavam só o
