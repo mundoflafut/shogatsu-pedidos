@@ -76,6 +76,8 @@ const DEFAULT_CFG = {
   // ── Logotipo ──
   logoShape: 'retangular',      // 'redondo' | 'quadrado' | 'retangular'
   logoSize: 40,                  // altura em px
+  dishPhotoSize: 80,             // v33: tamanho (px) da foto do prato pro cliente
+  menuFontScale: 1,              // v33: escala da fonte do cardápio (0.85 a 1.3)
   // ── Impressoras por estação (vias separadas) ──
   stations: {
     cozinha:  { label: 'Cozinha',  method: 'navegador', ip: '', port: 9100, device: '' },
@@ -1782,7 +1784,8 @@ function estimateDeliveryWindow(order, cfg) {
         createdAt: new Date().toISOString(),
         status: 'pendente', // pendente → confirmada / recusada / cancelada
         name, phone, people, date, time,
-        notes: String(body.notes || '').slice(0, 200)
+        notes: String(body.notes || '').slice(0, 200),
+        storeReply: '' // v33: mensagem da loja pro cliente (aparece na tela de acompanhamento)
       };
       list.unshift(reservation);
       writeJSON(RESERVATIONS_FILE, list);
@@ -1794,18 +1797,29 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     return sendJSON(res, 200, { reservations: readJSON(RESERVATIONS_FILE) });
   }
+  // ── GET /api/track-reservation/:id — cliente acompanha status da própria reserva (público, v33) ──
+  if (pathname.startsWith('/api/track-reservation/') && req.method === 'GET') {
+    const id = decodeURIComponent(pathname.split('/').pop());
+    const list = readJSON(RESERVATIONS_FILE);
+    const r = list.find(x => x.id === id);
+    if (!r) return sendJSON(res, 404, { error: 'Reserva não encontrada.' });
+    const { phone, ...rest } = r; // não expõe o telefone de novo
+    return sendJSON(res, 200, rest);
+  }
   // ── POST /api/reservations/:id/status — painel confirma/recusa/cancela uma reserva ──
   if (pathname.match(/^\/api\/reservations\/[^/]+\/status$/) && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const id = decodeURIComponent(pathname.split('/')[3]);
-      const { status } = await readBody(req);
+      const { status, reply } = await readBody(req);
       if (!['pendente', 'confirmada', 'recusada', 'cancelada'].includes(status)) return sendJSON(res, 400, { error: 'Status inválido.' });
       const list = readJSON(RESERVATIONS_FILE);
       const r = list.find(x => x.id === id);
       if (!r) return sendJSON(res, 404, { error: 'Reserva não encontrada.' });
       r.status = status;
+      if (reply !== undefined) r.storeReply = String(reply).slice(0, 300); // v33: resposta da loja pro cliente
       writeJSON(RESERVATIONS_FILE, list);
+      publicBroadcast('reservation-updated', { id }); // v33: avisa a tela do cliente em tempo real
       return sendJSON(res, 200, { ok: true, reservation: r });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
@@ -2055,28 +2069,24 @@ function estimateDeliveryWindow(order, cfg) {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
-  // ── DELETE /api/admin/orders/:id — remove um pedido DEFINITIVAMENTE do sistema (v32) ──
+  // ── DELETE /api/admin/orders/:id — remove um pedido DEFINITIVAMENTE do sistema (v32/v33) ──
   // Diferente do cancelamento (que só muda o status e mantém o pedido no histórico), isso apaga
-  // o registro por completo. Por isso exige a senha do administrador de novo, mesmo já logado,
-  // e guarda tudo num histórico separado (data/delete-log.json) — pedido, data/hora e usuário.
+  // o registro por completo. v33: restrito só ao usuário MASTER, e exige especificamente a
+  // SENHA MASTER de novo (não aceita senha de admin comum nem de usuário qualquer), mesmo com a
+  // sessão já logada. Guarda tudo num histórico separado (data/delete-log.json).
   if (pathname.match(/^\/api\/admin\/orders\/[^/]+$/) && req.method === 'DELETE') {
     const session = getSession(getToken(req, query));
-    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.admin) {
-      return sendJSON(res, 403, { error: 'Somente um administrador pode excluir pedidos do sistema.' });
+    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.master) {
+      return sendJSON(res, 403, { error: 'Somente o usuário MASTER pode excluir pedidos do sistema.' });
     }
     try {
       const id = decodeURIComponent(pathname.split('/').pop());
       const { password } = await readBody(req);
       const { cfg } = readConfig();
 
-      // Confere a senha de novo (reautenticação), independente de já haver uma sessão válida.
-      // Aceita a senha do próprio usuário logado, ou as senhas gerais de admin/master.
-      const user = (cfg.users || []).find(u => String(u.username || '').toLowerCase() === String(session.username || '').toLowerCase());
-      const passOk = !!password && (
-        (user && password === user.password) ||
-        password === cfg.adminPass ||
-        password === cfg.masterPass
-      );
+      // v33: confere especificamente a SENHA MASTER de novo (reautenticação), não aceita mais
+      // senha de admin comum nem de outros usuários.
+      const passOk = !!password && password === cfg.masterPass;
       if (!passOk) {
         return sendJSON(res, 403, { error: '❌ Senha inválida. Pedido não foi removido.' });
       }

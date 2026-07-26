@@ -29,6 +29,54 @@ Testado de ponta a ponta: senha errada → bloqueado com "❌ Senha inválida. P
 removido."; usuário nível "vendas" tentando excluir → bloqueado com 403; admin/master com senha
 certa → "✅ Pedido removido do sistema com sucesso." e o pedido some do arquivo.
 
+# v33 — Senha MASTER, destaque duplicado, foto/fonte ajustáveis, Pedidos unificado, reserva com status
+
+**Senha MASTER pra excluir pedido.** Antes o endpoint aceitava a senha de qualquer admin ou
+usuário; agora `DELETE /api/admin/orders/:id` exige especificamente `cfg.masterPass` e só libera
+pra quem está logado como **master** — no backend e escondendo o botão no painel pra quem não é
+master.
+
+**Bug real corrigido: destaque duplicado.** Todo prato com "Badge (destaque)" preenchido estava
+sendo mostrado com o MESMO texto **duas vezes** no cartão — uma vez num selo no topo, de novo
+numa tag dourada perto do preço. Unificado num único selo, mais visível (gradiente dourado).
+
+**Foto do prato — enquadramento ajustável.** No cadastro de prato, dois sliders (Horizontal /
+Vertical) deixam escolher qual parte da foto aparece dentro do quadro — útil quando a foto não é
+quadrada ou o prato não está centralizado. Salvo por prato (`imagePos`), aplicado tanto na
+prévia do admin quanto no cardápio do cliente.
+
+**Tamanho da foto do prato e fonte do cardápio — ajustáveis.** Nova seção em Configurações →
+🎨 Aparência do Cardápio: slider de tamanho da foto (56–140px) e seletor de tamanho de fonte
+(Pequena/Normal/Grande/Extra Grande), aplicados ao vivo no cardápio do cliente.
+
+**Dashboard + Gerenciar Pedidos + Kanban — unificados.** Os três viraram uma única aba "📊
+Pedidos" com sub-abas internas (Visão Geral / Lista / Kanban), sem recarregar nada ao trocar.
+De quebra, corrigido um bug de fundo: o destaque do item ativo no menu lateral usava uma
+comparação de texto frágil que nunca funcionava direito pro item "Pedidos" — trocado por
+atributos `data-page` explícitos, mais confiável.
+
+**Ícones em caixa colorida no seletor de modo.** 🛵 Delivery / 🏪 Retirada / 📅 Reservar Mesa
+agora aparecem como cartões com ícone destacado e cor própria (vermelho/azul/dourado) quando
+selecionados, em vez de botões de texto simples.
+
+**Tela de Reserva de Mesa do cliente — reconstruída** seguindo o modelo enviado: depois de
+solicitar, a mesma tela mostra um card "ℹ️ Status da Reserva" com o andamento (⏳ Aguardando
+confirmação / ✅ Confirmada / ✕ Recusada), a "💬 Resposta da Loja" quando o restaurante escreve
+uma, e atualiza sozinha (tempo real via SSE + polling de reforço a cada 15s) — sem precisar
+recarregar a página. No painel, a tela de reservas ganhou um campo pra loja escrever essa
+resposta ao confirmar/recusar.
+
+**Motoboys e Excluir do Sistema — confirmados presentes.** Essas duas features já tinham sido
+implementadas na v32 (aba 🛵 Motoboys e botão 🗑️ Excluir do Sistema) — testamos de novo de ponta
+a ponta nesta versão pra garantir que continuam funcionando. Se elas não aparecerem no seu
+Render, o mais provável é que o deploy ainda esteja rodando uma versão anterior — vale conferir
+se esse zip (v33) foi mesmo o que subiu.
+
+**Bug do carrinho — reconfirmado corrigido.** Revisamos de novo todos os pontos onde o carrinho
+é zerado (fim de pedido, troca de conta, repetir pedido) — todos já chamam `renderMenu()`
+corretamente (corrigido na v32), então o produto não deve mais ficar "preso" com os botões −/+
+travados.
+
 # v28 — Impressão automática, foto do modal, dashboard sem dado falso, reserva visível, botão voltar
 
 **1.2 — Impressão automática no recebimento do pedido.** Como o servidor na nuvem (Render) não
