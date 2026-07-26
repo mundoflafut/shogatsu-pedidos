@@ -114,7 +114,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 .order-mode.delivery{background:var(--blue-bg);color:var(--blue);}
 .order-mode.retirada{background:var(--gold-bg);color:var(--gold);}
 .order-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
-.oa-btn{flex:1;min-width:90px;border:1px solid var(--border2);background:var(--card);color:var(--white);border-radius:6px;padding:8px;font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .15s;cursor:pointer;}
+.oa-btn{flex:1;min-width:100px;border:1px solid var(--border2);background:var(--card);color:var(--white);border-radius:6px;padding:10px 8px;font-size:12px;font-weight:600;letter-spacing:.3px;transition:all .15s;cursor:pointer;}
 .oa-btn:hover{background:var(--border2);}
 @keyframes printSpin{0%{transform:rotate(0deg);}50%{transform:rotate(-12deg) scale(1.15);}100%{transform:rotate(0deg);}}
 .printing{animation:printSpin .6s ease-in-out infinite;pointer-events:none;opacity:.7;}
@@ -126,6 +126,12 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 .oa-btn.done:hover{background:var(--blue);color:#fff;}
 .oa-btn.cancel{background:var(--red-bg);color:var(--red-lt);border:1px solid var(--red-dk);}
 .oa-btn.cancel:hover{background:var(--red);color:#fff;}
+.oa-btn.print{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);}
+.oa-btn.print:hover{background:var(--blue);color:#fff;}
+.oa-btn.whatsapp{background:rgba(37,211,102,.14);color:#25d366;border:1px solid #25d366;}
+.oa-btn.whatsapp:hover{background:#25d366;color:#fff;}
+.oa-btn.paid{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);}
+.oa-btn.paid:hover{background:var(--gold);color:#000;}
 
 /* STATUS BADGE */
 .status-badge{font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:20px;font-weight:500;}
@@ -158,13 +164,15 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 .menu-cats{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow-y:auto;flex:1;}
 .menu-cat-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:center;gap:8px;}
 .menu-cat-item:hover{background:var(--panel);}
-.menu-cat-item:hover .cat-actions{opacity:1;}
 .menu-cat-item.active{background:var(--red-bg);color:var(--red-lt);border-left:2px solid var(--red);}
 .menu-cat-name{font-size:13px;}
 .menu-cat-count{font-size:11px;color:var(--muted);}
-.cat-actions{display:flex;gap:4px;margin-left:auto;opacity:0;transition:opacity .15s;}
-.cat-actions button{border:none;background:none;color:var(--muted);font-size:12px;padding:2px 4px;border-radius:4px;}
-.cat-actions button:hover{color:var(--white);background:var(--border2);}
+.cat-actions{display:flex;gap:6px;margin-left:auto;}
+.cat-actions button{border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:13px;padding:6px 10px;border-radius:6px;transition:all .15s;}
+.cat-actions button.edit{background:var(--blue-bg);color:var(--blue);border-color:var(--blue);}
+.cat-actions button.edit:hover{background:var(--blue);color:#fff;}
+.cat-actions button.del{background:var(--red-bg);color:var(--red-lt);border-color:var(--red-dk);}
+.cat-actions button.del:hover{background:var(--red);color:#fff;}
 .menu-items-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;}
 .menu-items-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .menu-items-body{flex:1;overflow-y:auto;padding:14px;}
@@ -583,7 +591,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
           <div class="field"><label>Telefone (ligar/SMS, com DDD)</label><input id="cfg-storePhone" placeholder="(22) 98868-3755"/></div>
           <div class="field-row">
             <div class="field"><label>Pedido Mínimo R$</label><input id="cfg-min" type="number" placeholder="60"/></div>
-            <div class="field"><label>Tempo Estimado</label>
+            <div class="field"><label>Tempo Estimado (Delivery)</label>
               <select onchange="if(this.value)document.getElementById('cfg-time').value=this.value;" style="margin-bottom:6px;">
                 <option value="">Presets rápidos...</option>
                 <option value="20–30 min">20–30 min</option>
@@ -595,6 +603,18 @@ input,select,textarea{font-family:'Inter',sans-serif;}
               </select>
               <input id="cfg-time" placeholder="40–60 min"/>
             </div>
+          </div>
+          <div class="field">
+            <label>Tempo Estimado (Retirada)</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">v34: retirada costuma ser bem mais rápida — agora tem sua própria estimativa, separada do delivery.</div>
+            <select onchange="if(this.value)document.getElementById('cfg-timeretirada').value=this.value;" style="margin-bottom:6px;">
+              <option value="">Presets rápidos...</option>
+              <option value="10–15 min">10–15 min</option>
+              <option value="15–20 min">15–20 min</option>
+              <option value="20–30 min">20–30 min</option>
+              <option value="30–45 min">30–45 min</option>
+            </select>
+            <input id="cfg-timeretirada" placeholder="20–30 min"/>
           </div>
         </div>
         <div class="settings-card">
@@ -862,6 +882,19 @@ input,select,textarea{font-family:'Inter',sans-serif;}
               <button class="btn danger sm" onclick="restoreBackup()">♻️ Restaurar</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-section-title" data-min-role="master">⚠️ Zona de Perigo</div>
+      <div class="settings-grid" data-min-role="master">
+        <div class="settings-card" style="grid-column:1/-1;border-color:var(--red-dk);">
+          <div class="settings-card-title" style="color:var(--red-lt);">⚠️ Excluir Dados</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Apaga dados do sistema permanentemente. Só pra quem está logado como <b>master</b> —
+            sempre pergunta qual dado excluir e pede a senha master de novo pra confirmar. Fica
+            registrado no histórico de auditoria.
+          </div>
+          <button class="btn danger sm" onclick="openDeleteDataModal()">🗑️ Excluir Dados...</button>
         </div>
       </div>
 
@@ -1147,6 +1180,28 @@ input,select,textarea{font-family:'Inter',sans-serif;}
   </div>
 </div>
 
+<div class="modal-overlay" id="courier-link-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📍 Link de Rastreio pro Motoboy</span>
+      <button class="modal-close" onclick="closeModal('courier-link-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+        Manda esse link pro motoboy (WhatsApp, por exemplo). Ele abre no celular dele, o
+        endereço da entrega já aparece, e ele só toca em "Compartilhar localização" — o cliente
+        passa a ver ele se aproximando no mapa. O link para de funcionar sozinho assim que a
+        entrega for marcada como concluída.
+      </div>
+      <div class="field"><label>Link</label><input id="courier-link-text" readonly onclick="this.select()"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('courier-link-modal')">Fechar</button>
+      <button class="btn primary" onclick="copyCourierLink()">📋 Copiar Link</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="delete-order-modal">
   <div class="modal">
     <div class="modal-header">
@@ -1167,6 +1222,37 @@ input,select,textarea{font-family:'Inter',sans-serif;}
     <div class="modal-footer">
       <button class="btn secondary" onclick="closeModal('delete-order-modal')">Voltar</button>
       <button class="btn danger" onclick="confirmDeleteOrder()">🗑️ Excluir Definitivamente</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="delete-data-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">⚠️ Excluir Dados</span>
+      <button class="modal-close" onclick="closeModal('delete-data-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>O que você quer excluir?</label>
+        <select id="delete-data-what" onchange="onDeleteDataWhatChange()">
+          <option value="">Selecione...</option>
+          <option value="menu">🍽️ Cardápio — restaurar pro padrão de fábrica</option>
+          <option value="orders">📋 Pedidos — apagar toda a lista/histórico</option>
+        </select>
+      </div>
+      <div id="delete-data-warning" style="display:none;font-size:12px;color:var(--red-lt);background:rgba(211,68,63,.1);border:1px solid var(--red-lt);border-radius:8px;padding:10px;margin:10px 0;"></div>
+      <div id="delete-data-pass-wrap" style="display:none;">
+        <div class="field">
+          <label>Digite a senha MASTER pra confirmar</label>
+          <input id="delete-data-password" type="password" placeholder="Senha MASTER" onkeydown="if(event.key==='Enter')confirmDeleteData()"/>
+        </div>
+      </div>
+      <div id="delete-data-err" style="display:none;font-size:12px;color:var(--red-lt);margin-top:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('delete-data-modal')">Voltar</button>
+      <button class="btn danger" id="delete-data-confirm-btn" disabled onclick="confirmDeleteData()">🗑️ Excluir Definitivamente</button>
     </div>
   </div>
 </div>
@@ -1617,6 +1703,22 @@ async function finishAdvanceStatus(id, body, wasAccepting){
   refreshCurrentPage();
   // Ao aceitar o pedido, já abre a impressão das vias automaticamente
   if(wasAccepting) printOrder(id);
+  // v34: ao marcar como "saiu para entrega", mostra o link de rastreio pra mandar pro motoboy
+  if(body.status==='saiu' && res.data.order && res.data.order.mode==='delivery') showCourierLinkModal(id);
+}
+
+// ── Link de rastreio pro motoboy (v34) ──
+function showCourierLinkModal(orderId){
+  const link = location.origin + '/entregador.html?id=' + encodeURIComponent(orderId);
+  document.getElementById('courier-link-text').value = link;
+  document.getElementById('courier-link-modal').classList.add('open');
+}
+function copyCourierLink(){
+  const input = document.getElementById('courier-link-text');
+  input.select();
+  navigator.clipboard && navigator.clipboard.writeText(input.value).then(()=>{
+    showToast('✅ Link copiado','Cole no WhatsApp do motoboy.');
+  }).catch(()=>{ document.execCommand('copy'); showToast('✅ Link copiado','Cole no WhatsApp do motoboy.'); });
 }
 
 // ── Seletor de motoboy (v32) — mostra os motoboys pré-cadastrados como chips,
@@ -1698,6 +1800,54 @@ async function confirmDeleteOrder(){
     updateNewBadge();
     refreshCurrentPage();
     showToast('✅ Pedido removido', data.message || 'Pedido removido do sistema com sucesso.');
+  }catch(e){
+    errEl.textContent = 'Erro de conexão. Tente novamente.';
+    errEl.style.display='block';
+  }
+}
+
+// ── Excluir Dados (v34) — pergunta QUAL dado antes de excluir, depois a senha master. ──
+const DELETE_DATA_INFO = {
+  menu:   { endpoint:'/api/admin/reset-menu',   warning:'⚠️ Isso substitui TODOS os itens, categorias, fotos e destaques do cardápio atual pelo cardápio padrão de fábrica. Não pode ser desfeito.' },
+  orders: { endpoint:'/api/admin/reset-orders', warning:'⚠️ Isso apaga TODA a lista/histórico de pedidos do sistema. Não pode ser desfeito.' }
+};
+function openDeleteDataModal(){
+  document.getElementById('delete-data-what').value = '';
+  document.getElementById('delete-data-warning').style.display = 'none';
+  document.getElementById('delete-data-pass-wrap').style.display = 'none';
+  document.getElementById('delete-data-password').value = '';
+  document.getElementById('delete-data-err').style.display = 'none';
+  document.getElementById('delete-data-confirm-btn').disabled = true;
+  document.getElementById('delete-data-modal').classList.add('open');
+}
+function onDeleteDataWhatChange(){
+  const what = document.getElementById('delete-data-what').value;
+  const info = DELETE_DATA_INFO[what];
+  const warnEl = document.getElementById('delete-data-warning');
+  const passWrap = document.getElementById('delete-data-pass-wrap');
+  const btn = document.getElementById('delete-data-confirm-btn');
+  if(!info){ warnEl.style.display='none'; passWrap.style.display='none'; btn.disabled=true; return; }
+  warnEl.textContent = info.warning;
+  warnEl.style.display = 'block';
+  passWrap.style.display = 'block';
+  btn.disabled = false;
+}
+async function confirmDeleteData(){
+  const what = document.getElementById('delete-data-what').value;
+  const info = DELETE_DATA_INFO[what];
+  const password = document.getElementById('delete-data-password').value;
+  const errEl = document.getElementById('delete-data-err');
+  errEl.style.display='none';
+  if(!info){ errEl.textContent='Selecione o que você quer excluir.'; errEl.style.display='block'; return; }
+  if(!password){ errEl.textContent='❌ Digite a senha MASTER.'; errEl.style.display='block'; return; }
+  try{
+    const r = await fetch(info.endpoint, { method:'POST', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ password }) });
+    const data = await r.json();
+    if(!r.ok){ errEl.textContent = data.error || '❌ Senha inválida.'; errEl.style.display='block'; return; }
+    closeModal('delete-data-modal');
+    showToast('✅ Concluído', data.message || 'Dados excluídos com sucesso.');
+    if(what==='menu') renderMenuEditor();
+    if(what==='orders'){ orders=[]; updateNewBadge(); refreshCurrentPage(); }
   }catch(e){
     errEl.textContent = 'Erro de conexão. Tente novamente.';
     errEl.style.display='block';
@@ -2022,7 +2172,16 @@ function renderDashboard(){
   document.getElementById('s-pedidos').textContent=todayOrders.length;
   document.getElementById('s-receita').textContent='R$ '+revenue.toFixed(2).replace('.',',');
   document.getElementById('s-novos').textContent=novos+' aguardando confirmação';
-  document.getElementById('s-tempo').textContent=cfg.time||'—';
+  // v34: BUG CORRIGIDO — antes esse card só mostrava o texto configurado em "Tempo Estimado"
+  // (ex: "40–60 min"), não um cálculo de verdade, apesar do rótulo dizer "de preparo + entrega".
+  // Agora calcula a média real (deliveredAt − createdAt) dos pedidos entregues hoje.
+  const withDuration = delivered.filter(o=>o.deliveredAt);
+  if (withDuration.length) {
+    const avgMin = withDuration.reduce((s,o)=>s+(new Date(o.deliveredAt)-new Date(o.createdAt)),0) / withDuration.length / 60000;
+    document.getElementById('s-tempo').textContent = Math.round(avgMin)+' min';
+  } else {
+    document.getElementById('s-tempo').textContent = '—';
+  }
 
   const reviews = orders.filter(o => o.review && !o.review.hidden && o.review.stars);
   const ratingEl = document.getElementById('s-rating');
@@ -2092,9 +2251,9 @@ function miniOrderCard(o){
     <div class="order-actions">
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
-      <button class="oa-btn" onclick="printOrder('${o.id}', event)" title="Imprimir vias">🖨</button>
-      ${o.phone?`<button class="oa-btn" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬</button>`:''}
-      ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
+      <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias">🖨 Imprimir</button>
+      ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
+      ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
   </div>`;
 }
@@ -2115,7 +2274,7 @@ function notifyWhatsApp(id) {
   if (!o || !o.phone) return;
   const msgs = {
     novo: `Oi ${o.name}! Recebemos seu pedido no ${cfg.name} 🍣`,
-    prep: `🍣 ${cfg.name}\nSeu pedido foi aceito e já está sendo preparado. Previsão: ${cfg.time}.`,
+    prep: `🍣 ${cfg.name}\nSeu pedido foi aceito e já está sendo preparado. Previsão: ${o.mode==='retirada'?(cfg.timeRetirada||cfg.time):cfg.time}.`,
     pronto: o.mode === 'delivery' ? `🛵 ${cfg.name}\nSeu pedido saiu para entrega!` : `🏪 ${cfg.name}\nSeu pedido está pronto pra retirada!`,
     entregue: `✅ ${cfg.name}\nPedido entregue! Obrigado pela preferência 🙏`,
     cancelado: `⛔ ${cfg.name}\nSeu pedido foi cancelado. ${o.cancelReason ? 'Motivo: ' + o.cancelReason : ''}`
@@ -2170,9 +2329,9 @@ function renderOrdersList(){
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
-        <button class="oa-btn" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
-        ${o.phone?`<button class="oa-btn" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
-        ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
+        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
+        ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
+        ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
         ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
       </div>
     </div>`).join('');
@@ -2229,11 +2388,11 @@ async function renderReservationsList(){
       <div class="order-actions">
         <button class="oa-btn accept" onclick="updateReservationStatus('${r.id}','confirmada')">✓ Confirmar</button>
         <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','recusada')">✕ Recusar</button>
-        ${r.phone?`<button class="oa-btn" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
+        ${r.phone?`<button class="oa-btn whatsapp" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
       </div>`:r.status==='confirmada'?`
       <div class="order-actions">
         <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','cancelada')">✕ Cancelar</button>
-        ${r.phone?`<button class="oa-btn" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
+        ${r.phone?`<button class="oa-btn whatsapp" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
       </div>`:''}
     </div>`).join('');
 }
@@ -2273,7 +2432,7 @@ function renderKanban(){
           <div class="k-card-footer">
             <span class="k-card-total">R$ ${Number(o.total).toFixed(2).replace('.',',')}</span>
             <span style="font-size:10px;color:var(--muted)">${o.mode==='delivery'?'🛵':'🏪'}</span>
-            <button onclick="printOrder('${o.id}', event)" title="Imprimir vias" style="border:none;background:none;color:var(--muted);font-size:13px;cursor:pointer;">🖨</button>
+            <button onclick="printOrder('${o.id}', event)" title="Imprimir vias" style="border:1px solid var(--blue);background:var(--blue-bg);color:var(--blue);font-size:13px;padding:4px 8px;border-radius:5px;cursor:pointer;">🖨</button>
           </div>
           ${col.btn?`<button class="k-btn ${col.btnClass}" onclick="advanceStatus('${o.id}')">${col.btn}</button>`:''}
         </div>`).join('')}
@@ -2301,8 +2460,8 @@ function renderMenuEditor(){
       <span class="menu-cat-name">${s.title}</span>
       <span class="menu-cat-count">${s.items.length}</span>
       <span class="cat-actions">
-        <button onclick="event.stopPropagation();openEditCategory(${i})" title="Editar categoria">✏</button>
-        <button onclick="event.stopPropagation();deleteCategory(${i})" title="Excluir categoria">🗑</button>
+        <button class="edit" onclick="event.stopPropagation();openEditCategory(${i})" title="Editar categoria">✏️ Editar</button>
+        <button class="del" onclick="event.stopPropagation();deleteCategory(${i})" title="Excluir categoria">🗑</button>
       </span>
     </div>`).join('');
   renderMenuItems();
@@ -2971,6 +3130,7 @@ function loadSettings(){
   document.getElementById('cfg-fee').value=cfg.fee||'';
   document.getElementById('cfg-min').value=cfg.min||'';
   document.getElementById('cfg-time').value=cfg.time||'';
+  const trEl=document.getElementById('cfg-timeretirada'); if(trEl) trEl.value=cfg.timeRetirada||'';
   document.getElementById('cfg-addr').value=cfg.addr||'';
   document.getElementById('cfg-hours').value=cfg.hours||'';
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
@@ -3400,6 +3560,7 @@ async function saveAllSettings(){
   cfg.fee    = parseFloat(document.getElementById('cfg-fee').value)||0;
   cfg.min    = parseFloat(document.getElementById('cfg-min').value)||0;
   cfg.time   = document.getElementById('cfg-time').value.trim();
+  const trEl2=document.getElementById('cfg-timeretirada'); if(trEl2) cfg.timeRetirada = trEl2.value.trim();
   cfg.addr   = document.getElementById('cfg-addr').value.trim();
   cfg.hours  = document.getElementById('cfg-hours').value.trim();
   cfg.name   = document.getElementById('cfg-name').value.trim();

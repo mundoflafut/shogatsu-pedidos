@@ -309,8 +309,9 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .ss-abtn.wa:hover{background:var(--green);color:#fff;}
 .ss-abtn.rep{background:rgba(201,168,76,.12);border-color:var(--gold);color:var(--gold);}
 .ss-abtn.rep:hover{background:var(--gold);color:#1a1408;}
-.ss-secondary-links{text-align:center;padding:4px 0 10px;}
-.ss-secondary-links a{color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;}
+.ss-secondary-links{padding:4px 0 10px;}
+.ss-continue-btn{width:100%;font-family:'Poppins',sans-serif;font-weight:600;font-size:12px;letter-spacing:.3px;border-radius:10px;padding:14px 8px;border:1px solid var(--border);background:var(--card);color:var(--white);cursor:pointer;transition:transform .15s,background .15s,border-color .15s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.ss-continue-btn:hover{transform:translateY(-2px);border-color:var(--gold);color:var(--gold);}
 .ss-sticky{position:fixed;top:0;left:0;right:0;z-index:60;background:var(--panel);border-bottom:1px solid var(--gold);padding:10px 18px;display:flex;align-items:center;gap:10px;max-width:640px;margin:0 auto;transform:translateY(-100%);transition:transform .3s ease;}
 .ss-sticky.show{transform:translateY(0);}
 .ss-sticky .dot{width:8px;height:8px;border-radius:50%;background:var(--red-lt);animation:ssPulse 1.4s infinite;flex-shrink:0;}
@@ -688,7 +689,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
         <button class="ss-abtn fav" id="success-fav-btn" onclick="toggleFavoriteOrder()">🤍 Favoritar</button>
       </div>
       <div class="ss-secondary-links">
-        <a onclick="minimizeOrderTracking()">Continuar navegando pelo cardápio</a>
+        <button class="ss-continue-btn" onclick="minimizeOrderTracking()">🛍️ Continuar Comprando</button>
       </div>
     </div>
 
@@ -794,7 +795,8 @@ let currentOrderStatus = 'novo';
 let currentOrderTicket = null;
 let currentOrderName = '', currentOrderAddress = '', currentOrderPhone = '', currentOrderMode = 'delivery', currentOrderPayMethod = '';
 let currentOrderItems = [], currentOrderLat = null, currentOrderLng = null;
-let ssMap = null, ssMapMarkers = { store: null, customer: null };
+let currentCourierLat = null, currentCourierLng = null; // v34: posição ao vivo do motoboy
+let ssMap = null, ssMapMarkers = { store: null, customer: null, courier: null };
 let ssCountdownTimer = null, ssLiveTagTimer = null, ssSecsSinceUpdate = 0;
 let customer = null; // { phone, name, lastAddress, orderCount, lastOrderAt } — null = visitante
 
@@ -1602,7 +1604,7 @@ function applyTheme() {
 function renderMenu() {
   document.getElementById('hero-address').textContent = cfg.addr;
   document.getElementById('chip-hours').textContent = cfg.hours;
-  document.getElementById('chip-time').textContent = cfg.time;
+  document.getElementById('chip-time').textContent = mode === 'retirada' ? (cfg.timeRetirada || cfg.time) : cfg.time;
   document.getElementById('chip-fee').textContent =
     (cfg.feeMode === 'cep' || cfg.feeMode === 'bairro') ? 'Consulte pelo CEP/bairro'
     : cfg.feeMode === 'distancia' ? 'a partir de R$ ' + Number(cfg.fee).toFixed(2).replace('.', ',')
@@ -2355,24 +2357,44 @@ function initOrUpdateSsMap() {
   const mapEl = document.getElementById('ss-map');
   if (!mapEl || typeof L === 'undefined') return;
   mapEl.style.display = 'block';
-  if (!ssMap) {
+  const isNewMap = !ssMap;
+  if (isNewMap) {
     ssMap = L.map('ss-map', { zoomControl: false, attributionControl: false, scrollWheelZoom: false });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(ssMap);
   }
   const storeLat = Number(cfg.storeLat), storeLng = Number(cfg.storeLng);
-  const points = [[currentOrderLat, currentOrderLng]];
   const goldIcon = L.divIcon({ html: '<div style="background:#c9a84c;width:14px;height:14px;border-radius:50%;border:2px solid #0a0a0a;"></div>', className: '' });
   const houseIcon = L.divIcon({ html: '<div style="font-size:20px;">🏠</div>', className: '' });
+  const motoIcon = L.divIcon({ html: '<div style="font-size:22px;">🛵</div>', className: '' });
   if (!ssMapMarkers.customer) ssMapMarkers.customer = L.marker([currentOrderLat, currentOrderLng], { icon: houseIcon }).addTo(ssMap);
-  if (storeLat && storeLng) {
-    points.push([storeLat, storeLng]);
-    if (!ssMapMarkers.store) ssMapMarkers.store = L.marker([storeLat, storeLng], { icon: goldIcon }).addTo(ssMap);
+  if (storeLat && storeLng && !ssMapMarkers.store) ssMapMarkers.store = L.marker([storeLat, storeLng], { icon: goldIcon }).addTo(ssMap);
+  // v34: pontinho do motoboy — só aparece enquanto o pedido está "saiu para entrega"
+  let courierIsNew = false;
+  if (currentCourierLat && currentCourierLng) {
+    if (!ssMapMarkers.courier) {
+      ssMapMarkers.courier = L.marker([currentCourierLat, currentCourierLng], { icon: motoIcon }).addTo(ssMap);
+      courierIsNew = true;
+    } else {
+      ssMapMarkers.courier.setLatLng([currentCourierLat, currentCourierLng]);
+    }
+  } else if (ssMapMarkers.courier) {
+    ssMap.removeLayer(ssMapMarkers.courier);
+    ssMapMarkers.courier = null;
   }
-  ssMap.fitBounds(points, { padding: [24, 24], maxZoom: 15 });
+  // Só re-centraliza o mapa quando ele é criado ou quando o motoboy aparece pela primeira vez —
+  // depois disso, só move o pontinho, sem ficar reposicionando o mapa a cada atualização.
+  if (isNewMap || courierIsNew) {
+    const points = [[currentOrderLat, currentOrderLng]];
+    if (storeLat && storeLng) points.push([storeLat, storeLng]);
+    if (currentCourierLat && currentCourierLng) points.push([currentCourierLat, currentCourierLng]);
+    ssMap.fitBounds(points, { padding: [24, 24], maxZoom: 15 });
+  }
 }
 function startCountdown(createdAtIso) {
   if (ssCountdownTimer) clearInterval(ssCountdownTimer);
-  const nums = String(cfg.time || '').match(/\d+/g);
+  // v34: BUG CORRIGIDO — retirada usava a mesma janela de tempo do delivery.
+  const timeText = currentOrderMode === 'retirada' ? (cfg.timeRetirada || cfg.time) : cfg.time;
+  const nums = String(timeText || '').match(/\d+/g);
   const totalMin = nums && nums.length ? parseInt(nums[nums.length - 1]) : 40;
   const target = new Date(createdAtIso).getTime() + totalMin * 60000;
   const tickFn = () => {
@@ -2411,6 +2433,8 @@ function startTracking(id) {
       if (!r.ok) return;
       const data = await r.json();
       currentOrderStatus = data.status;
+      currentCourierLat = data.courierLat || null;
+      currentCourierLng = data.courierLng || null;
       if (data.ticketNumber && !currentOrderTicket) {
         currentOrderTicket = data.ticketNumber;
         const idEl = document.getElementById('success-order-id');
@@ -2534,7 +2558,9 @@ const STATUS_LABEL_SHORT = { novo: 'Recebido', preparando: 'Preparando', saiu: '
 function renderOrderTrackFloat() {
   if (!currentOrderId) return;
   const statusText = STATUS_LABEL_SHORT[currentOrderStatus] || 'Em andamento';
-  const eta = currentOrderCreatedAt ? estimateDeliveryWindowClient(currentOrderCreatedAt, cfg.time) : '';
+  // v34: BUG CORRIGIDO — retirada usava a estimativa de tempo do delivery.
+  const timeTextFloat = currentOrderMode === 'retirada' ? (cfg.timeRetirada || cfg.time) : cfg.time;
+  const eta = currentOrderCreatedAt ? estimateDeliveryWindowClient(currentOrderCreatedAt, timeTextFloat) : '';
   const orderLabel = currentOrderTicket ? `Pedido nº ${currentOrderTicket}` : `Pedido (aguardando confirmação)`;
   document.getElementById('otf-status').textContent = `${orderLabel} · ${statusText}`;
   document.getElementById('otf-total-eta').innerHTML = `R$ ${Number(currentOrderTotal).toFixed(2).replace('.', ',')}${eta ? `<br><span style="font-size:10px;font-weight:400;">${eta}</span>` : ''}`;
@@ -2572,6 +2598,8 @@ function setMode(m) {
   mode = m;
   document.getElementById('btn-delivery').classList.toggle('active', m === 'delivery');
   document.getElementById('btn-retirada').classList.toggle('active', m === 'retirada');
+  const chipTime = document.getElementById('chip-time');
+  if (chipTime) chipTime.textContent = m === 'retirada' ? (cfg.timeRetirada || cfg.time) : cfg.time;
   if (m === 'delivery') { onAddressChanged(); } else { deliveryBlocked = false; }
   updateCartUI();
 }
