@@ -29,6 +29,29 @@ Testado de ponta a ponta: senha errada → bloqueado com "❌ Senha inválida. P
 removido."; usuário nível "vendas" tentando excluir → bloqueado com 403; admin/master com senha
 certa → "✅ Pedido removido do sistema com sucesso." e o pedido some do arquivo.
 
+# v35 — Cardápio de rodízio (QR), link único pra bio, instalar como app, excluir reservas
+
+**Novo: Cardápio do Rodízio (`/cardapio-rodizio.html`).** Página pra QR code na mesa — o cliente
+já sentado escaneia e vê o cardápio do rodízio, com um banner "✨ Liberado hoje" pros itens
+extras que só saem em certos dias da semana. No editor de prato (painel → Cardápio), novo campo
+"📅 Dias do Rodízio" com os 7 dias da semana — item sem nenhum dia marcado aparece como fixo
+("sempre disponível"); com dias marcados, só aparece destacado no banner "liberado hoje" nesses
+dias. Em Configurações → 🔗 Links Úteis, o QR code já vem pronto pra copiar/imprimir.
+
+**Novo: link único pra bio do Instagram/Facebook (`/pedir-agora.html`).** Uma tela com botões
+pra "Fazer Pedido", "Cardápio do Rodízio", "Falar no WhatsApp" e "Como Chegar" — busca os dados
+reais da loja (nome, whatsapp, endereço) direto do painel, então fica sempre sincronizado.
+
+**Novo: banner "Instalar como App".** Aparece depois de alguns segundos de navegação no
+cardápio — no Android/Chrome usa o instalador nativo do navegador (1 toque); no iPhone mostra o
+passo a passo (Compartilhar → Adicionar à Tela de Início, já que a Apple não permite instalar
+em 1 clique). Não aparece de novo se o cliente já instalou ou já fechou o banner antes.
+
+**Senha master pra excluir reservas de mesa.** A tela "Excluir Dados" (Configurações → ⚠️ Zona
+de Perigo) ganhou uma terceira opção: além de Cardápio e Pedidos, agora também dá pra apagar
+todo o histórico de Reservas de Mesa — mesmo fluxo de sempre (pergunta qual, avisa o que vai
+acontecer, pede a senha master, registra no histórico de auditoria).
+
 # v34 — Rastreamento GPS do motoboy, botões invisíveis, tempo estimado, excluir dados
 
 **Novo: rastreamento GPS ao vivo do motoboy.** Nova página `entregador.html` que o motoboy abre

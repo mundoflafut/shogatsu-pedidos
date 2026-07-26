@@ -2183,6 +2183,24 @@ function estimateDeliveryWindow(order, cfg) {
       return sendJSON(res, 200, { ok: true, message: `✅ Histórico apagado (${countBefore} pedido(s) removido(s)).` });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
+  // ── POST /api/admin/reset-reservations — apaga TODO o histórico de reservas de mesa (v35) ──
+  if (pathname === '/api/admin/reset-reservations' && req.method === 'POST') {
+    const session = getSession(getToken(req, query));
+    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.master) {
+      return sendJSON(res, 403, { error: 'Somente o usuário MASTER pode apagar o histórico de reservas.' });
+    }
+    try {
+      const { password } = await readBody(req);
+      const { cfg } = readConfig();
+      if (!password || password !== cfg.masterPass) return sendJSON(res, 403, { error: '❌ Senha inválida. Histórico não foi apagado.' });
+      const countBefore = readJSON(RESERVATIONS_FILE).length;
+      writeJSON(RESERVATIONS_FILE, []);
+      const log = readJSON(DELETE_LOG_FILE);
+      log.unshift({ action: 'reset-reservations', reservationsRemoved: countBefore, deletedAt: new Date().toISOString(), deletedBy: session.username, deletedByRole: session.role });
+      writeJSON(DELETE_LOG_FILE, log.slice(0, 500));
+      return sendJSON(res, 200, { ok: true, message: `✅ Histórico de reservas apagado (${countBefore} reserva(s) removida(s)).` });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
 
 
   if (pathname.startsWith('/api/track/') && req.method === 'GET') {
