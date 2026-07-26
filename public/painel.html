@@ -569,6 +569,26 @@ input,select,textarea{font-family:'Inter',sans-serif;}
           </div>
         </div>
         <div class="settings-card">
+          <div class="settings-card-title">🔗 Links Úteis</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Duas páginas novas, prontas pra usar — não precisam de nenhuma configuração extra.</div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>📲 Link único (bio do Instagram/Facebook)</label>
+            <div style="display:flex;gap:8px;">
+              <input id="link-pedir-agora" readonly onclick="this.select()" style="font-size:11px;"/>
+              <button class="btn secondary sm" onclick="copyLinkField('link-pedir-agora')">📋</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>🍽️ Cardápio do Rodízio (QR code da mesa)</label>
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <input id="link-rodizio" readonly onclick="this.select()" style="font-size:11px;"/>
+              <button class="btn secondary sm" onclick="copyLinkField('link-rodizio')">📋</button>
+            </div>
+            <img id="qr-rodizio" style="width:140px;height:140px;border-radius:8px;background:#fff;padding:6px;" alt="QR Code do cardápio de rodízio"/>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">Imprime esse QR e cola na mesa — o cliente escaneia e vê o cardápio do rodízio na hora.</div>
+          </div>
+        </div>
+        <div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
           <div class="field"><label>Endereço Completo</label><input id="cfg-addr" placeholder="Av. Gov. Roberto Silveira, 109"/></div>
@@ -1021,6 +1041,19 @@ input,select,textarea{font-family:'Inter',sans-serif;}
       <div class="field-row">
         <div class="field"><label>Badge (destaque)</label><input id="item-badge" placeholder="ex: 🔥 Destaque  ou  👑 Premium"/></div>
         <div class="field">
+          <label>📅 Dias do Rodízio (opcional)</label>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Usado só no cardápio de rodízio presencial (QR code da mesa). Marque os dias em que esse item é servido como "extra do dia". Deixe tudo desmarcado se o item é fixo/sempre disponível ou se ele nem faz parte do rodízio.</div>
+          <div id="item-days" style="display:flex;flex-wrap:wrap;gap:10px;">
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="dom"/> Dom</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="seg"/> Seg</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="ter"/> Ter</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qua"/> Qua</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qui"/> Qui</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sex"/> Sex</label>
+            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sab"/> Sáb</label>
+          </div>
+        </div>
+        <div class="field">
           <label>Imprime na(s) via(s) de:</label>
           <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;">
             <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="item-st-cozinha" checked/> 🍳 Cozinha</label>
@@ -1239,6 +1272,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
           <option value="">Selecione...</option>
           <option value="menu">🍽️ Cardápio — restaurar pro padrão de fábrica</option>
           <option value="orders">📋 Pedidos — apagar toda a lista/histórico</option>
+          <option value="reservations">📅 Reservas de Mesa — apagar todo o histórico</option>
         </select>
       </div>
       <div id="delete-data-warning" style="display:none;font-size:12px;color:var(--red-lt);background:rgba(211,68,63,.1);border:1px solid var(--red-lt);border-radius:8px;padding:10px;margin:10px 0;"></div>
@@ -1720,6 +1754,13 @@ function copyCourierLink(){
     showToast('✅ Link copiado','Cole no WhatsApp do motoboy.');
   }).catch(()=>{ document.execCommand('copy'); showToast('✅ Link copiado','Cole no WhatsApp do motoboy.'); });
 }
+function copyLinkField(id){
+  const input = document.getElementById(id);
+  input.select();
+  navigator.clipboard && navigator.clipboard.writeText(input.value).then(()=>{
+    showToast('✅ Link copiado','Já pode colar onde precisar.');
+  }).catch(()=>{ document.execCommand('copy'); showToast('✅ Link copiado','Já pode colar onde precisar.'); });
+}
 
 // ── Seletor de motoboy (v32) — mostra os motoboys pré-cadastrados como chips,
 // com opção de digitar um nome avulso ou deixar em branco. ──
@@ -1809,7 +1850,8 @@ async function confirmDeleteOrder(){
 // ── Excluir Dados (v34) — pergunta QUAL dado antes de excluir, depois a senha master. ──
 const DELETE_DATA_INFO = {
   menu:   { endpoint:'/api/admin/reset-menu',   warning:'⚠️ Isso substitui TODOS os itens, categorias, fotos e destaques do cardápio atual pelo cardápio padrão de fábrica. Não pode ser desfeito.' },
-  orders: { endpoint:'/api/admin/reset-orders', warning:'⚠️ Isso apaga TODA a lista/histórico de pedidos do sistema. Não pode ser desfeito.' }
+  orders: { endpoint:'/api/admin/reset-orders', warning:'⚠️ Isso apaga TODA a lista/histórico de pedidos do sistema. Não pode ser desfeito.' },
+  reservations: { endpoint:'/api/admin/reset-reservations', warning:'⚠️ Isso apaga TODO o histórico de reservas de mesa do sistema. Não pode ser desfeito.' }
 };
 function openDeleteDataModal(){
   document.getElementById('delete-data-what').value = '';
@@ -1848,6 +1890,7 @@ async function confirmDeleteData(){
     showToast('✅ Concluído', data.message || 'Dados excluídos com sucesso.');
     if(what==='menu') renderMenuEditor();
     if(what==='orders'){ orders=[]; updateNewBadge(); refreshCurrentPage(); }
+    if(what==='reservations'){ renderReservationsList(); }
   }catch(e){
     errEl.textContent = 'Erro de conexão. Tente novamente.';
     errEl.style.display='block';
@@ -2614,6 +2657,7 @@ function openAddItem(){
   ['item-name','item-desc','item-qty','item-badge'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('item-price').value='';
   setItemStationCheckboxes(['cozinha']);
+  document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=false);
   resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
@@ -2630,6 +2674,8 @@ function openEditItem(si,ii){
   document.getElementById('item-qty').value=item.qty||'';
   document.getElementById('item-badge').value=item.badge||'';
   setItemStationCheckboxes(item.stations && item.stations.length ? item.stations : ['cozinha']);
+  const itemDays = item.days || [];
+  document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=itemDays.includes(cb.value));
   resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
@@ -2704,6 +2750,7 @@ async function saveItem(){
     .map(g=>({...g, name:g.name.trim()||'Opções', options:g.options.map(o=>({name:(o.name||'').trim(),priceDelta:Number(o.priceDelta)||0})).filter(o=>o.name)}))
     .filter(g=>g.options.length>0);
   const [posX, posY] = document.getElementById('item-image-pos').value.split(',').map(n=>parseInt(n)||50);
+  const selectedDays = [...document.querySelectorAll('.item-day-cb:checked')].map(cb=>cb.value);
   const item={
     name,desc:document.getElementById('item-desc').value.trim(),
     price:parseFloat(document.getElementById('item-price').value)||0,
@@ -2712,6 +2759,7 @@ async function saveItem(){
     stations:getItemStationCheckboxes(),
     image:document.getElementById('item-image').value.trim(),
     imagePos:{x:posX,y:posY},
+    days:selectedDays,
     variants:cleanVariants
   };
   if(ii===-1){ item.available=true; menu[si].items.push(item); }
@@ -3125,6 +3173,13 @@ function saveStoreCoordsManually(){
   showToast('📍 Salvo!', 'Coordenadas da loja atualizadas manualmente.');
 }
 function loadSettings(){
+  // v35: links úteis (pedir-agora e cardápio-rodízio) + QR code
+  const pedirLink = location.origin + '/pedir-agora.html';
+  const rodizioLink = location.origin + '/cardapio-rodizio.html';
+  const linkPedirEl=document.getElementById('link-pedir-agora'); if(linkPedirEl) linkPedirEl.value = pedirLink;
+  const linkRodizioEl=document.getElementById('link-rodizio'); if(linkRodizioEl) linkRodizioEl.value = rodizioLink;
+  const qrEl=document.getElementById('qr-rodizio');
+  if(qrEl) qrEl.src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(rodizioLink);
   document.getElementById('cfg-whats').value=cfg.whats||'';
   const spEl=document.getElementById('cfg-storePhone'); if(spEl) spEl.value=cfg.storePhone||'';
   document.getElementById('cfg-fee').value=cfg.fee||'';
