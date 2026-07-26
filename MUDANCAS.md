@@ -1,4 +1,39 @@
-# v36 — Bug real do Service Worker, sidebar recolhível/redimensionável, cardápio do rodízio e divulgação
+# v37 — Bug do menu mobile, fontes maiores, modernização visual e barra de categorias
+
+**Bug real corrigido: no celular não dava pra reabrir o menu lateral.** O botão de
+recolher/expandir a sidebar (criado na v36) ficava *dentro* da própria sidebar — em tela
+pequena ela já começa escondida por padrão, então o botão de abrir sumia junto. Corrigido com
+um ☰ sempre visível na barra superior em telas pequenas, mais um fundo escurecido atrás da
+sidebar (toca fora pra fechar).
+
+**Fontes aumentadas em todo o painel.** Todo tamanho de fonte do `painel.html` subiu ~1px
+(o texto base foi de 13px pra 14px, e assim por diante em cascata) — mantém a hierarquia
+visual, só fica mais legível.
+
+**Modernização visual do painel** (só aparência — nenhuma lógica, API ou regra de negócio
+mudou): cantos mais arredondados (12–16px) em cards e botões, sombras mais suaves com
+elevação ao passar o mouse, efeito glassmorphism discreto na barra superior e nos modais,
+animação de entrada suave ao trocar de aba, efeito ripple (ondinha) ao clicar em qualquer
+botão, e ícones da barra lateral com uma leve animação ao selecionar. Como a maioria dos
+elementos (cards, botões, barra lateral) é compartilhada entre as abas, o efeito já aparece
+em Pedidos, Reservas, Motoboys, Cardápio, Relatórios, Avaliações, Configurações, Impressoras
+e Usuários sem precisar mexer aba por aba.
+
+*Não incluído nesta rodada, por escopo*: troca completa dos emojis por ícones Lucide/Heroicons
+e um redesenho estrutural (não só visual) de cada tela individualmente — isso é bem mais
+arriscado de fazer de uma vez só num sistema em produção; prefiro fazer aba por aba, testando
+cada uma, se for do interesse continuar.
+
+**Cardápio (index.html): barra de categorias — Sticky Scrollable Category Bar completa.**
+A barra já existia fixa no topo com rolagem horizontal; adicionado o que faltava do pedido:
+arrastar com o mouse no desktop (o toque no celular já funcionava nativamente), a categoria
+ativa agora se centraliza sozinha dentro da barra conforme a rolagem da página muda de seção,
+brilho e ícone com bounce na categoria ativa, e glassmorphism com sombra na barra. A lógica de
+detectar a seção visível e rolar suavemente até ela já existia e não foi alterada.
+
+---
+
+
 
 **Bug real corrigido: painel ficava preso numa versão antiga (cache do Service Worker).**
 O `sw.js` usava "cache primeiro" pra **todo** arquivo HTML, inclusive o `painel.html` — uma vez
