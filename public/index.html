@@ -66,11 +66,18 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .chip span{color:var(--white);}
 
 .mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:sticky;top:60px;z-index:190;}
-.mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:8px;align-items:center;}
-.mode-btn{flex:1;background:none;border:1px solid var(--border);border-radius:4px;padding:10px;color:var(--muted);font-size:12px;font-weight:500;letter-spacing:1px;transition:all .2s;max-width:180px;}
+.mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:10px;align-items:center;}
+.mode-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .2s;max-width:180px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.mode-btn .mode-btn-icon{font-size:20px;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--panel);transition:all .2s;}
+.mode-btn[data-color="delivery"] .mode-btn-icon{background:rgba(211,68,63,.14);}
+.mode-btn[data-color="retirada"] .mode-btn-icon{background:rgba(64,150,255,.14);}
+.mode-btn[data-color="reservar"] .mode-btn-icon{background:rgba(255,179,0,.16);}
+.mode-btn[data-color="delivery"].active{background:var(--red);border-color:var(--red);color:#fff;}
+.mode-btn[data-color="retirada"].active{background:#2f6fd8;border-color:#2f6fd8;color:#fff;}
+.mode-btn[data-color="reservar"].active{background:#c98a00;border-color:#c98a00;color:#fff;}
+.mode-btn.active .mode-btn-icon{background:rgba(255,255,255,.22);}
 .review-badge{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:8px 14px;font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;}
 .review-badge.pending{cursor:pointer;animation:couponGlow 2s ease-in-out infinite;}
-.mode-btn.active{background:var(--red);border-color:var(--red);color:#fff;}
 
 .cat-nav{background:var(--black);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:108px;z-index:180;}
 .cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;}
@@ -90,13 +97,13 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .item-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:14px;transition:border-color .2s;}
 .item-card:hover{border-color:var(--red-dk);}
-.item-img{width:80px;height:80px;border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
+.item-img{width:var(--dish-img-size,80px);height:var(--dish-img-size,80px);border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
 .item-body{flex:1;}
-.item-name{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--white);margin-bottom:3px;line-height:1.2;}
-.item-desc{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;}
+.item-name{font-family:'Cormorant Garamond',serif;font-size:calc(18px * var(--menu-fs-scale,1));color:var(--white);margin-bottom:3px;line-height:1.2;}
+.item-desc{font-size:calc(11px * var(--menu-fs-scale,1));color:var(--muted);line-height:1.6;margin-bottom:8px;}
 .item-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-.item-price{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--red-lt);}
-.item-badge{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--red-lt);border:1px solid var(--red-dk);padding:2px 8px;border-radius:20px;margin-bottom:6px;display:inline-block;}
+.item-price{font-family:'Cormorant Garamond',serif;font-size:calc(20px * var(--menu-fs-scale,1));font-weight:600;color:var(--red-lt);}
+.item-badge{font-size:10px;font-weight:700;letter-spacing:.5px;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:3px 10px;border-radius:20px;margin-bottom:6px;display:inline-block;}
 .item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
 .add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .1s;}
@@ -364,9 +371,9 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 <div class="mode-bar">
   <div class="mode-bar-inner">
-    <button class="mode-btn active" id="btn-delivery" onclick="setMode('delivery')">🛵 Delivery</button>
-    <button class="mode-btn" id="btn-retirada" onclick="setMode('retirada')">🏪 Retirada</button>
-    <button class="mode-btn" id="btn-reservar" style="display:none;" onclick="openReservationScreen()">📅 Reservar Mesa</button>
+    <button class="mode-btn active" data-color="delivery" id="btn-delivery" onclick="setMode('delivery')"><span class="mode-btn-icon">🛵</span>Delivery</button>
+    <button class="mode-btn" data-color="retirada" id="btn-retirada" onclick="setMode('retirada')"><span class="mode-btn-icon">🏪</span>Retirada</button>
+    <button class="mode-btn" data-color="reservar" id="btn-reservar" style="display:none;" onclick="openReservationScreen()"><span class="mode-btn-icon">📅</span>Reservar Mesa</button>
     <div id="review-status-badge" style="display:none;"></div>
   </div>
 </div>
@@ -714,8 +721,30 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
       <div class="form-group"><label>Quantas pessoas? *</label><input type="number" min="1" id="rsv-people" placeholder="ex: 4"/></div>
       <div class="form-group"><label>Observações</label><textarea id="rsv-notes" placeholder="Aniversário, preferência de mesa, restrições..."></textarea></div>
       <p class="hint" id="reservation-status" style="color:var(--red-lt);font-size:12px;"></p>
-      <button class="place-btn" style="position:static;" onclick="submitReservation()">✅ Solicitar Reserva</button>
+      <button class="place-btn" style="position:static;" id="rsv-submit-btn" onclick="submitReservation()">✅ Solicitar Reserva</button>
       <p class="hint" style="margin-top:10px;">A reserva fica pendente até a loja confirmar. Você será avisado pelo WhatsApp.</p>
+    </div>
+
+    <!-- v33: card de acompanhamento — aparece depois de solicitar, com a identidade visual do
+         cardápio (mesmas classes .ss-card / .ss-sec-title da tela de pedido). Fica ali mostrando
+         "aguardando confirmação" / "confirmada" / "recusada" e a resposta da loja, se houver. -->
+    <div class="ss-card d1" id="rsv-status-card" style="display:none;margin-top:16px;">
+      <div class="ss-sec-title">ℹ️ Status da Reserva</div>
+      <div style="padding:16px 20px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <span id="rsv-status-icon" style="font-size:24px;line-height:1;">⏳</span>
+          <div>
+            <div id="rsv-status-label" style="font-weight:600;font-size:14px;color:var(--white);margin-bottom:2px;">Aguardando confirmação</div>
+            <div id="rsv-status-desc" style="font-size:11px;color:var(--muted);line-height:1.5;">Sua solicitação foi enviada e está sendo analisada pela equipe do restaurante.</div>
+          </div>
+        </div>
+        <div id="rsv-reply-wrap" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">💬 Resposta da Loja</div>
+          <div id="rsv-reply-text" style="font-size:13px;color:var(--white);"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:14px;display:flex;align-items:center;gap:6px;">📲 Você também será avisado pelo WhatsApp.</div>
+        <button class="btn secondary" style="width:100%;margin-top:14px;font-size:12px;padding:10px;" onclick="startNewReservation()">+ Fazer nova reserva</button>
+      </div>
     </div>
   </div>
 </div>
@@ -973,8 +1002,15 @@ function openReservationScreen() {
     if(!document.getElementById('rsv-phone').value) document.getElementById('rsv-phone').value = customer.phone;
   }
   document.getElementById('reservation-screen').classList.add('open');
+  // v33: se o cliente já tem uma reserva em aberto, mostra o card de status e busca o que há de novo
+  const lastId = localStorage.getItem('shogatsu_last_reservation');
+  if (lastId) { refreshReservationStatus(lastId); startReservationPolling(); }
+  else { document.getElementById('rsv-status-card').style.display = 'none'; }
 }
-function closeReservationScreen() { document.getElementById('reservation-screen').classList.remove('open'); }
+function closeReservationScreen() {
+  document.getElementById('reservation-screen').classList.remove('open');
+  stopReservationPolling();
+}
 async function submitReservation() {
   const name = document.getElementById('rsv-name').value.trim();
   const phone = document.getElementById('rsv-phone').value.trim();
@@ -992,11 +1028,63 @@ async function submitReservation() {
     });
     const data = await r.json();
     if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível reservar.'; return; }
-    closeReservationScreen();
+    // v33: em vez de fechar a tela, guarda o ID e mostra o card de acompanhamento na mesma tela
+    // (igual ao modelo: formulário + status ali embaixo), com polling pra pegar a resposta da loja.
+    localStorage.setItem('shogatsu_last_reservation', data.reservation.id);
+    renderReservationStatus(data.reservation);
+    startReservationPolling();
     showMiniToast('✅ Reserva solicitada! Aguarde a confirmação da loja.', 4000);
-    ['rsv-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('rsv-notes').value = '';
   } catch (e) { statusEl.textContent = 'Erro de conexão.'; }
 }
+function startNewReservation() {
+  localStorage.removeItem('shogatsu_last_reservation');
+  stopReservationPolling();
+  document.getElementById('rsv-status-card').style.display = 'none';
+  ['rsv-name','rsv-phone','rsv-date','rsv-time','rsv-people','rsv-notes'].forEach(id => document.getElementById(id).value = '');
+  if (customer) {
+    document.getElementById('rsv-name').value = customer.name || '';
+    document.getElementById('rsv-phone').value = customer.phone || '';
+  }
+}
+const RSV_STATUS_INFO = {
+  pendente:  { icon:'⏳', label:'Aguardando confirmação', desc:'Sua solicitação foi enviada e está sendo analisada pela equipe do restaurante.' },
+  confirmada:{ icon:'✅', label:'Reserva confirmada!',     desc:'Sua mesa está garantida. Chegue com uns minutos de antecedência.' },
+  recusada:  { icon:'✕',  label:'Não foi possível confirmar', desc:'A loja não conseguiu confirmar essa reserva pra esse horário. Tente outra data/horário ou fale pelo WhatsApp.' },
+  cancelada: { icon:'✕',  label:'Reserva cancelada',       desc:'Essa reserva foi cancelada.' }
+};
+function renderReservationStatus(r) {
+  const card = document.getElementById('rsv-status-card');
+  const info = RSV_STATUS_INFO[r.status] || RSV_STATUS_INFO.pendente;
+  document.getElementById('rsv-status-icon').textContent = info.icon;
+  document.getElementById('rsv-status-label').textContent = info.label;
+  document.getElementById('rsv-status-desc').textContent = info.desc;
+  const replyWrap = document.getElementById('rsv-reply-wrap');
+  if (r.storeReply) {
+    replyWrap.style.display = 'block';
+    document.getElementById('rsv-reply-text').textContent = r.storeReply;
+  } else {
+    replyWrap.style.display = 'none';
+  }
+  card.style.display = 'block';
+}
+let reservationPollTimer = null;
+async function refreshReservationStatus(id) {
+  try {
+    const res = await fetch('/api/track-reservation/' + encodeURIComponent(id));
+    if (!res.ok) { localStorage.removeItem('shogatsu_last_reservation'); document.getElementById('rsv-status-card').style.display = 'none'; return; }
+    const r = await res.json();
+    renderReservationStatus(r);
+  } catch (e) { /* falha de rede silenciosa — tenta de novo no próximo ciclo */ }
+}
+function startReservationPolling() {
+  stopReservationPolling();
+  reservationPollTimer = setInterval(() => {
+    const id = localStorage.getItem('shogatsu_last_reservation');
+    if (id) refreshReservationStatus(id); else stopReservationPolling();
+  }, 15000);
+}
+function stopReservationPolling() { if (reservationPollTimer) { clearInterval(reservationPollTimer); reservationPollTimer = null; } }
 
 function toggleAccountPanel(which) {
   const histP = document.getElementById('account-history-panel'), editP = document.getElementById('account-edit-panel');
@@ -1487,11 +1575,22 @@ function connectPublicSSE() {
   if (publicEvtSource) publicEvtSource.close();
   publicEvtSource = new EventSource('/api/public-stream');
   publicEvtSource.addEventListener('menu-updated', () => { loadConfig(); });
+  // v33: assim que a loja confirma/recusa/responde uma reserva, atualiza a tela na hora
+  publicEvtSource.addEventListener('reservation-updated', (e) => {
+    try {
+      const { id } = JSON.parse(e.data);
+      const lastId = localStorage.getItem('shogatsu_last_reservation');
+      if (lastId && lastId === id) refreshReservationStatus(id);
+    } catch (err) {}
+  });
 }
 
 function applyTheme() {
-  if (!cfg.theme) return;
   const root = document.documentElement.style;
+  // v33: tamanho da foto do prato e tamanho da fonte do cardápio, ajustáveis em Configurações
+  root.setProperty('--dish-img-size', (cfg.dishPhotoSize || 80) + 'px');
+  root.setProperty('--menu-fs-scale', cfg.menuFontScale || 1);
+  if (!cfg.theme) return;
   if (cfg.theme.primary) root.setProperty('--gold', cfg.theme.primary);
   if (cfg.theme.accent) { root.setProperty('--red', cfg.theme.accent); root.setProperty('--red-lt', cfg.theme.accent); }
   if (cfg.theme.bg) root.setProperty('--black', cfg.theme.bg);
@@ -1583,12 +1682,12 @@ function renderMenu() {
         return `
         <div class="item-card" id="card-${key}" style="${isAvail ? '' : 'opacity:.55;'}">
           <div class="item-img" style="position:relative;">
-            ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;">` : sec.icon}
+            ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;">` : sec.icon}
             <button onclick="toggleFavorite('${key}', event)" title="Favoritar" style="position:absolute;top:6px;right:6px;background:rgba(10,10,10,.55);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${favorites.has(key) ? '❤️' : '🤍'}</button>
           </div>
           <div class="item-body">
             ${item.badge && isAvail ? `<div class="item-badge">${item.badge}</div>` : ''}
-            ${!isAvail ? `<div class="item-badge" style="background:var(--muted);">Indisponível</div>` : ''}
+            ${!isAvail ? `<div class="item-badge" style="background:var(--muted);color:#fff;">Indisponível</div>` : ''}
             <div class="item-name">${item.name}</div>
             <div class="item-desc">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
             ${cartQty > 0 ? `<div class="mi-in-cart-tag">🛒 ${cartQty} no carrinho</div>` : ''}
@@ -1603,7 +1702,6 @@ function renderMenu() {
                 : `<button class="add-btn" onclick="addToCart('${key}')" data-key="${key}">+</button>`
               }
             </div>
-            ${item.badge && isAvail ? `<div class="item-promo-tag">🏷️ ${item.badge}</div>` : ''}
           </div>
         </div>`;
       }).join('')}

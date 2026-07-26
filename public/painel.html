@@ -337,19 +337,17 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 
   <nav class="sidebar-nav">
     <div class="nav-section">Principal</div>
-    <button class="nav-item active" onclick="goPage('dashboard')"><span class="ni">📊</span> Dashboard</button>
-    <button class="nav-item" onclick="goPage('pedidos')"><span class="ni">🛒</span> Pedidos <span class="nb" id="nb-pedidos" style="display:none">0</span></button>
-    <button class="nav-item" onclick="goPage('kanban')"><span class="ni">📋</span> Kanban</button>
-    <button class="nav-item" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
+    <button class="nav-item active" data-page="pedidos" onclick="goPage('pedidos')"><span class="ni">📊</span> Pedidos <span class="nb" id="nb-pedidos" style="display:none">0</span></button>
+    <button class="nav-item" data-page="reservas" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
     <div class="nav-section" data-min-role="admin">Gestão</div>
-    <button class="nav-item" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
-    <button class="nav-item" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
-    <button class="nav-item" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
-    <button class="nav-item" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
+    <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
+    <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
+    <button class="nav-item" data-page="relatorios" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
+    <button class="nav-item" data-page="avaliacoes" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
     <div class="nav-section" data-min-role="admin">Sistema</div>
-    <button class="nav-item" data-min-role="admin" onclick="goPage('configuracoes')"><span class="ni">⚙️</span> Configurações</button>
+    <button class="nav-item" data-page="configuracoes" data-min-role="admin" onclick="goPage('configuracoes')"><span class="ni">⚙️</span> Configurações</button>
     <button class="nav-item" data-min-role="admin" onclick="goToPrinterSettings()"><span class="ni">🖨</span> Impressoras</button>
-    <button class="nav-item" data-min-role="master" onclick="goPage('usuarios')"><span class="ni">👥</span> Usuários</button>
+    <button class="nav-item" data-page="usuarios" data-min-role="master" onclick="goPage('usuarios')"><span class="ni">👥</span> Usuários</button>
     <button class="nav-item" onclick="toggleTheme()"><span class="ni" id="theme-icon">🌙</span> <span id="theme-label">Modo Escuro</span></button>
   </nav>
 
@@ -380,78 +378,87 @@ input,select,textarea{font-family:'Inter',sans-serif;}
   <div class="content">
 
     <!-- ── DASHBOARD ── -->
-    <div class="page active" id="page-dashboard">
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-icon">🛒</div>
-          <div class="stat-value" id="s-pedidos" style="color:var(--red-lt)">0</div>
-          <div class="stat-label">Pedidos Hoje</div>
-          <div class="stat-delta up" id="s-novos">0 aguardando</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">💰</div>
-          <div class="stat-value" id="s-receita" style="color:var(--green-lt)">R$ 0</div>
-          <div class="stat-label">Faturamento Hoje</div>
-          <div class="stat-delta up">Pedidos entregues</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">⏱</div>
-          <div class="stat-value" id="s-tempo" style="color:var(--gold)">0 min</div>
-          <div class="stat-label">Tempo Médio</div>
-          <div class="stat-delta">de preparo + entrega</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">⭐</div>
-          <div class="stat-value" id="s-rating" style="color:var(--blue)">—</div>
-          <div class="stat-label">Avaliação Média</div>
-          <div class="stat-delta" id="s-rating-delta">Sem avaliações ainda</div>
-        </div>
+    <div class="page active" id="page-pedidos">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="topbar-btn active" id="ptab-visao" onclick="setPedidosView('visao')">📊 Visão Geral</button>
+        <button class="topbar-btn" id="ptab-lista" onclick="setPedidosView('lista')">📃 Lista</button>
+        <button class="topbar-btn" id="ptab-kanban" onclick="setPedidosView('kanban')">📋 Kanban</button>
       </div>
 
-      <div class="panels">
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title">🔴 Pedidos Aguardando</span>
-            <button class="btn sm secondary" onclick="goPage('pedidos')">Ver todos</button>
+      <!-- ── Sub-aba: Visão Geral (ex-Dashboard) ── -->
+      <div id="pedidos-view-visao">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">🛒</div>
+            <div class="stat-value" id="s-pedidos" style="color:var(--red-lt)">0</div>
+            <div class="stat-label">Pedidos Hoje</div>
+            <div class="stat-delta up" id="s-novos">0 aguardando</div>
           </div>
-          <div class="panel-body" id="dash-orders-list">
-            <div style="text-align:center;padding:30px;color:var(--muted)">Nenhum pedido no momento</div>
+          <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value" id="s-receita" style="color:var(--green-lt)">R$ 0</div>
+            <div class="stat-label">Faturamento Hoje</div>
+            <div class="stat-delta up">Pedidos entregues</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏱</div>
+            <div class="stat-value" id="s-tempo" style="color:var(--gold)">0 min</div>
+            <div class="stat-label">Tempo Médio</div>
+            <div class="stat-delta">de preparo + entrega</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-value" id="s-rating" style="color:var(--blue)">—</div>
+            <div class="stat-label">Avaliação Média</div>
+            <div class="stat-delta" id="s-rating-delta">Sem avaliações ainda</div>
           </div>
         </div>
-        <div>
-          <div class="panel" style="margin-bottom:14px;">
-            <div class="panel-header"><span class="panel-title">📊 Pedidos por Status</span></div>
-            <div class="panel-body">
-              <div style="display:flex;flex-direction:column;gap:10px;" id="status-bars"></div>
+
+        <div class="panels">
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">🔴 Pedidos Aguardando</span>
+              <button class="btn sm secondary" onclick="setPedidosView('lista')">Ver todos</button>
+            </div>
+            <div class="panel-body" id="dash-orders-list">
+              <div style="text-align:center;padding:30px;color:var(--muted)">Nenhum pedido no momento</div>
             </div>
           </div>
-          <div class="panel">
-            <div class="panel-header"><span class="panel-title">🏆 Mais Pedidos Hoje</span></div>
-            <div class="panel-body" id="top-items" style="font-size:12px;color:var(--muted);">Nenhum pedido ainda</div>
+          <div>
+            <div class="panel" style="margin-bottom:14px;">
+              <div class="panel-header"><span class="panel-title">📊 Pedidos por Status</span></div>
+              <div class="panel-body">
+                <div style="display:flex;flex-direction:column;gap:10px;" id="status-bars"></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><span class="panel-title">🏆 Mais Pedidos Hoje</span></div>
+              <div class="panel-body" id="top-items" style="font-size:12px;color:var(--muted);">Nenhum pedido ainda</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ── PEDIDOS ── -->
-    <div class="page" id="page-pedidos">
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-        <button class="topbar-btn active" id="filter-todos"   onclick="filterOrders('todos')"    style="border-color:var(--red);color:var(--red-lt)">Todos</button>
-        <button class="topbar-btn" id="filter-novo"     onclick="filterOrders('novo')">🔴 Novos</button>
-        <button class="topbar-btn" id="filter-prep"     onclick="filterOrders('prep')">🟡 Preparando</button>
-        <button class="topbar-btn" id="filter-pronto"   onclick="filterOrders('pronto')">🟢 Prontos</button>
-        <button class="topbar-btn" id="filter-entregue" onclick="filterOrders('entregue')">✅ Entregues</button>
-        <button class="topbar-btn" id="filter-cancelado" onclick="filterOrders('cancelado')">⛔ Cancelados</button>
-        <div style="margin-left:auto;display:flex;gap:8px;">
-          <input style="background:var(--panel);border:1px solid var(--border);color:var(--white);padding:7px 12px;border-radius:6px;outline:none;font-size:12px;width:200px;" placeholder="🔍 Buscar por nome ou #pedido..." id="order-search" oninput="renderOrdersList()"/>
+      <!-- ── Sub-aba: Lista (ex-Pedidos) ── -->
+      <div id="pedidos-view-lista" style="display:none;">
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <button class="topbar-btn active" id="filter-todos"   onclick="filterOrders('todos')"    style="border-color:var(--red);color:var(--red-lt)">Todos</button>
+          <button class="topbar-btn" id="filter-novo"     onclick="filterOrders('novo')">🔴 Novos</button>
+          <button class="topbar-btn" id="filter-prep"     onclick="filterOrders('prep')">🟡 Preparando</button>
+          <button class="topbar-btn" id="filter-pronto"   onclick="filterOrders('pronto')">🟢 Prontos</button>
+          <button class="topbar-btn" id="filter-entregue" onclick="filterOrders('entregue')">✅ Entregues</button>
+          <button class="topbar-btn" id="filter-cancelado" onclick="filterOrders('cancelado')">⛔ Cancelados</button>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <input style="background:var(--panel);border:1px solid var(--border);color:var(--white);padding:7px 12px;border-radius:6px;outline:none;font-size:12px;width:200px;" placeholder="🔍 Buscar por nome ou #pedido..." id="order-search" oninput="renderOrdersList()"/>
+          </div>
         </div>
+        <div id="orders-list-full"></div>
       </div>
-      <div id="orders-list-full"></div>
-    </div>
 
-    <!-- ── KANBAN ── -->
-    <div class="page" id="page-kanban">
-      <div class="kanban" id="kanban-board"></div>
+      <!-- ── Sub-aba: Kanban ── -->
+      <div id="pedidos-view-kanban" style="display:none;">
+        <div class="kanban" id="kanban-board"></div>
+      </div>
     </div>
 
     <!-- ── RESERVAS DE MESA ── -->
@@ -533,6 +540,26 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 
       <div class="settings-section-title">🏪 Restaurante</div>
       <div class="settings-grid">
+        <div class="settings-card">
+          <div class="settings-card-title">🎨 Aparência do Cardápio</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ajusta como o cardápio aparece pro cliente — dá pra testar e ver o resultado ao vivo abrindo o site em outra aba.</div>
+          <div class="field">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Tamanho da foto do prato</span>
+              <span id="cfg-dishphoto-val" style="color:var(--red-lt);font-weight:600;">80px</span>
+            </label>
+            <input type="range" id="cfg-dishphotosize" min="56" max="140" step="2" oninput="document.getElementById('cfg-dishphoto-val').textContent=this.value+'px'"/>
+          </div>
+          <div class="field">
+            <label>Tamanho da fonte do cardápio</label>
+            <select id="cfg-menufontscale">
+              <option value="0.85">Pequena</option>
+              <option value="1">Normal</option>
+              <option value="1.15">Grande</option>
+              <option value="1.3">Extra Grande</option>
+            </select>
+          </div>
+        </div>
         <div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
@@ -925,6 +952,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
       <input type="hidden" id="item-edit-si"/>
       <input type="hidden" id="item-edit-ii"/>
       <input type="hidden" id="item-image"/>
+      <input type="hidden" id="item-image-pos" value="50,50"/>
       <div class="field">
         <label>Foto do Prato</label>
         <div class="photo-upload">
@@ -937,6 +965,17 @@ input,select,textarea{font-family:'Inter',sans-serif;}
             <button type="button" class="btn secondary sm" onclick="document.getElementById('item-photo-file').click()">📷 Selecionar Foto</button>
             <button type="button" class="btn secondary sm" onclick="removeItemPhoto()">🗑 Remover Foto</button>
             <span class="photo-upload-status" id="item-photo-status"></span>
+          </div>
+        </div>
+        <div id="item-photo-pos-wrap" style="display:none;margin-top:10px;">
+          <label style="font-size:10px;">🖼️ Ajustar enquadramento da foto (o que aparece dentro do quadro)</label>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:4px;">
+            <span style="font-size:10px;color:var(--muted);width:60px;">Horizontal</span>
+            <input type="range" min="0" max="100" id="item-photo-posx" oninput="updateItemPhotoPos()" style="flex:1;"/>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:6px;">
+            <span style="font-size:10px;color:var(--muted);width:60px;">Vertical</span>
+            <input type="range" min="0" max="100" id="item-photo-posy" oninput="updateItemPhotoPos()" style="flex:1;"/>
           </div>
         </div>
       </div>
@@ -1120,8 +1159,8 @@ input,select,textarea{font-family:'Inter',sans-serif;}
         não fica guardado no histórico. Essa ação não pode ser desfeita.
       </div>
       <div class="field">
-        <label>Digite sua senha de administrador pra confirmar</label>
-        <input id="delete-order-password" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter')confirmDeleteOrder()"/>
+        <label>Digite a senha MASTER pra confirmar</label>
+        <input id="delete-order-password" type="password" placeholder="Senha MASTER" onkeydown="if(event.key==='Enter')confirmDeleteOrder()"/>
       </div>
       <div id="delete-order-err" style="display:none;font-size:12px;color:var(--red-lt);margin-top:8px;"></div>
     </div>
@@ -1244,7 +1283,7 @@ async function boot(){
   await loadOrders();
   updateNewBadge();
   applyRoleUI();
-  goPage('dashboard');
+  goPage('pedidos');
   connectSSE();
   loadReservations();
   setInterval(loadReservations, 30000);
@@ -1452,7 +1491,7 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={dashboard:'Dashboard',pedidos:'Gerenciar Pedidos',kanban:'Kanban de Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
 const PAGE_MIN_ROLE = { cardapio:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
@@ -1462,11 +1501,9 @@ function goPage(id, silent){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(b=>{if(b.textContent.toLowerCase().includes(pageTitles[id]?.split(' ')[0]?.toLowerCase()||id))b.classList.add('active');});
+  document.querySelectorAll('.nav-item[data-page]').forEach(b=>{ if(b.dataset.page===id) b.classList.add('active'); });
   document.getElementById('topbar-title').textContent=pageTitles[id]||id;
-  if(id==='dashboard')renderDashboard();
-  if(id==='pedidos')renderOrdersList();
-  if(id==='kanban')renderKanban();
+  if(id==='pedidos')setPedidosView(pedidosView);
   if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
   if(id==='relatorios')renderReports();
@@ -1474,6 +1511,26 @@ function goPage(id, silent){
   if(id==='usuarios')loadUsersPage();
   if(id==='motoboys')loadCouriersPage();
   if(id==='avaliacoes')loadReviewsPage();
+}
+
+// ═══════════════════════════════════════════
+// PEDIDOS — visão unificada (v33): Visão Geral (ex-Dashboard) + Lista + Kanban,
+// tudo dentro da mesma aba "Pedidos", trocando de sub-view sem recarregar nada.
+// ═══════════════════════════════════════════
+let pedidosView = localStorage.getItem('shog_pedidos_view') || 'visao';
+function setPedidosView(view){
+  pedidosView = view;
+  localStorage.setItem('shog_pedidos_view', view);
+  ['visao','lista','kanban'].forEach(v=>{
+    document.getElementById('pedidos-view-'+v).style.display = (v===view) ? '' : 'none';
+    document.getElementById('ptab-'+v).classList.toggle('active', v===view);
+  });
+  renderPedidosCurrentView();
+}
+function renderPedidosCurrentView(){
+  if(pedidosView==='lista') renderOrdersList();
+  else if(pedidosView==='kanban') renderKanban();
+  else renderDashboard();
 }
 
 // ═══════════════════════════════════════════
@@ -1606,13 +1663,13 @@ async function confirmCourierPicker(){
   await finishAdvanceStatus(orderId, body, wasAccepting);
 }
 
-// ── Excluir Pedido do Sistema (v32) — ADM → Pedidos → 🗑️ Excluir do Sistema.
+// ── Excluir Pedido do Sistema (v32/v33) — ADM → Pedidos → 🗑️ Excluir do Sistema.
 // Diferente de cancelar (que mantém o pedido no histórico com o motivo), isso apaga o
-// registro por completo. Exige senha de administrador de novo e fica registrado num
-// histórico de auditoria no servidor (pedido, data/hora e usuário que excluiu). ──
+// registro por completo. v33: restrito ao usuário MASTER, exige a SENHA MASTER de novo
+// e fica registrado num histórico de auditoria no servidor (pedido, data/hora e usuário). ──
 let deleteOrderTargetId = null;
 function deleteOrderFromSystem(id){
-  if(!hasRole('admin')){ showToast('🔒 Acesso restrito','Só administradores podem excluir pedidos do sistema.'); return; }
+  if(!hasRole('master')){ showToast('🔒 Acesso restrito','Só o usuário MASTER pode excluir pedidos do sistema.'); return; }
   deleteOrderTargetId = id;
   document.getElementById('delete-order-id-label').textContent = id;
   document.getElementById('delete-order-password').value = '';
@@ -2116,7 +2173,7 @@ function renderOrdersList(){
         <button class="oa-btn" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
         ${o.phone?`<button class="oa-btn" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
         ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
-        ${hasRole('admin')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema">🗑️ Excluir do Sistema</button>`:''}
+        ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
       </div>
     </div>`).join('');
 }
@@ -2163,6 +2220,11 @@ async function renderReservationsList(){
         <div style="font-size:12px;color:var(--muted)">📅 ${r.date?new Date(r.date+'T00:00').toLocaleDateString('pt-BR'):''} às ${esc(r.time)} · 👥 ${r.people} pessoa(s)</div>
       </div>
       ${r.notes?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Obs: ${esc(r.notes)}</div>`:''}
+      ${r.status!=='cancelada'&&r.status!=='recusada'?`
+      <div class="field" style="margin-bottom:8px;">
+        <label style="font-size:10px;">💬 Resposta da loja (aparece pro cliente)</label>
+        <input id="rsv-reply-${r.id}" placeholder="ex: Mesa confirmada, te esperamos!" value="${esc(r.storeReply||'')}" style="font-size:12px;"/>
+      </div>`:''}
       ${r.status==='pendente'?`
       <div class="order-actions">
         <button class="oa-btn accept" onclick="updateReservationStatus('${r.id}','confirmada')">✓ Confirmar</button>
@@ -2176,7 +2238,9 @@ async function renderReservationsList(){
     </div>`).join('');
 }
 async function updateReservationStatus(id, status){
-  const r = await apiPost(`/api/reservations/${encodeURIComponent(id)}/status`, { status });
+  const replyEl = document.getElementById('rsv-reply-'+id);
+  const reply = replyEl ? replyEl.value.trim() : undefined;
+  const r = await apiPost(`/api/reservations/${encodeURIComponent(id)}/status`, { status, reply });
   if(!r.ok){ showToast('Erro', r.data.error||'Não foi possível atualizar a reserva.'); return; }
   showToast('Reserva atualizada', status==='confirmada'?'Reserva confirmada!':status==='recusada'?'Reserva recusada.':'Reserva cancelada.');
   renderReservationsList();
@@ -2301,7 +2365,7 @@ function menuItemRowHTML(sec,si,item,ii,allowReorder){
           <button onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover para cima">▲</button>
           <button onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover para baixo">▼</button>
         </span>`:`<span></span>`}
-        ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}"/>`:`<div class="mi-thumb empty">🍽️</div>`}
+        ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`:`<div class="mi-thumb empty">🍽️</div>`}
         <div>
           ${!allowReorder?`<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">${sec.icon} ${sec.title}</div>`:''}
           <div class="mi-name">${item.name}</div>
@@ -2326,18 +2390,26 @@ async function toggleItemAvailability(si,ii){
 }
 
 // ── Item: foto do prato ──
-function resetItemPhotoPreview(url){
+function resetItemPhotoPreview(url, pos){
   const img=document.getElementById('item-photo-preview');
   const placeholder=document.getElementById('item-photo-placeholder');
+  const posWrap=document.getElementById('item-photo-pos-wrap');
   document.getElementById('item-image').value=url||'';
   document.getElementById('item-photo-status').textContent='';
+  const p = pos || {x:50,y:50};
+  document.getElementById('item-image-pos').value = p.x+','+p.y;
+  document.getElementById('item-photo-posx').value = p.x;
+  document.getElementById('item-photo-posy').value = p.y;
+  img.style.objectPosition = p.x+'% '+p.y+'%';
   if(url){
     img.src=url;
     img.style.display='block';
     placeholder.style.display='none';
+    posWrap.style.display='block';
     // se a foto salva não carregar (arquivo apagado/link quebrado), volta pro placeholder em vez de ícone quebrado
-    img.onerror=()=>{ img.style.display='none'; placeholder.style.display='flex'; };
+    img.onerror=()=>{ img.style.display='none'; placeholder.style.display='flex'; posWrap.style.display='none'; };
   } else {
+    posWrap.style.display='none';
     img.removeAttribute('src');
     img.style.display='none';
     placeholder.style.display='flex';
@@ -2367,6 +2439,12 @@ async function uploadItemPhoto(input){
   }
 }
 function removeItemPhoto(){ resetItemPhotoPreview(''); }
+function updateItemPhotoPos(){
+  const x = document.getElementById('item-photo-posx').value;
+  const y = document.getElementById('item-photo-posy').value;
+  document.getElementById('item-image-pos').value = x+','+y;
+  document.getElementById('item-photo-preview').style.objectPosition = x+'% '+y+'%';
+}
 
 let editingVariants=[];
 function openAddItem(){
@@ -2377,7 +2455,7 @@ function openAddItem(){
   ['item-name','item-desc','item-qty','item-badge'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('item-price').value='';
   setItemStationCheckboxes(['cozinha']);
-  resetItemPhotoPreview('');
+  resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
   document.getElementById('item-modal').classList.add('open');
@@ -2393,7 +2471,7 @@ function openEditItem(si,ii){
   document.getElementById('item-qty').value=item.qty||'';
   document.getElementById('item-badge').value=item.badge||'';
   setItemStationCheckboxes(item.stations && item.stations.length ? item.stations : ['cozinha']);
-  resetItemPhotoPreview(item.image||'');
+  resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
   document.getElementById('item-modal').classList.add('open');
@@ -2466,6 +2544,7 @@ async function saveItem(){
   const cleanVariants = editingVariants
     .map(g=>({...g, name:g.name.trim()||'Opções', options:g.options.map(o=>({name:(o.name||'').trim(),priceDelta:Number(o.priceDelta)||0})).filter(o=>o.name)}))
     .filter(g=>g.options.length>0);
+  const [posX, posY] = document.getElementById('item-image-pos').value.split(',').map(n=>parseInt(n)||50);
   const item={
     name,desc:document.getElementById('item-desc').value.trim(),
     price:parseFloat(document.getElementById('item-price').value)||0,
@@ -2473,6 +2552,7 @@ async function saveItem(){
     badge:document.getElementById('item-badge').value.trim(),
     stations:getItemStationCheckboxes(),
     image:document.getElementById('item-image').value.trim(),
+    imagePos:{x:posX,y:posY},
     variants:cleanVariants
   };
   if(ii===-1){ item.available=true; menu[si].items.push(item); }
@@ -2895,6 +2975,11 @@ function loadSettings(){
   document.getElementById('cfg-hours').value=cfg.hours||'';
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
+  // v33: aparência do cardápio (foto do prato e fonte)
+  const dpsEl=document.getElementById('cfg-dishphotosize');
+  if(dpsEl){ dpsEl.value = cfg.dishPhotoSize || 80; document.getElementById('cfg-dishphoto-val').textContent = (cfg.dishPhotoSize||80)+'px'; }
+  const mfsEl=document.getElementById('cfg-menufontscale');
+  if(mfsEl) mfsEl.value = cfg.menuFontScale || 1;
   const loy = cfg.loyalty || {};
   const loyEnEl=document.getElementById('cfg-loyalty-enabled'); if(loyEnEl) loyEnEl.checked = loy.enabled!==false;
   document.getElementById('cfg-pixKey').value = cfg.pixKey||'';
@@ -3319,6 +3404,9 @@ async function saveAllSettings(){
   cfg.hours  = document.getElementById('cfg-hours').value.trim();
   cfg.name   = document.getElementById('cfg-name').value.trim();
   cfg.days   = document.getElementById('cfg-days').value.trim();
+  // v33: aparência do cardápio
+  const dpsEl2=document.getElementById('cfg-dishphotosize'); if(dpsEl2) cfg.dishPhotoSize = parseInt(dpsEl2.value)||80;
+  const mfsEl2=document.getElementById('cfg-menufontscale'); if(mfsEl2) cfg.menuFontScale = parseFloat(mfsEl2.value)||1;
   cfg.loyalty = {
     enabled: document.getElementById('cfg-loyalty-enabled')?.checked !== false,
     pointsPerReal: parseFloat(document.getElementById('cfg-loyalty-rate')?.value) || 0,
