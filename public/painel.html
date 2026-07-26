@@ -34,7 +34,60 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
 /* ── SIDEBAR ── */
-.sidebar{width:var(--sidebar-w);background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow:hidden;}
+.sidebar{width:var(--sidebar-w);background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100vh;overflow:hidden;transition:width .18s ease;position:relative;}
+/* v36: sidebar recolhida — só ícones, sem textos */
+.sidebar.collapsed{width:64px !important;}
+.sidebar.collapsed .brand-name,.sidebar.collapsed .brand-sub,.sidebar.collapsed .nav-section,
+.sidebar.collapsed .nav-item span:not(.ni):not(.nb),.sidebar.collapsed .store-toggle-label,
+.sidebar.collapsed .store-toggle,.sidebar.collapsed #sidebar-user-badge{display:none;}
+.sidebar.collapsed .nav-item{justify-content:center;padding:9px 0;}
+.sidebar.collapsed .nav-item .nb{position:absolute;top:2px;right:6px;margin-left:0;}
+.sidebar.collapsed .nav-item{position:relative;}
+.sidebar.collapsed .sidebar-brand{justify-content:center;padding:20px 8px;}
+.sidebar.collapsed .sidebar-collapse-btn{margin-left:0 !important;transform:rotate(180deg);}
+.sidebar-collapse-btn{
+  background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:6px;
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:13px;transition:all .15s;flex-shrink:0;
+}
+.sidebar-collapse-btn:hover{color:var(--white);border-color:var(--border2);}
+/* v36: puxador de redimensionar a sidebar (arrastar a borda) */
+.sidebar-resize-handle{
+  position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:col-resize;z-index:20;
+  background:transparent;
+}
+.sidebar-resize-handle:hover,.sidebar-resize-handle.dragging{background:var(--gold);opacity:.5;}
+.sidebar.collapsed .sidebar-resize-handle{display:none;}
+
+/* v36: responsividade — nada deve cortar/vazar em telas menores */
+@media (max-width:980px){
+  :root{--sidebar-w:210px;}
+  .stats-grid{grid-template-columns:repeat(2,1fr) !important;}
+}
+@media (max-width:760px){
+  body{overflow:auto;height:auto;min-height:100vh;}
+  .sidebar{position:fixed;left:0;top:0;z-index:100;box-shadow:4px 0 24px rgba(0,0,0,.4);transform:translateX(0);}
+  .sidebar.collapsed{transform:translateX(-100%);width:var(--sidebar-w) !important;}
+  .sidebar.collapsed .brand-name,.sidebar.collapsed .brand-sub,.sidebar.collapsed .nav-section,
+  .sidebar.collapsed .nav-item span:not(.ni):not(.nb),.sidebar.collapsed .store-toggle-label,
+  .sidebar.collapsed .store-toggle,.sidebar.collapsed #sidebar-user-badge{display:revert;}
+  .sidebar.collapsed .nav-item{justify-content:flex-start;padding:9px 12px;}
+  .main{width:100%;}
+  .content{padding:14px;}
+  .stats-grid{grid-template-columns:1fr 1fr !important;}
+  .topbar{flex-wrap:wrap;height:auto;padding:10px 14px;gap:8px;}
+  .topbar-title{font-size:15px;}
+}
+@media (max-width:480px){
+  .stats-grid{grid-template-columns:1fr !important;}
+  .topbar-right{flex-wrap:wrap;gap:6px;}
+}
+/* v36: tabelas/kanban/linhas de item nunca cortam — rolam na horizontal se precisar */
+.kanban-board,#page-pedidos .kanban-board,[id^="kanban"]{overflow-x:auto;}
+.menu-item-row{overflow-x:auto;}
+table{max-width:100%;}
+.panel,.settings-card,.stat-card{max-width:100%;}
+
 .sidebar-brand{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .brand-icon{width:36px;height:36px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .brand-name{font-family:'Cormorant Garamond',serif;font-size:17px;letter-spacing:2px;color:var(--white);line-height:1.1;}
@@ -334,13 +387,14 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 <div class="pulse-ring" id="pulse-ring"></div>
 
 <!-- SIDEBAR -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="brand-icon">🍣</div>
     <div>
       <div class="brand-name">SHOGATSU</div>
       <div class="brand-sub">Painel Admin</div>
     </div>
+    <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Recolher/expandir menu" style="margin-left:auto;">◀</button>
   </div>
 
   <nav class="sidebar-nav">
@@ -369,6 +423,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
       <label class="toggle"><input type="checkbox" id="store-toggle" checked onchange="toggleStore(this)"><span class="toggle-slider"></span></label>
     </div>
   </div>
+  <div class="sidebar-resize-handle" id="sidebar-resize-handle" title="Arraste para redimensionar"></div>
 </aside>
 
 <!-- MAIN -->
@@ -1295,7 +1350,81 @@ input,select,textarea{font-family:'Inter',sans-serif;}
 
 <script>
 // ═══════════════════════════════════════════
-// AUTH / SESSION
+// v36: SIDEBAR — recolher/expandir + redimensionar por arraste, com estado salvo
+// Só mexe em layout/aparência — nenhuma lógica de pedidos/config é tocada aqui.
+// ═══════════════════════════════════════════
+(function initSidebarLayout(){
+  const sidebar = document.getElementById('sidebar');
+  const handle = document.getElementById('sidebar-resize-handle');
+  const collapseBtn = document.getElementById('sidebar-collapse-btn');
+  const MIN_W = 170, MAX_W = 340, DEFAULT_W = 220;
+
+  function applyWidth(w){
+    document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+  }
+  function isNarrowScreen(){ return window.innerWidth <= 760; }
+
+  // Restaura o que foi salvo da última vez (largura e se estava recolhida)
+  const savedW = parseInt(localStorage.getItem('shog_sidebar_w'), 10);
+  applyWidth(!isNaN(savedW) && savedW >= MIN_W && savedW <= MAX_W ? savedW : DEFAULT_W);
+  const savedCollapsed = localStorage.getItem('shog_sidebar_collapsed') === '1';
+  // Em tela estreita, começa recolhida (vira menu lateral por cima) — não força em telas normais
+  if (savedCollapsed || isNarrowScreen()) sidebar.classList.add('collapsed');
+
+  window.toggleSidebarCollapse = function(){
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('shog_sidebar_collapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+  };
+
+  // Arrastar a borda direita da sidebar pra redimensionar
+  let dragging = false;
+  handle.addEventListener('mousedown', (e) => {
+    if (sidebar.classList.contains('collapsed')) return;
+    dragging = true;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const w = Math.min(MAX_W, Math.max(MIN_W, e.clientX));
+    applyWidth(w);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    // Salva a largura atual (lida da variável CSS) pra próxima vez que abrir o painel
+    const current = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w'), 10);
+    if (!isNaN(current)) localStorage.setItem('shog_sidebar_w', current);
+  });
+})();
+
+// v36: o painel costuma ficar aberto numa aba o dia inteiro — isso verifica de tempos em
+// tempos se existe uma versão nova publicada e avisa com um bannerzinho, em vez de a pessoa
+// continuar usando uma versão desatualizada sem saber (foi exatamente o bug do master).
+(function checkForUpdates(){
+  if (!('serviceWorker' in navigator)) return;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    showUpdateBanner();
+  });
+  function showUpdateBanner(){
+    const b = document.createElement('div');
+    b.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:99999;background:#c9a84c;color:#1a1a1a;padding:12px 20px;border-radius:10px;font-family:Inter,sans-serif;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);cursor:pointer;';
+    b.textContent = '🔄 Nova versão do painel disponível — clique para atualizar';
+    b.onclick = () => location.reload();
+    document.body.appendChild(b);
+  }
+  navigator.serviceWorker.getRegistration().then(reg => {
+    if (!reg) return;
+    setInterval(() => reg.update().catch(() => {}), 5 * 60 * 1000); // confere a cada 5 min
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  });
+})();
 // ═══════════════════════════════════════════
 // Escapa dados vindos do cliente (nome, telefone, endereço, obs) antes de jogar em innerHTML —
 // sem isso, um pedido malicioso poderia injetar HTML/JS e rodar no navegador de quem opera o painel.
