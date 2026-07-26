@@ -24,6 +24,8 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subs.json');
+const COURIERS_FILE = path.join(DATA_DIR, 'couriers.json'); // v32: pré-cadastro de motoboys
+const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const webpush = require('./webpush');
 
 // ─── Config / Menu padrão (usados só na primeira execução) ───
@@ -148,6 +150,8 @@ if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
 if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 if (!fs.existsSync(RESERVATIONS_FILE)) fs.writeFileSync(RESERVATIONS_FILE, '[]');
 if (!fs.existsSync(PUSH_SUBS_FILE)) fs.writeFileSync(PUSH_SUBS_FILE, '[]');
+if (!fs.existsSync(COURIERS_FILE)) fs.writeFileSync(COURIERS_FILE, '[]');
+if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -184,7 +188,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -899,6 +903,67 @@ const server = http.createServer(async (req, res) => {
     data.cfg.users = data.cfg.users.filter(u => String(u.username || '').toLowerCase() !== uname);
     writeJSON(CONFIG_FILE, data);
     return sendJSON(res, 200, { ok: true });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MOTOBOYS (v32) — pré-cadastro de entregadores, pra agilizar a hora de
+  // marcar "saiu para entrega" sem precisar digitar o nome toda vez.
+  // ═══════════════════════════════════════════════════════════
+  // ── GET /api/admin/couriers — lista motoboys cadastrados ──
+  if (pathname === '/api/admin/couriers' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver os motoboys.' });
+    return sendJSON(res, 200, { couriers: readJSON(COURIERS_FILE) });
+  }
+  // ── POST /api/admin/couriers — cadastra um novo motoboy ──
+  if (pathname === '/api/admin/couriers' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra cadastrar motoboys.' });
+    try {
+      const { name, phone, plate, notes } = await readBody(req);
+      const nm = String(name || '').trim();
+      if (!nm || nm.length < 2) return sendJSON(res, 400, { error: 'Digite o nome do motoboy.' });
+      const couriers = readJSON(COURIERS_FILE);
+      const courier = {
+        id: 'MB' + Date.now().toString(36).toUpperCase(),
+        name: nm,
+        phone: String(phone || '').replace(/\D/g, ''),
+        plate: String(plate || '').trim().toUpperCase(),
+        notes: String(notes || '').trim().slice(0, 200),
+        active: true,
+        createdAt: new Date().toISOString()
+      };
+      couriers.unshift(courier);
+      writeJSON(COURIERS_FILE, couriers);
+      return sendJSON(res, 201, { ok: true, courier, couriers });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── PATCH /api/admin/couriers/:id — edita dados ou ativa/desativa um motoboy ──
+  if (pathname.match(/^\/api\/admin\/couriers\/[^/]+$/) && req.method === 'PATCH') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra editar motoboys.' });
+    try {
+      const id = decodeURIComponent(pathname.split('/').pop());
+      const body = await readBody(req);
+      const couriers = readJSON(COURIERS_FILE);
+      const courier = couriers.find(c => c.id === id);
+      if (!courier) return sendJSON(res, 404, { error: 'Motoboy não encontrado.' });
+      if (body.name !== undefined) courier.name = String(body.name).trim();
+      if (body.phone !== undefined) courier.phone = String(body.phone).replace(/\D/g, '');
+      if (body.plate !== undefined) courier.plate = String(body.plate).trim().toUpperCase();
+      if (body.notes !== undefined) courier.notes = String(body.notes).trim().slice(0, 200);
+      if (body.active !== undefined) courier.active = !!body.active;
+      writeJSON(COURIERS_FILE, couriers);
+      return sendJSON(res, 200, { ok: true, courier, couriers });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── DELETE /api/admin/couriers/:id — remove um motoboy do cadastro ──
+  if (pathname.match(/^\/api\/admin\/couriers\/[^/]+$/) && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra remover motoboys.' });
+    const id = decodeURIComponent(pathname.split('/').pop());
+    let couriers = readJSON(COURIERS_FILE);
+    const existed = couriers.some(c => c.id === id);
+    if (!existed) return sendJSON(res, 404, { error: 'Motoboy não encontrado.' });
+    couriers = couriers.filter(c => c.id !== id);
+    writeJSON(COURIERS_FILE, couriers);
+    return sendJSON(res, 200, { ok: true, couriers });
   }
 
 
@@ -1990,7 +2055,61 @@ function estimateDeliveryWindow(order, cfg) {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
-  // ── GET /api/track/:id — cliente acompanha status do próprio pedido (público) ──
+  // ── DELETE /api/admin/orders/:id — remove um pedido DEFINITIVAMENTE do sistema (v32) ──
+  // Diferente do cancelamento (que só muda o status e mantém o pedido no histórico), isso apaga
+  // o registro por completo. Por isso exige a senha do administrador de novo, mesmo já logado,
+  // e guarda tudo num histórico separado (data/delete-log.json) — pedido, data/hora e usuário.
+  if (pathname.match(/^\/api\/admin\/orders\/[^/]+$/) && req.method === 'DELETE') {
+    const session = getSession(getToken(req, query));
+    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.admin) {
+      return sendJSON(res, 403, { error: 'Somente um administrador pode excluir pedidos do sistema.' });
+    }
+    try {
+      const id = decodeURIComponent(pathname.split('/').pop());
+      const { password } = await readBody(req);
+      const { cfg } = readConfig();
+
+      // Confere a senha de novo (reautenticação), independente de já haver uma sessão válida.
+      // Aceita a senha do próprio usuário logado, ou as senhas gerais de admin/master.
+      const user = (cfg.users || []).find(u => String(u.username || '').toLowerCase() === String(session.username || '').toLowerCase());
+      const passOk = !!password && (
+        (user && password === user.password) ||
+        password === cfg.adminPass ||
+        password === cfg.masterPass
+      );
+      if (!passOk) {
+        return sendJSON(res, 403, { error: '❌ Senha inválida. Pedido não foi removido.' });
+      }
+
+      const orders = readJSON(ORDERS_FILE);
+      const order = orders.find(o => o.id === id);
+      if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
+
+      const remaining = orders.filter(o => o.id !== id);
+      writeJSON(ORDERS_FILE, remaining);
+
+      const log = readJSON(DELETE_LOG_FILE);
+      log.unshift({
+        orderId: id,
+        orderSummary: { name: order.name, total: order.total, status: order.status, createdAt: order.createdAt },
+        deletedAt: new Date().toISOString(),
+        deletedBy: session.username,
+        deletedByRole: session.role
+      });
+      writeJSON(DELETE_LOG_FILE, log.slice(0, 500)); // mantém só as 500 exclusões mais recentes
+
+      broadcast('order-deleted', { id });
+      return sendJSON(res, 200, { ok: true, message: '✅ Pedido removido do sistema com sucesso.' });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── GET /api/admin/delete-log — histórico de exclusões de pedidos (só master) ──
+  if (pathname === '/api/admin/delete-log' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'master')) return sendJSON(res, 403, { error: 'Só o usuário master pode ver o histórico de exclusões.' });
+    return sendJSON(res, 200, { log: readJSON(DELETE_LOG_FILE) });
+  }
+
+
   if (pathname.startsWith('/api/track/') && req.method === 'GET') {
     const id = pathname.split('/').pop();
     const orders = readJSON(ORDERS_FILE);

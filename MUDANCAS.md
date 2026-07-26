@@ -1,3 +1,34 @@
+# v32 — Motoboys, exclusão de pedidos, bug do carrinho preso e tela de pedido
+
+**Bug real corrigido: produto ficava "preso" no carrinho.** Três lugares (`placeOrder`,
+`clearCartOnAccountSwitch`, `repeatOrder`) zeravam ou trocavam o carrinho e atualizavam só o
+resumo/badge (`updateCartUI()`), mas nunca re-renderizavam o cardápio (`renderMenu()`). Resultado:
+o cartão do produto continuava mostrando os botões −/+ com a quantidade antiga mesmo com o
+carrinho já vazio por dentro — e como `changeQty()` ignora chaves que não existem mais em
+`cart{}`, o botão − ficava sem fazer nada pra sempre. Corrigido nos três pontos, chamando
+`renderMenu()` sempre que o carrinho muda por fora da interação direta do cliente. Também
+sincronizamos a gaveta do carrinho quando ela já está aberta e um item novo é adicionado pelo
+cardápio.
+
+**Tela "Pedido Recebido" — botão ❤️ Favoritar.** A tela de confirmação já existia com a
+identidade visual do cardápio (mesmas cores, tipografia, ícones e cards), mas faltava o botão de
+favoritar do mockup. Adicionado ao grid de ações (agora 2x2), com estado salvo em localStorage.
+
+**Novo: pré-cadastro de motoboys.** Nova aba "🛵 Motoboys" no painel (nível admin+): cadastra
+nome, telefone, placa e observações, com ativar/desativar e remover. Os dados entram no backup
+automático do Supabase, igual pedidos/clientes/config. Na hora de marcar "saiu para entrega", o
+antigo `prompt()` de texto livre virou um seletor visual com os motoboys cadastrados (chips),
+mantendo a opção de digitar um nome avulso ou deixar em branco.
+
+**Novo: Excluir Pedido do Sistema (ADM → Pedidos).** Botão 🗑️ visível só pra admin/master.
+Diferente de cancelar (que mantém o pedido no histórico com motivo), isso apaga o registro por
+completo — por isso exige a senha de administrador de novo, num modal separado, mesmo com a
+sessão já logada. Toda exclusão fica registrada num histórico de auditoria
+(`data/delete-log.json`, também salvo no Supabase) com o pedido, data/hora e usuário responsável.
+Testado de ponta a ponta: senha errada → bloqueado com "❌ Senha inválida. Pedido não foi
+removido."; usuário nível "vendas" tentando excluir → bloqueado com 403; admin/master com senha
+certa → "✅ Pedido removido do sistema com sucesso." e o pedido some do arquivo.
+
 # v28 — Impressão automática, foto do modal, dashboard sem dado falso, reserva visível, botão voltar
 
 **1.2 — Impressão automática no recebimento do pedido.** Como o servidor na nuvem (Render) não
