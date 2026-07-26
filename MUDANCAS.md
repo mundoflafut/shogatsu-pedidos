@@ -29,6 +29,38 @@ Testado de ponta a ponta: senha errada → bloqueado com "❌ Senha inválida. P
 removido."; usuário nível "vendas" tentando excluir → bloqueado com 403; admin/master com senha
 certa → "✅ Pedido removido do sistema com sucesso." e o pedido some do arquivo.
 
+# v34 — Rastreamento GPS do motoboy, botões invisíveis, tempo estimado, excluir dados
+
+**Novo: rastreamento GPS ao vivo do motoboy.** Nova página `entregador.html` que o motoboy abre
+no celular (link gerado automaticamente e mostrado num modal assim que o pedido é marcado como
+"saiu para entrega") — ele só toca em "Compartilhar localização" e o cliente passa a ver o
+🛵 se movendo no mapa da tela de acompanhamento, em tempo real. A localização só fica ativa
+durante a entrega — é apagada automaticamente assim que o pedido é marcado como entregue ou
+cancelado, e o link do motoboy para de funcionar sozinho nesse momento.
+
+**Bug real corrigido: botões quase invisíveis.** Os botões de editar/excluir categoria só
+apareciam ao passar o mouse (quebrado em celular/tablet, que não tem hover) e eram cinza sem
+nenhuma cor — quase impossível de enxergar. Os botões de Imprimir e WhatsApp na lista de pedidos
+não tinham nenhuma cor de destaque (ficavam cinza-sobre-cinza). Corrigido: todos os botões agora
+são sempre visíveis, maiores, e cada ação tem sua cor própria (imprimir=azul,
+WhatsApp=verde-WhatsApp, marcar pago=dourado, editar=azul, excluir=vermelho).
+
+**Bug do tempo estimado — corrigido de verdade.** Existia um único campo "Tempo Estimado" usado
+tanto pra Delivery quanto pra Retirada. Separado em dois campos configuráveis, e corrigido em
+todos os lugares que usavam o valor errado (contador regressivo, widget flutuante, chip do topo
+do cardápio, mensagem de WhatsApp). De bônus: o card "Tempo Médio" do Dashboard nunca calculava
+nada de verdade (só ecoava o texto configurado) — agora calcula a média real a partir dos
+pedidos entregues no dia.
+
+**"Reset de Dados" renomeado pra "Excluir Dados", com pergunta de qual antes de agir.** A
+funcionalidade agora fica em Configurações → ⚠️ Zona de Perigo (só master): um único botão
+"Excluir Dados..." abre um modal que primeiro pergunta **o que** excluir (Cardápio ou Pedidos),
+mostra um aviso específico pra escolha, só then pede a senha master. Cada exclusão fica
+registrada no histórico de auditoria.
+
+**Botão "Continuar navegando pelo cardápio"** — era um link de texto sublinhado sem nada a ver
+com o resto da tela. Agora é um botão "🛍️ Continuar Comprando" com o mesmo design dos outros.
+
 # v33 — Senha MASTER, destaque duplicado, foto/fonte ajustáveis, Pedidos unificado, reserva com status
 
 **Senha MASTER pra excluir pedido.** Antes o endpoint aceitava a senha de qualquer admin ou

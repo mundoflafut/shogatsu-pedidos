@@ -32,7 +32,7 @@ const webpush = require('./webpush');
 const DEFAULT_CFG = {
   whats: '552227641333', storePhone: '(22) 2764-1333', fee: 8, min: 60,
   name: 'Shogatsu Culinária Oriental', days: 'Ter–Dom',
-  time: '40–60 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costazul · Rio das Ostras · CEP 22896-155',
+  time: '40–60 min', timeRetirada: '20–30 min', addr: 'Av. Gov. Roberto Silveira, 109 · Costazul · Rio das Ostras · CEP 22896-155',
   hours: '18h30–23h', open: 1,
   // ── Auto-abertura/fechamento por horário (se ativado, cfg.open passa a ser calculado sozinho) ──
   schedule: { enabled: false, openTime: '18:00', closeTime: '23:00' },
@@ -1437,7 +1437,10 @@ const server = http.createServer(async (req, res) => {
 // pedido + o texto configurado em cfg.time (ex: "40–60 min"). Se não conseguir
 // extrair dois números do texto, devolve só o texto original como está.
 function estimateDeliveryWindow(order, cfg) {
-  const nums = String(cfg.time || '').match(/\d+/g);
+  // v34: BUG CORRIGIDO — retirada usava a mesma estimativa de tempo do delivery, mesmo sendo
+  // bem mais rápida na prática. Agora cada modo tem seu próprio texto configurável.
+  const timeText = order.mode === 'retirada' ? (cfg.timeRetirada || cfg.time) : cfg.time;
+  const nums = String(timeText || '').match(/\d+/g);
   const created = new Date(order.createdAt);
   const fmt = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   if (nums && nums.length >= 2) {
@@ -1449,7 +1452,7 @@ function estimateDeliveryWindow(order, cfg) {
     const to = new Date(created.getTime() + parseInt(nums[0]) * 60000);
     return `até ${fmt(to)}`;
   }
-  return cfg.time || '—';
+  return timeText || '—';
 }
 
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
@@ -1955,7 +1958,12 @@ function estimateDeliveryWindow(order, cfg) {
         // Busca melhor-esforço — se a geocodificação falhar (endereço incompleto, serviço fora do ar),
         // o pedido segue normal, só sem o marcador do cliente no mapa.
         customerLat: null,
-        customerLng: null
+        customerLng: null,
+        // v34: localização ao vivo do motoboy durante a entrega (rastreamento pro cliente).
+        // Só é preenchida enquanto status === 'saiu' — ver /api/courier/location e /api/track.
+        courierLat: null,
+        courierLng: null,
+        courierLocationAt: null
       };
       if (order.mode === 'delivery' && order.address) {
         try {
@@ -2035,6 +2043,18 @@ function estimateDeliveryWindow(order, cfg) {
       if (status === 'cancelado') {
         order.cancelReason = String(cancelReason || '').slice(0, 200) || 'Não informado';
         order.cancelledBy = ['loja', 'cliente'].includes(cancelledBy) ? cancelledBy : 'loja';
+      }
+      // v34: guarda quando o pedido foi de fato entregue — sem isso não dá pra calcular o
+      // tempo médio real (o dashboard só mostrava o texto configurado, não um cálculo de verdade).
+      if (status === 'entregue' && !order.deliveredAt) {
+        order.deliveredAt = new Date().toISOString();
+      }
+      // v34: entrega encerrada (entregue ou cancelada) — apaga a última posição do motoboy.
+      // Não é só esconder na resposta: some do registro mesmo, pra não ficar guardado sem necessidade.
+      if (['entregue', 'cancelado'].includes(status)) {
+        order.courierLat = null;
+        order.courierLng = null;
+        order.courierLocationAt = null;
       }
       if (fee !== undefined && fee !== null && fee !== '') {
         order.fee = Number(fee) || 0;
@@ -2119,6 +2139,51 @@ function estimateDeliveryWindow(order, cfg) {
     return sendJSON(res, 200, { log: readJSON(DELETE_LOG_FILE) });
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // RESET DE DADOS (v34) — Configurações → ⚠️ Zona de Perigo.
+  // Só master, sempre com reautenticação por senha master, sempre registrado no histórico
+  // de auditoria (o mesmo delete-log.json usado pra exclusão de pedidos).
+  // ═══════════════════════════════════════════════════════════
+  // ── POST /api/admin/reset-menu — restaura o cardápio pro padrão de fábrica ──
+  if (pathname === '/api/admin/reset-menu' && req.method === 'POST') {
+    const session = getSession(getToken(req, query));
+    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.master) {
+      return sendJSON(res, 403, { error: 'Somente o usuário MASTER pode restaurar o cardápio.' });
+    }
+    try {
+      const { password } = await readBody(req);
+      const { cfg } = readConfig();
+      if (!password || password !== cfg.masterPass) return sendJSON(res, 403, { error: '❌ Senha inválida. Cardápio não foi restaurado.' });
+      const data = readConfig();
+      data.menu = JSON.parse(JSON.stringify(DEFAULT_MENU)); // cópia limpa, sem referenciar o objeto original
+      writeJSON(CONFIG_FILE, data);
+      const log = readJSON(DELETE_LOG_FILE);
+      log.unshift({ action: 'reset-menu', deletedAt: new Date().toISOString(), deletedBy: session.username, deletedByRole: session.role });
+      writeJSON(DELETE_LOG_FILE, log.slice(0, 500));
+      publicBroadcast('menu-updated', {});
+      return sendJSON(res, 200, { ok: true, message: '✅ Cardápio restaurado para o padrão de fábrica.' });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/admin/reset-orders — apaga TODO o histórico de pedidos ──
+  if (pathname === '/api/admin/reset-orders' && req.method === 'POST') {
+    const session = getSession(getToken(req, query));
+    if (!session || (ROLE_RANK[session.role] || 0) < ROLE_RANK.master) {
+      return sendJSON(res, 403, { error: 'Somente o usuário MASTER pode apagar o histórico de pedidos.' });
+    }
+    try {
+      const { password } = await readBody(req);
+      const { cfg } = readConfig();
+      if (!password || password !== cfg.masterPass) return sendJSON(res, 403, { error: '❌ Senha inválida. Histórico não foi apagado.' });
+      const countBefore = readJSON(ORDERS_FILE).length;
+      writeJSON(ORDERS_FILE, []);
+      const log = readJSON(DELETE_LOG_FILE);
+      log.unshift({ action: 'reset-orders', ordersRemoved: countBefore, deletedAt: new Date().toISOString(), deletedBy: session.username, deletedByRole: session.role });
+      writeJSON(DELETE_LOG_FILE, log.slice(0, 500));
+      broadcast('order-updated', {});
+      return sendJSON(res, 200, { ok: true, message: `✅ Histórico apagado (${countBefore} pedido(s) removido(s)).` });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
 
   if (pathname.startsWith('/api/track/') && req.method === 'GET') {
     const id = pathname.split('/').pop();
@@ -2126,7 +2191,60 @@ function estimateDeliveryWindow(order, cfg) {
     const order = orders.find(o => o.id === id);
     if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
     const { name, phone, address, ...rest } = order;
+    // v34: a localização do motoboy só é exposta pro cliente enquanto o pedido está
+    // "saiu para entrega" — antes disso (ainda não saiu) ou depois (já entregue/cancelado),
+    // não faz sentido mostrar e o motoboy não deve continuar rastreável.
+    if (order.status !== 'saiu') { rest.courierLat = null; rest.courierLng = null; rest.courierLocationAt = null; }
     return sendJSON(res, 200, rest); // não expõe dados pessoais de novo, só status/itens/valores
+  }
+
+  // ── POST /api/courier/location/:id — o motoboy manda a posição do GPS enquanto entrega (v34) ──
+  // Sem login: o próprio id do pedido funciona como o "convite" (igual o /api/track já faz).
+  // Só aceita e só grava enquanto o pedido está "saiu" — fora dessa janela, recusa.
+  if (pathname.startsWith('/api/courier/location/') && req.method === 'POST') {
+    const id = decodeURIComponent(pathname.split('/').pop());
+    try {
+      const { lat, lng } = await readBody(req);
+      const latNum = Number(lat), lngNum = Number(lng);
+      if (!isFinite(latNum) || !isFinite(lngNum)) return sendJSON(res, 400, { error: 'coordenadas inválidas' });
+      const orders = readJSON(ORDERS_FILE);
+      const order = orders.find(o => o.id === id);
+      if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
+      if (order.status !== 'saiu') {
+        // Entrega já terminou (ou ainda nem saiu) — avisa o app do motoboy pra ele parar de mandar.
+        return sendJSON(res, 200, { ok: false, ended: true, status: order.status });
+      }
+      order.courierLat = latNum;
+      order.courierLng = lngNum;
+      order.courierLocationAt = new Date().toISOString();
+      writeJSON(ORDERS_FILE, orders);
+      broadcast('order-updated', order);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── GET /api/courier/order/:id — o app do motoboy usa isso pra saber o endereço da entrega (v34) ──
+  // Só devolve os dados enquanto o pedido está em andamento (preparando ou saiu); depois de
+  // entregue/cancelado, devolve só um aviso — o motoboy não continua vendo endereço de entregas antigas.
+  if (pathname.startsWith('/api/courier/order/') && req.method === 'GET') {
+    const id = decodeURIComponent(pathname.split('/').pop());
+    const orders = readJSON(ORDERS_FILE);
+    const order = orders.find(o => o.id === id);
+    if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
+    if (!['preparando', 'saiu'].includes(order.status)) {
+      return sendJSON(res, 200, { ended: true, status: order.status });
+    }
+    return sendJSON(res, 200, {
+      ended: false,
+      id: order.id,
+      ticketNumber: order.ticketNumber,
+      status: order.status,
+      mode: order.mode,
+      name: order.name,
+      phone: order.phone,
+      address: order.address,
+      obs: order.obs || ''
+    });
   }
 
   // ── POST /api/orders/:id/received — cliente confirma que recebeu o pedido ──
