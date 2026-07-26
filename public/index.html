@@ -79,14 +79,18 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .review-badge{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:8px 14px;font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;}
 .review-badge.pending{cursor:pointer;animation:couponGlow 2s ease-in-out infinite;}
 
-.cat-nav{background:var(--black);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:108px;z-index:180;}
-.cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;}
+.cat-nav{background:color-mix(in srgb, var(--black) 82%, transparent);backdrop-filter:blur(10px) saturate(150%);-webkit-backdrop-filter:blur(10px) saturate(150%);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:108px;z-index:180;box-shadow:0 6px 18px rgba(0,0,0,.25);}
+.cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;cursor:grab;user-select:none;scroll-behavior:smooth;}
+.cat-nav-inner.dragging{cursor:grabbing;scroll-behavior:auto;}
 .cat-nav-inner::-webkit-scrollbar{display:none;}
-.cat-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;padding:12px 14px;white-space:nowrap;transition:all .2s;display:inline-flex;align-items:center;gap:6px;}
-.cat-btn-icon{font-size:22px;line-height:1;filter:grayscale(60%);opacity:.75;transition:filter .2s,opacity .2s;}
-.cat-btn.active .cat-btn-icon,.cat-btn:hover .cat-btn-icon{filter:grayscale(0%);opacity:1;}
+.cat-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;padding:12px 14px;white-space:nowrap;transition:all .2s cubic-bezier(.2,.8,.3,1);display:inline-flex;align-items:center;gap:6px;flex-shrink:0;}
+.cat-btn-icon{font-size:22px;line-height:1;filter:grayscale(60%);opacity:.75;transition:filter .2s,opacity .2s,transform .2s cubic-bezier(.34,1.56,.64,1);}
+.cat-btn.active .cat-btn-icon,.cat-btn:hover .cat-btn-icon{filter:grayscale(0%);opacity:1;transform:scale(1.15);}
+.cat-btn.active .cat-btn-icon{animation:catIconBounce .35s cubic-bezier(.34,1.56,.64,1);}
+@keyframes catIconBounce{0%{transform:scale(1);}50%{transform:scale(1.3);}100%{transform:scale(1.15);}}
 .cat-btn-badge{background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;margin-left:2px;}
 .cat-btn.active,.cat-btn:hover{color:var(--red-lt);border-bottom-color:var(--red);}
+.cat-btn.active{text-shadow:0 0 12px rgba(192,57,43,.5);}
 
 .main{max-width:800px;margin:0 auto;padding:24px 16px 120px;}
 
@@ -2607,6 +2611,29 @@ function scrollCat(id) {
   const el = document.getElementById('sec-' + id);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// v37: arrastar a barra de categorias com o mouse (desktop) — no celular o dedo já
+// funciona nativamente por causa do overflow-x:auto, isso aqui só cobre o mouse.
+(function enableCatNavDrag(){
+  const nav = document.getElementById('cat-nav-inner');
+  if (!nav) return;
+  let isDown = false, startX = 0, scrollStart = 0, moved = false;
+  nav.addEventListener('mousedown', (e) => {
+    isDown = true; moved = false; nav.classList.add('dragging');
+    startX = e.pageX; scrollStart = nav.scrollLeft;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    const dx = e.pageX - startX;
+    if (Math.abs(dx) > 4) moved = true;
+    nav.scrollLeft = scrollStart - dx;
+  });
+  window.addEventListener('mouseup', () => { isDown = false; nav.classList.remove('dragging'); });
+  // Evita que um "arrastão" também dispare o clique do botão de categoria por baixo do mouse
+  nav.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
+
+let lastActiveCatId = null;
 window.addEventListener('scroll', () => {
   if (!menu.length) return;
   let cur = menu[0].id;
@@ -2617,6 +2644,16 @@ window.addEventListener('scroll', () => {
   document.querySelectorAll('.cat-btn').forEach((b, i) => {
     b.classList.toggle('active', menu[i] && menu[i].id === cur);
   });
+  // v37: quando a categoria ativa muda, centraliza ela dentro da barra de rolagem horizontal
+  if (cur !== lastActiveCatId) {
+    lastActiveCatId = cur;
+    const activeBtn = document.querySelector('.cat-btn.active');
+    const nav = document.getElementById('cat-nav-inner');
+    if (activeBtn && nav) {
+      const target = activeBtn.offsetLeft - (nav.clientWidth / 2) + (activeBtn.clientWidth / 2);
+      nav.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+    }
+  }
 });
 
 loadCustomerSession();
