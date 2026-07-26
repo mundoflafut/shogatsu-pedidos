@@ -294,7 +294,8 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .ss-rating{display:flex;justify-content:center;gap:6px;padding:6px 20px 20px;}
 .ss-rating span{font-size:30px;cursor:pointer;color:#5a5248;transition:.15s;}
 .ss-rating span.on{color:#FFC300;text-shadow:0 0 10px rgba(255,195,0,.5);transform:scale(1.08);}
-.ss-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:16px;}
+.ss-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px;}
+.ss-abtn.fav.is-fav{background:rgba(211,68,63,.14);border-color:var(--red-lt);color:var(--red-lt);}
 .ss-abtn{font-family:'Poppins',sans-serif;font-weight:600;font-size:11px;letter-spacing:.3px;border-radius:10px;padding:13px 8px;border:1px solid var(--border);background:var(--card);color:var(--white);cursor:pointer;transition:transform .15s,background .15s,border-color .15s;display:flex;align-items:center;justify-content:center;gap:6px;}
 .ss-abtn:hover{transform:translateY(-2px);border-color:var(--gold);}
 .ss-abtn.wa{background:rgba(39,174,96,.12);border-color:var(--green);color:var(--green-lt);}
@@ -677,6 +678,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
         <button class="ss-abtn wa" id="success-wa-btn">💬 WhatsApp</button>
         <button class="ss-abtn rep" onclick="repeatOrder()">🔁 Repetir pedido</button>
         <button class="ss-abtn" onclick="shareOrder()">↗️ Compartilhar</button>
+        <button class="ss-abtn fav" id="success-fav-btn" onclick="toggleFavoriteOrder()">🤍 Favoritar</button>
       </div>
       <div class="ss-secondary-links">
         <a onclick="minimizeOrderTracking()">Continuar navegando pelo cardápio</a>
@@ -745,6 +747,9 @@ function clearCartOnAccountSwitch(){
   const hadItems = Object.keys(cart).length > 0;
   cart = {};
   updateCartUI();
+  // BUG CORRIGIDO (v32): faltava renderMenu() aqui — os cartões de produto ficavam "presos"
+  // mostrando a quantidade antiga do carrinho da conta anterior, travados sem responder ao −/+.
+  renderMenu();
   if(document.getElementById('cart-drawer').classList.contains('open')) closeCart();
   if(hadItems) showMiniToast('🛒 Seu carrinho foi esvaziado ao trocar de conta.');
 }
@@ -1616,6 +1621,39 @@ function toggleFavorite(key, ev) {
   renderMenu();
 }
 function toggleFavoritesFilter() { showFavoritesOnly = !showFavoritesOnly; renderMenu(); }
+
+// ── Pedidos favoritos (tela "Pedido Recebido" → ❤️ Favoritar) ──
+// Guarda um "instantâneo" do pedido (itens, modo, forma de pagamento) pra poder
+// repetir rapidinho depois, igual ao repeatOrder(), mas junta vários favoritos
+// numa lista em vez de só o último pedido.
+let favoriteOrders = JSON.parse(localStorage.getItem('shogatsu_favorite_orders') || '[]');
+function isOrderFavorited(orderId) { return favoriteOrders.some(f => f.orderId === orderId); }
+function toggleFavoriteOrder() {
+  if (!currentOrderId) return;
+  const btn = document.getElementById('success-fav-btn');
+  if (isOrderFavorited(currentOrderId)) {
+    favoriteOrders = favoriteOrders.filter(f => f.orderId !== currentOrderId);
+  } else {
+    favoriteOrders.unshift({
+      orderId: currentOrderId,
+      items: currentOrderItems,
+      mode: currentOrderMode,
+      payMethod: currentOrderPayMethod,
+      total: currentOrderTotal,
+      savedAt: new Date().toISOString()
+    });
+    favoriteOrders = favoriteOrders.slice(0, 20); // não deixa a lista crescer sem limite
+  }
+  localStorage.setItem('shogatsu_favorite_orders', JSON.stringify(favoriteOrders));
+  syncFavoriteOrderBtn();
+}
+function syncFavoriteOrderBtn() {
+  const btn = document.getElementById('success-fav-btn');
+  if (!btn) return;
+  const fav = currentOrderId && isOrderFavorited(currentOrderId);
+  btn.classList.toggle('is-fav', !!fav);
+  btn.textContent = fav ? '❤️ Favoritado' : '🤍 Favoritar';
+}
 function onCustomerMenuSearch(v) { customerMenuQuery = (v || '').trim().toLowerCase(); renderMenu(); }
 function matchesQuery(item, q) {
   return (item.name || '').toLowerCase().includes(q) || (item.desc || '').toLowerCase().includes(q);
@@ -1639,7 +1677,7 @@ function addToCart(key) {
   if (item.variants && item.variants.length) { openVariantPicker(key); return; }
   if (!cart[key]) cart[key] = { baseKey: key, name: item.name, price: item.price, stations: item.stations && item.stations.length ? item.stations : ['cozinha'], qty: 0 };
   cart[key].qty++;
-  updateCartUI(); renderMenu(); animateAdd(key);
+  updateCartUI(); renderMenu(); animateAdd(key); refreshCartSummary();
 }
 function changeQty(key, delta) {
   if (!cart[key]) return;
@@ -2083,10 +2121,16 @@ async function placeOrder() {
   try{ localStorage.setItem('shogatsu_repeat_order', JSON.stringify({ items, mode, payMethod })); }catch(e){}
   currentOrderCreatedAt = order.createdAt;
   currentOrderStatus = 'novo';
-  cart = {}; updateCartUI(); // limpa o carrinho na hora — evita pedido duplicado se o cliente minimizar e voltar ao cardápio
+  // BUG CORRIGIDO (v32): limpar o carrinho sem re-renderizar o cardápio deixava os cartões de
+  // produto "presos" mostrando a quantidade antiga (com os botões −/+) mesmo com o carrinho já
+  // vazio por dentro — como changeQty() ignora chaves que não existem mais em cart{}, o botão −
+  // ficava travado pra sempre. Agora sempre chamamos renderMenu() junto, pra sincronizar a tela
+  // com o estado real do carrinho.
+  cart = {}; updateCartUI(); renderMenu(); // limpa o carrinho na hora — evita pedido duplicado se o cliente minimizar e voltar ao cardápio
   document.getElementById('checkout-screen').classList.remove('open');
   document.getElementById('success-screen').classList.add('open');
   document.getElementById('order-track-float').classList.remove('visible');
+  syncFavoriteOrderBtn();
   document.getElementById('success-order-id').textContent = order.ticketNumber ? '#' + order.ticketNumber : '⏳';
   document.getElementById('success-msg').textContent = `Obrigado por escolher ${cfg.name || 'a gente'}`;
 
@@ -2355,6 +2399,7 @@ function repeatOrder() {
   cart = {};
   saved.items.forEach((i, idx) => { cart['repeat_' + idx + '_' + Date.now()] = { ...i }; });
   updateCartUI();
+  renderMenu(); // BUG CORRIGIDO (v32): sem isso, produtos do carrinho anterior ficavam presos no cardápio
   mode = saved.mode === 'retirada' ? 'retirada' : 'delivery';
   payMethod = saved.payMethod || '';
   minimizeOrderTracking();
@@ -2406,6 +2451,7 @@ function minimizeOrderTracking() {
 function reopenOrderTracking() {
   document.getElementById('order-track-float').classList.remove('visible');
   document.getElementById('success-screen').classList.add('open');
+  syncFavoriteOrderBtn();
 }
 
 function newOrder() {
