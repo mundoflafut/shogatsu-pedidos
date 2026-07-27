@@ -1,4 +1,48 @@
-# v37 — Bug do menu mobile, fontes maiores, modernização visual e barra de categorias
+# v38 — Barra de categorias padrão iFood/Uber Eats, legibilidade dos pratos e revisão do PWA
+
+**Barra de categorias + busca, unificadas num só bloco fixo com blur e sombra.** Antes a barra
+de busca ficava solta, abaixo da barra de categorias (que já era fixa). Agora as duas vivem
+dentro de um único painel "vidro fosco" (glassmorphism) que gruda no topo junto, como no
+iFood/Uber Eats.
+
+**Indicador animado deslizante.** Em vez de só trocar a cor da categoria ativa, agora tem uma
+"trilha" dourada/vermelha que desliza suavemente (280ms) até a categoria selecionada — tanto ao
+clicar quanto ao rolar a página.
+
+**Trocado o cálculo de categoria ativa por `IntersectionObserver`.** Antes, a cada pixel rolado
+a página recalculava manualmente a posição de cada seção (`offsetTop`) pra saber qual categoria
+estava visível — funcionava, mas gastava processamento à toa. Agora o navegador avisa sozinho
+quando uma seção entra na área visível, o que é mais preciso e mais leve (ajuda a manter os
+60 FPS pedidos). A rolagem horizontal com o mouse (arrastar) e a centralização automática da
+categoria ativa, adicionadas na v37, continuam funcionando do mesmo jeito.
+
+**Legibilidade dos pratos melhorada.** Nome, descrição e preço com mais peso de fonte, melhor
+contraste de cor e espaçamento — mesma identidade visual (mesmas fontes e cores), só mais fácil
+de ler.
+
+**PWA revisado (instalação e fotos).** Conferido o fluxo de "Instalar App": ele já usa o prompt
+nativo do navegador direto (sem etapa extra) e já não aparece de novo depois de instalado —
+nenhuma mudança necessária aí, só validado. Revisadas todas as fotos de prato do cardápio (lista
+principal, miniaturas do editor, cardápios do rodízio): todas já usam `object-fit: cover` com
+proporção fixa e cantos preservados — não foi encontrado nenhum ponto com distorção ativa no
+código atual; se o problema aparecer de novo com uma foto específica, me manda o print que eu
+reproduzo e conserto pontualmente.
+
+**Ficou de fora desta rodada, por serem funcionalidades grandes e novas (não ajustes visuais):**
+- **Ícone do app editável pelo painel** (upload, recorte e atualização automática do
+  `manifest.json`/favicons) — é um recurso novo de verdade (processamento de imagem, geração de
+  vários tamanhos de ícone), não um bug a corrigir.
+- **Módulo do Rodízio Presencial 100% separado do Delivery**, com editor próprio no painel,
+  QR Code automático sempre atualizado, e envio automático do link/QR junto da confirmação de
+  reserva — isso é um sistema novo inteiro (categorias/produtos próprios, endpoints novos,
+  geração de QR, integração com WhatsApp/e-mail na confirmação da reserva).
+
+Ambos valem a pena, mas são grandes o bastante pra merecerem uma rodada só deles, testada com
+calma, em vez de entrar de última hora numa lista já cheia de mudanças visuais.
+
+---
+
+
 
 **Bug real corrigido: no celular não dava pra reabrir o menu lateral.** O botão de
 recolher/expandir a sidebar (criado na v36) ficava *dentro* da própria sidebar — em tela
