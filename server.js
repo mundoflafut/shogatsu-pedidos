@@ -79,11 +79,13 @@ const DEFAULT_CFG = {
   dishPhotoSize: 80,             // v33: tamanho (px) da foto do prato pro cliente
   menuFontScale: 1,              // v33: escala da fonte do cardápio (0.85 a 1.3)
   // ── Impressoras por estação (vias separadas) ──
+  // prepTime = tempo médio de preparo dessa estação, em minutos, usado para calcular
+  // a previsão de saída automática na comanda (Entrada + prepTime = Previsão de saída).
   stations: {
-    cozinha:  { label: 'Cozinha',  method: 'navegador', ip: '', port: 9100, device: '' },
-    sushibar: { label: 'Sushibar', method: 'navegador', ip: '', port: 9100, device: '' },
-    bar:      { label: 'Bar',      method: 'navegador', ip: '', port: 9100, device: '' },
-    caixa:    { label: 'Caixa',    method: 'navegador', ip: '', port: 9100, device: '' }
+    cozinha:  { label: 'Cozinha',  method: 'navegador', ip: '', port: 9100, device: '', prepTime: 20 },
+    sushibar: { label: 'Sushibar', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 },
+    bar:      { label: 'Bar',      method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8 },
+    caixa:    { label: 'Caixa',    method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 }
   },
   // ── Motivos de cancelamento/recusa (chips rápidos no painel) ──
   cancelReasons: ['Item em falta', 'Fora da área de entrega', 'Pedido duplicado', 'Cliente desistiu', 'Loja fechada no momento'],
@@ -321,7 +323,10 @@ function readConfig() {
   const cfg = {
     ...DEFAULT_CFG,
     ...data.cfg,
-    stations: { ...DEFAULT_CFG.stations, ...(data.cfg.stations || {}) },
+    stations: Object.fromEntries(Object.keys(DEFAULT_CFG.stations).map(st => [st, {
+      ...DEFAULT_CFG.stations[st],
+      ...((data.cfg.stations && data.cfg.stations[st]) || {})
+    }])),
     labels: { ...DEFAULT_CFG.labels, ...(data.cfg.labels || {}) },
     uiFonts: { ...DEFAULT_CFG.uiFonts, ...(data.cfg.uiFonts || {}) },
     theme: { ...DEFAULT_CFG.theme, ...(data.cfg.theme || {}) },
@@ -1566,6 +1571,12 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push('Pagamento: ' + order.payMethod + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
       } else {
         // ── Vias de produção (cozinha/sushibar/bar): só pedido, itens e observações ──
+        // v40: previsão de saída automática = Entrada + tempo de preparo configurado pra essa estação.
+        const prepMin = Number((cfg.stations[st] && cfg.stations[st].prepTime)) || 15;
+        const saidaPrevista = new Date(new Date(order.createdAt).getTime() + prepMin * 60000)
+          .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        lines.push('Entrada: ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        lines.push('Previsao de saida: ' + saidaPrevista);
         lines.push('--------------------------------');
         items.forEach(i => lines.push(`${i.qty}x ${i.name}`));
         if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
