@@ -49,6 +49,7 @@ const DEFAULT_CFG = {
   logoUrl: '',
   print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
   sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
+  customerAlertSound: 'classico', // som tocado no app do cliente a cada aviso (classico|suave|dupla|sino|oriental)
   labels: {                     // textos dos botões/status do painel, customizáveis pelo admin
     actionNovo: 'Aceitar Pedido',
     actionPrep: 'Marcar Pronto',
