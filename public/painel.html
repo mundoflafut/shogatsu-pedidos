@@ -443,6 +443,7 @@ table{max-width:100%;}
     <div class="nav-section" data-min-role="admin">Gestão</div>
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
+    <button class="nav-item" data-page="qrlinks" data-min-role="admin" onclick="goPage('qrlinks')"><span class="ni">🔗</span> QR Code &amp; Links</button>
     <button class="nav-item" data-page="relatorios" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
     <button class="nav-item" data-page="avaliacoes" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
     <div class="nav-section" data-min-role="admin">Sistema</div>
@@ -599,6 +600,36 @@ table{max-width:100%;}
           </div>
           <div class="menu-items-body" id="menu-items-body">
             <div style="text-align:center;padding:40px;color:var(--muted)">Selecione uma categoria</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── QR CODE & LINKS ── -->
+    <div class="page" id="page-qrlinks">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        Link e QR Code prontos pra cada página pública do sistema — copie o link ou baixe/imprima o QR
+        pra usar nas mesas, na bio do Instagram, no cardápio impresso, etc. Cada aba abaixo é uma página
+        diferente.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;" id="qrl-tabs"></div>
+      <div class="panel" id="qrl-content" style="max-width:520px;"></div>
+
+      <div class="panel" style="max-width:520px;margin-top:18px;">
+        <div class="panel-title" style="margin-bottom:10px;">🔧 Gerador Personalizado</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Cole qualquer link (ou texto) e gere um QR Code na hora — útil pra promoções, cardápios de terceiros, cupons, etc.</div>
+        <div class="field">
+          <label>Link ou texto</label>
+          <div style="display:flex;gap:8px;">
+            <input id="qrl-custom-input" placeholder="https://..." style="flex:1;"/>
+            <button class="btn primary sm" onclick="generateCustomQr()">Gerar QR</button>
+          </div>
+        </div>
+        <div id="qrl-custom-result" style="display:none;margin-top:12px;text-align:center;">
+          <img id="qrl-custom-img" style="width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;"/>
+          <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
+            <a class="btn secondary sm" id="qrl-custom-download" download="qrcode.png" target="_blank">⬇️ Baixar</a>
+            <button class="btn secondary sm" onclick="printQrImage('qrl-custom-img')">🖨 Imprimir</button>
           </div>
         </div>
       </div>
@@ -1802,8 +1833,8 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
-const PAGE_MIN_ROLE = { cardapio:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
+const PAGE_MIN_ROLE = { cardapio:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
     showToast('🔒 Acesso restrito','Seu usuário não tem permissão pra essa área.');
@@ -1817,6 +1848,7 @@ function goPage(id, silent){
   if(id==='pedidos')setPedidosView(pedidosView);
   if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
+  if(id==='qrlinks')renderQrLinksPage();
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
   if(id==='usuarios')loadUsersPage();
@@ -1951,6 +1983,84 @@ function copyLinkField(id){
   navigator.clipboard && navigator.clipboard.writeText(input.value).then(()=>{
     showToast('✅ Link copiado','Já pode colar onde precisar.');
   }).catch(()=>{ document.execCommand('copy'); showToast('✅ Link copiado','Já pode colar onde precisar.'); });
+}
+
+// ═══════════════════════════════════════════
+// QR CODE & LINKS — ferramenta central com uma aba por página pública
+// (o Cardápio do Rodízio tem a sua própria aba, separada das demais).
+// ═══════════════════════════════════════════
+const QR_LINKS = [
+  { key:'pedir',    icon:'📲', label:'Delivery / Pedir Agora', path:'/pedir-agora.html',              desc:'Link único pra bio do Instagram/Facebook ou status do WhatsApp — abre direto o cardápio de delivery.' },
+  { key:'cardapio',  icon:'🍽️', label:'Cardápio',              path:'/cardapio-rodizio.html',          desc:'QR Code pra colar nas mesas do salão — o cliente escaneia e vê o cardápio do rodízio na hora, sem precisar de app.' },
+  { key:'popular',  icon:'📖', label:'Cardápio Rodízio Popular', path:'/cardapio-rodizio-popular.html', desc:'Cardápio completo do rodízio (preços por grupo de dias, destaques do dia) — pode ir num QR separado se quiser um cardápio mais completo na mesa.' },
+  { key:'divulgacao', icon:'📣', label:'Divulgação',            path:'/divulgacao-rodizio.html',        desc:'Página-vitrine do rodízio, pronta pra colar na bio do Instagram/Facebook ou mandar direto pro cliente.' },
+  { key:'avaliar',  icon:'⭐', label:'Avaliação Rodízio',        path:'/avaliar-rodizio.html',           desc:'Link pra pedir avaliação de quem veio no rodízio presencial — pode imprimir o QR e deixar na mesa ou na conta.' },
+  { key:'entregador', icon:'🛵', label:'Painel do Entregador',   path:'/entregador.html',                desc:'Acesso rápido do motoboy pra ver e atualizar as entregas — manda o link direto pro celular dele.' },
+];
+let qrlActiveTab = 'pedir';
+function renderQrLinksPage(){
+  const tabsEl = document.getElementById('qrl-tabs');
+  tabsEl.innerHTML = QR_LINKS.map(l=>`
+    <button class="topbar-btn${qrlActiveTab===l.key?' active':''}" id="qrltab-${l.key}" onclick="qrlSelectTab('${l.key}')" style="${qrlActiveTab===l.key?'border-color:var(--red);color:var(--red-lt)':''}">${l.icon} ${l.label}</button>
+  `).join('');
+  qrlRenderContent();
+}
+function qrlSelectTab(key){
+  qrlActiveTab = key;
+  document.querySelectorAll('#qrl-tabs .topbar-btn').forEach(b=>{ b.classList.remove('active'); b.style.borderColor=''; b.style.color=''; });
+  const active = document.getElementById('qrltab-'+key);
+  if(active){ active.classList.add('active'); active.style.borderColor='var(--red)'; active.style.color='var(--red-lt)'; }
+  qrlRenderContent();
+}
+function qrlRenderContent(){
+  const l = QR_LINKS.find(x=>x.key===qrlActiveTab) || QR_LINKS[0];
+  const url = location.origin + l.path;
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(url);
+  document.getElementById('qrl-content').innerHTML = `
+    <div class="panel-title" style="margin-bottom:6px;">${l.icon} ${l.label}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${l.desc}</div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>Link</label>
+      <div style="display:flex;gap:8px;">
+        <input id="qrl-link-input" readonly onclick="this.select()" value="${url}" style="flex:1;font-size:11px;"/>
+        <button class="btn secondary sm" onclick="copyLinkField('qrl-link-input')">📋 Copiar</button>
+      </div>
+    </div>
+    <div style="text-align:center;">
+      <img id="qrl-img" src="${qrSrc}" style="width:220px;height:220px;border-radius:10px;background:#fff;padding:8px;" alt="QR Code — ${l.label}"/>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;">
+        <a class="btn secondary sm" href="${qrSrc}" download="qr-${l.key}.png" target="_blank">⬇️ Baixar QR</a>
+        <button class="btn secondary sm" onclick="printQrImage('qrl-img','${esc(l.label)}')">🖨 Imprimir QR</button>
+        <button class="btn secondary sm" onclick="window.open('${url}','_blank')">🔗 Abrir</button>
+      </div>
+    </div>`;
+}
+function generateCustomQr(){
+  const val = document.getElementById('qrl-custom-input').value.trim();
+  if(!val){ showToast('Digite um link ou texto', 'Preencha o campo antes de gerar o QR.'); return; }
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(val);
+  document.getElementById('qrl-custom-img').src = qrSrc;
+  const dl = document.getElementById('qrl-custom-download');
+  dl.href = qrSrc;
+  document.getElementById('qrl-custom-result').style.display = 'block';
+}
+// Abre uma janela simples só com a imagem do QR pra imprimir (útil pra colar na mesa/conta).
+function printQrImage(imgId, label){
+  const src = document.getElementById(imgId).src;
+  const w = window.open('', '_blank', 'width=400,height=500');
+  if(!w){ showToast('⚠️ Pop-up bloqueado', 'Permita pop-ups pra esse site pra imprimir o QR Code.', 5000); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR Code</title>
+  <style>body{font-family:sans-serif;text-align:center;padding:30px;} img{width:280px;height:280px;} h2{font-size:15px;margin-top:14px;}</style>
+  </head><body>
+    <img src="${src}"/>
+    ${label?`<h2>${label}</h2>`:''}
+    <script>
+      window.onload = function(){ window.print(); };
+      window.onafterprint = function(){ try{ window.close(); }catch(e){} };
+      setTimeout(function(){ try{ window.close(); }catch(e){} }, 45000);
+    <\/script>
+  </body></html>`);
+  w.document.close();
 }
 
 // ── Seletor de motoboy (v32) — mostra os motoboys pré-cadastrados como chips,
@@ -2150,36 +2260,33 @@ const payLabelsPrint = { pix:'PIX', credito:'Cartão de Crédito', debito:'Cart�
 async function printOrder(id, ev){
   const btn = (ev||window.event)?.currentTarget;
   if(btn) btn.classList.add('printing');
-  const order = orders.find(o=>o.id===id);
-  // BUG CORRIGIDO: como cada estação é impressa depois de um "await", só a primeira
-  // janela abria dentro do clique do usuário — as seguintes eram bloqueadas pelo
-  // navegador como pop-up. Agora pré-abrimos todas as janelas necessárias ANTES de
-  // qualquer await, ainda dentro do clique, e só preenchemos o conteúdo depois.
+  // BUG CORRIGIDO (nem toda via imprimia): a janela de cada estação só era pré-aberta
+  // quando o pedido já estava carregado na lista local (`orders`) — se o pedido vinha de
+  // outro lugar (card do dashboard, lista filtrada, etc.) essa checagem falhava e NENHUMA
+  // janela era pré-aberta. Como cada via só é confirmada depois de um `await`, a partir da
+  // segunda o navegador bloqueava como pop-up — então só a primeira via de fato imprimia.
+  // Agora as 4 janelas são sempre pré-abertas de forma síncrona, ainda dentro do clique do
+  // usuário, independente de sabermos de antemão quais estações têm itens — as que acabam
+  // sem uso (via "pulada" ou impressora de rede/USB) são simplesmente fechadas depois.
   const preOpened={};
-  if(order){
-    PRINT_STATIONS.forEach(st=>{
-      const items = st==='caixa' ? order.items : order.items.filter(i=>(i.stations||[]).includes(st));
-      if(!items.length) return;
-      const method=(cfg.stations&&cfg.stations[st]&&cfg.stations[st].method)||'navegador';
-      if(method!=='navegador') return;
-      const w=window.open('', '_blank', 'width=380,height=600');
-      if(w){ w.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>'); preOpened[st]=w; }
-    });
-  }
+  PRINT_STATIONS.forEach(st=>{
+    const w=window.open('', '_blank', 'width=380,height=600');
+    if(w){ w.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>'); preOpened[st]=w; }
+  });
   let printedAny=false, blockedAny=false;
   for(const st of PRINT_STATIONS){
     const res = await apiPost('/api/print', { orderId:id, station: st });
-    if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
+    if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); if(preOpened[st]) preOpened[st].close(); continue; }
     const d = res.data;
     if(d.skipped) { if(preOpened[st]) preOpened[st].close(); continue; } // essa via não tem itens desse pedido, pula sem incomodar
     if(d.method==='navegador'){
-      if(!preOpened[st] && !order) blockedAny=true; // não sabíamos o pedido de antemão (ex: chamado sem estar na lista local) — pode ter sido bloqueado
-      openBrowserTicket(d.order, d.station, d.deliveryWindow, preOpened[st]);
+      if(!preOpened[st]) blockedAny=true; // não foi possível pré-abrir (navegador bloqueou mesmo o pré-open) — avisa o usuário
+      else openBrowserTicket(d.order, d.station, d.deliveryWindow, preOpened[st]);
       printedAny=true;
     }
-    else if(d.printed){ printedAny=true; }
+    else { if(preOpened[st]) preOpened[st].close(); if(d.printed) printedAny=true; }
   }
-  if(blockedAny) showToast('⚠️ Pop-up pode ter sido bloqueado', 'Permita pop-ups pra esse site nas configurações do navegador.', 6000);
+  if(blockedAny) showToast('⚠️ Pop-up pode ter sido bloqueado', 'Permita pop-ups pra esse site nas configurações do navegador — sem isso nem todas as vias conseguem imprimir.', 6000);
   else if(printedAny) showToast('🖨 Impressão enviada', `Pedido ${id} enviado para as vias configuradas.`, 3500);
   if(btn) btn.classList.remove('printing');
 }

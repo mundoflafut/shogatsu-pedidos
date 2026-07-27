@@ -721,7 +721,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
     <span class="screen-title">📅 Reservar Mesa</span>
   </div>
   <div class="screen-body">
-    <div class="form-section">
+    <div class="form-section" id="rsv-form-section">
       <div class="form-section-title">📅 Dados da Reserva</div>
       <div class="form-group"><label>Nome completo *</label><input type="text" id="rsv-name"/></div>
       <div class="form-group"><label>WhatsApp / Telefone *</label><input type="tel" id="rsv-phone" placeholder="(22) 99999-9999"/></div>
@@ -735,6 +735,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
       <button class="place-btn" style="position:static;" id="rsv-submit-btn" onclick="submitReservation()">✅ Solicitar Reserva</button>
       <p class="hint" style="margin-top:10px;">A reserva fica pendente até a loja confirmar. Você será avisado pelo WhatsApp.</p>
     </div>
+
 
     <!-- v33: card de acompanhamento — aparece depois de solicitar, com a identidade visual do
          cardápio (mesmas classes .ss-card / .ss-sec-title da tela de pedido). Fica ali mostrando
@@ -1016,8 +1017,8 @@ function openReservationScreen() {
   document.getElementById('reservation-screen').classList.add('open');
   // v33: se o cliente já tem uma reserva em aberto, mostra o card de status e busca o que há de novo
   const lastId = localStorage.getItem('shogatsu_last_reservation');
-  if (lastId) { refreshReservationStatus(lastId); startReservationPolling(); }
-  else { document.getElementById('rsv-status-card').style.display = 'none'; }
+  if (lastId) { document.getElementById('rsv-form-section').style.display = 'none'; refreshReservationStatus(lastId); startReservationPolling(); }
+  else { document.getElementById('rsv-form-section').style.display = ''; document.getElementById('rsv-status-card').style.display = 'none'; }
 }
 function closeReservationScreen() {
   document.getElementById('reservation-screen').classList.remove('open');
@@ -1033,13 +1034,18 @@ async function submitReservation() {
   const statusEl = document.getElementById('reservation-status');
   if (!name || !phone || !date || !time || !people) { statusEl.textContent = 'Preencha todos os campos obrigatórios.'; return; }
   statusEl.textContent = '';
+  const submitBtn = document.getElementById('rsv-submit-btn');
+  // v38: desabilita o botão assim que clicado — evita duplo clique/duplo envio enquanto
+  // a requisição está em andamento (o bug original: dava pra clicar várias vezes seguidas).
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Enviando...';
   try {
     const r = await fetch('/api/reservations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, phone, date, time, people, notes })
     });
     const data = await r.json();
-    if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível reservar.'; return; }
+    if (!r.ok) { statusEl.textContent = data.error || 'Não foi possível reservar.'; submitBtn.disabled = false; submitBtn.textContent = '✅ Solicitar Reserva'; return; }
     // v33: em vez de fechar a tela, guarda o ID e mostra o card de acompanhamento na mesma tela
     // (igual ao modelo: formulário + status ali embaixo), com polling pra pegar a resposta da loja.
     localStorage.setItem('shogatsu_last_reservation', data.reservation.id);
@@ -1047,7 +1053,16 @@ async function submitReservation() {
     startReservationPolling();
     showMiniToast('✅ Reserva solicitada! Aguarde a confirmação da loja.', 4000);
     document.getElementById('rsv-notes').value = '';
-  } catch (e) { statusEl.textContent = 'Erro de conexão.'; }
+    // v38 (bug real corrigido): o botão "Solicitar Reserva" continuava ativo e visível mesmo
+    // depois da reserva já ter sido feita — dava pra clicar de novo e criar reservas duplicadas.
+    // Agora o formulário some e só aparece o status + "Fazer nova reserva" quando o cliente
+    // realmente quiser começar outra.
+    document.getElementById('rsv-form-section').style.display = 'none';
+  } catch (e) {
+    statusEl.textContent = 'Erro de conexão.';
+    submitBtn.disabled = false;
+    submitBtn.textContent = '✅ Solicitar Reserva';
+  }
 }
 function startNewReservation() {
   localStorage.removeItem('shogatsu_last_reservation');
@@ -1058,6 +1073,10 @@ function startNewReservation() {
     document.getElementById('rsv-name').value = customer.name || '';
     document.getElementById('rsv-phone').value = customer.phone || '';
   }
+  const submitBtn = document.getElementById('rsv-submit-btn');
+  submitBtn.disabled = false;
+  submitBtn.textContent = '✅ Solicitar Reserva';
+  document.getElementById('rsv-form-section').style.display = '';
 }
 const RSV_STATUS_INFO = {
   pendente:  { icon:'⏳', label:'Aguardando confirmação', desc:'Sua solicitação foi enviada e está sendo analisada pela equipe do restaurante.' },
