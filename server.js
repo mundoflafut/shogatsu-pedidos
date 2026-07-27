@@ -779,12 +779,30 @@ function sendJSON(res, status, obj) {
   });
   res.end(body);
 }
-function readBody(req) {
+function readBody(req, maxBytes = 10e6) {
+  // BUG CORRIGIDO (v42 — "caixa de fotos bugada"): quando o corpo passava do limite, o
+  // código só chamava req.destroy() e nunca resolvia nem rejeitava a Promise — o
+  // navegador ficava esperando pra sempre (a foto travava em "Enviando..." sem erro
+  // nenhum). Agora rejeita explicitamente, então o endpoint sempre responde algo, e
+  // o limite subiu de 8MB pra 10MB pra caber uma imagem de 4MB convertida em base64
+  // (que fica ~33% maior) com folga.
   return new Promise((resolve, reject) => {
     let chunks = '';
-    req.on('data', c => { chunks += c; if (chunks.length > 8e6) req.destroy(); });
-    req.on('end', () => { try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { reject(e); } });
-    req.on('error', reject);
+    let tooLarge = false;
+    req.on('data', c => {
+      if (tooLarge) return;
+      chunks += c;
+      if (chunks.length > maxBytes) {
+        tooLarge = true;
+        reject(new Error('payload muito grande'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (tooLarge) return;
+      try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { reject(e); }
+    });
+    req.on('error', (e) => { if (!tooLarge) reject(e); });
   });
 }
 function getToken(req, query) {

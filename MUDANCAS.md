@@ -1,3 +1,40 @@
+# v42 — Correção de bugs (categorias, reserva, fotos, impressão duplicada, edição de prato)
+
+**Bug real corrigido: janela de categorias cortada.** A coluna de categorias do editor de
+cardápio tinha 200px fixos, e cada item de categoria colocava ícone + nome + contador + setas de
+reordenar + botões "✏️ Editar"/"🗑" tudo numa única linha sem quebra — e o container ao redor
+usava `overflow:hidden`, então qualquer coisa que não coubesse nos 200px era simplesmente cortada
+da tela. Agora a coluna é mais larga (260px), cada item de categoria quebra em duas linhas (nome
+em cima, ações embaixo), os botões de editar/excluir viraram só ícone (sem o texto "Editar") e
+não existe mais `overflow:hidden` escondendo conteúdo.
+
+**Bug real corrigido: botão de reserva não indicava a mesa como reservada.** Depois de confirmar
+uma reserva no painel, o status mostrado era "✅ Confirmada" — só dizia que o pedido de reserva
+tinha sido aceito, mas não deixava claro que a mesa já está reservada de fato. Agora, assim que
+confirmada, o status exibido passa a ser "🪑 Reservada".
+
+**Bug real corrigido: caixa de fotos travava com fotos de celular.** Duas causas juntas: (1) no
+servidor, quando o corpo da requisição passava do limite de tamanho, o código só derrubava a
+conexão (`req.destroy()`) sem nunca resolver nem rejeitar a Promise — o navegador ficava esperando
+pra sempre, preso em "Enviando...", sem erro nenhum; (2) o app enviava a foto do jeito que ela
+saía da câmera do celular, muitas vezes 3–8MB, o que ficava perto ou passava do limite. Agora: (a)
+o `readBody` do servidor sempre rejeita direito quando o limite estoura, então a requisição nunca
+mais fica pendurada pra sempre; (b) a foto é redimensionada/comprimida no navegador (máx. 1600px,
+JPEG 82%) antes do envio, então quase sempre fica abaixo de 1MB e sobe rápido e sem erro.
+
+**Ajuste: duas ferramentas de impressão fazendo a mesma coisa.** Os botões "🖨 Imprimir" (imprime
+todas as vias configuradas) e "🖨▾" (escolher em quais vias imprimir) apareciam soltos, lado a
+lado, parecendo duas ferramentas diferentes. Agora estão visualmente unidos num único controle
+(botão principal + seta grudada), lendo como uma ferramenta só com uma opção extra — sem perder
+nenhuma das duas funções.
+
+**Ajuste: caixa de editar prato não deve ter caixinhas de dia da semana por padrão.** As 7
+caixinhas de "Dias do Rodízio" apareciam sempre, mesmo pra pratos comuns que não têm nada a ver
+com o cardápio de rodízio — poluindo a edição da maioria dos itens. Agora existe um único checkbox
+"📅 Extra do rodízio (só em dias específicos)", e as 7 caixinhas de dia só aparecem quando ele é
+marcado. Pratos que já usavam essa função continuam funcionando normalmente (o checkbox já vem
+marcado neles ao abrir a edição).
+
 # v39 — Bug da reserva, impressão de todas as vias, e ferramenta de QR Code & Links
 
 **Bug real corrigido: botão "Solicitar Reserva" continuava ativo depois da reserva já feita.**
