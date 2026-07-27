@@ -33,10 +33,24 @@
   .today-item .desc{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
   .no-today{font-size:13px; color:var(--muted); font-style:italic;}
 
-  .cat{margin:26px 16px 0;}
+  .cat{margin:26px 16px 0; scroll-margin-top:64px;}
   .cat-head{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
   .cat-head .icon{font-size:20px;}
   .cat-head h2{font-size:15px; margin:0; color:var(--gold); font-weight:700;}
+
+  /* v40: navegação rápida por categorias — fixa no topo, rolagem horizontal no celular */
+  .cat-nav{
+    position:sticky; top:0; z-index:5; display:flex; gap:8px; overflow-x:auto;
+    padding:10px 16px; background:rgba(10,10,10,.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); scrollbar-width:none;
+  }
+  .cat-nav::-webkit-scrollbar{display:none;}
+  .cat-nav-btn{
+    flex:0 0 auto; display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600;
+    color:var(--muted); background:var(--card); border:1px solid var(--border); border-radius:20px;
+    padding:7px 13px; white-space:nowrap; cursor:pointer; transition:.15s;
+  }
+  .cat-nav-btn.active{color:var(--bg); background:var(--gold); border-color:var(--gold);}
 
   .item{
     background:var(--card); border:1px solid var(--border); border-radius:12px;
@@ -65,6 +79,7 @@
 </header>
 
 <div id="today-banner-wrap"></div>
+<div id="cat-nav-wrap"></div>
 <div id="menu-wrap"><div class="loading">Carregando cardápio...</div></div>
 
 <script>
@@ -119,14 +134,21 @@ function renderTodayBanner(menu){
   `;
 }
 
+function slugify(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+
 function renderMenu(menu){
   const wrap = document.getElementById('menu-wrap');
-  if (!menu.length) { wrap.innerHTML = '<div class="error">Cardápio ainda não configurado.</div>'; return; }
-  wrap.innerHTML = menu.map(cat => {
+  const navWrap = document.getElementById('cat-nav-wrap');
+  const visibleCats = menu.filter(cat => (cat.items || []).some(it => it.available !== false));
+  if (!menu.length) { wrap.innerHTML = '<div class="error">Cardápio ainda não configurado.</div>'; navWrap.innerHTML=''; return; }
+  navWrap.innerHTML = visibleCats.length > 1 ? `<div class="cat-nav" id="cat-nav">` + visibleCats.map((cat,i) => `
+    <button type="button" class="cat-nav-btn ${i===0?'active':''}" data-target="cat-${slugify(cat.title)}"
+      onclick="jumpToCategory('cat-${slugify(cat.title)}')">${esc(cat.icon || '🍽️')} ${esc(cat.title)}</button>
+  `).join('') + `</div>` : '';
+  wrap.innerHTML = visibleCats.map(cat => {
     const items = (cat.items || []).filter(it => it.available !== false);
-    if (!items.length) return '';
     return `
-      <div class="cat">
+      <div class="cat" id="cat-${slugify(cat.title)}">
         <div class="cat-head"><span class="icon">${esc(cat.icon || '🍽️')}</span><h2>${esc(cat.title)}</h2></div>
         ${items.map(it => {
           const hasDays = Array.isArray(it.days) && it.days.length;
@@ -145,6 +167,38 @@ function renderMenu(menu){
       </div>
     `;
   }).join('');
+  setupCategoryObserver();
+}
+
+function jumpToCategory(id){
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // destaque imediato ao clicar, sem esperar o IntersectionObserver alcançar a seção
+  document.querySelectorAll('.cat-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
+  centerActiveNavBtn(id);
+}
+
+function centerActiveNavBtn(id){
+  const nav = document.getElementById('cat-nav');
+  const btn = nav && nav.querySelector(`[data-target="${id}"]`);
+  if (nav && btn) nav.scrollTo({ left: btn.offsetLeft - (nav.clientWidth / 2) + (btn.clientWidth / 2), behavior: 'smooth' });
+}
+
+let categoryObserver = null;
+function setupCategoryObserver(){
+  if (categoryObserver) { categoryObserver.disconnect(); categoryObserver = null; }
+  const sections = document.querySelectorAll('.cat[id^="cat-"]');
+  if (!sections.length) return;
+  categoryObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        document.querySelectorAll('.cat-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
+        centerActiveNavBtn(id);
+      }
+    });
+  }, { rootMargin: '-96px 0px -70% 0px', threshold: 0 });
+  sections.forEach(s => categoryObserver.observe(s));
 }
 
 init();

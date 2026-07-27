@@ -673,6 +673,12 @@ table{max-width:100%;}
     <!-- ── CONFIGURAÇÕES ── -->
     <div class="page" id="page-configuracoes">
 
+      <div style="position:sticky;top:0;z-index:20;background:var(--bg,#12141a);padding:10px 0 12px;margin-bottom:6px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">
+        <button type="button" class="btn secondary sm" onclick="document.getElementById('settings-printer-card').scrollIntoView({behavior:'smooth',block:'start'})" title="Ir direto pra configuração de impressoras">
+          🖨 Escolher Impressora
+        </button>
+      </div>
+
       <div class="settings-section-title">🏪 Restaurante</div>
       <div class="settings-grid">
         <div class="settings-card">
@@ -923,7 +929,7 @@ table{max-width:100%;}
 
       <div class="settings-section-title">🖨 Impressão</div>
       <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
+        <div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📠 Impressoras por Estação</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Renomeie cada via como preferir e escolha como ela imprime: pela janela do
@@ -964,6 +970,23 @@ table{max-width:100%;}
           <div class="field"><label>Imprimir ao Receber Pedido</label>
             <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
           </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Som que toca no app do cliente sempre que ele recebe qualquer aviso (pedido confirmado,
+            status mudou, etc). Escolha um estilo e clique em Testar pra ouvir.
+          </div>
+          <div class="field"><label style="font-size:10px;">Estilo do som</label>
+            <select id="cfg-customer-alert-sound">
+              <option value="classico">🔔 Clássico (0,4s)</option>
+              <option value="suave">💧 Suave (0,3s)</option>
+              <option value="dupla">🎵 Nota Dupla (0,4s)</option>
+              <option value="sino">⏰ Sino (1,5s)</option>
+              <option value="oriental">🎋 Oriental — Sino Zen (4s)</option>
+            </select>
+          </div>
+          <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
         </div>
       </div>
 
@@ -1961,6 +1984,74 @@ function playBeep(){
       o.start(ctx.currentTime+i*.15);o.stop(ctx.currentTime+i*.15+.12);
     });
   }catch(e){}
+}
+
+// v40: mesma biblioteca de 5 avisos sonoros usada no cardápio do cliente — aqui só
+// pro admin poder ouvir e escolher em Configurações (botão "▶ Testar Som").
+const CUSTOMER_ALERT_SOUNDS = {
+  classico(){ try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(880,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(1320,ctx.currentTime+.12);
+    g.gain.setValueAtTime(.15,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.35);
+    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.35);
+  }catch(e){} },
+  suave(){ try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(660,ctx.currentTime);
+    g.gain.setValueAtTime(.001,ctx.currentTime);
+    g.gain.linearRampToValueAtTime(.12,ctx.currentTime+.05);
+    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.3);
+    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.3);
+  }catch(e){} },
+  dupla(){ try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    [700,1050].forEach((f,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='triangle';o.frequency.value=f;
+      const t=ctx.currentTime+i*.16;
+      g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.16,t+.02);
+      g.gain.exponentialRampToValueAtTime(.001,t+.2);
+      o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.2);
+    });
+  }catch(e){} },
+  sino(){ try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const now=ctx.currentTime;
+    [523.25,659.25,784].forEach((f,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(i===0?.18:.08,now+.03);
+      g.gain.exponentialRampToValueAtTime(.001,now+1.5);
+      o.connect(g);g.connect(ctx.destination);o.start(now);o.stop(now+1.5);
+    });
+  }catch(e){} },
+  oriental(){ try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const now=ctx.currentTime;
+    [110,164.8,220].forEach((f,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(i===0?.22:.09,now+.06);
+      g.gain.exponentialRampToValueAtTime(.001,now+4);
+      o.connect(g);g.connect(ctx.destination);o.start(now);o.stop(now+4);
+    });
+    [587.33,659.25,784,880].forEach((f,i)=>{
+      const t=now+i*.28;
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='triangle';o.frequency.value=f;
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.13,t+.02);
+      g.gain.exponentialRampToValueAtTime(.001,t+.9);
+      o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.9);
+    });
+  }catch(e){} }
+};
+function testCustomerAlertSound(){
+  const kind = document.getElementById('cfg-customer-alert-sound')?.value || 'classico';
+  (CUSTOMER_ALERT_SOUNDS[kind]||CUSTOMER_ALERT_SOUNDS.classico)();
 }
 
 async function advanceStatus(id){
@@ -3614,6 +3705,8 @@ function loadSettings(){
   if(printEl) printEl.value=String(Number(cfg.print)||0);
   const soundEl=document.getElementById('cfg-sound');
   if(soundEl) soundEl.value=String(cfg.sound===undefined?1:Number(cfg.sound));
+  const custAlertEl=document.getElementById('cfg-customer-alert-sound');
+  if(custAlertEl) custAlertEl.value=cfg.customerAlertSound||'classico';
   renderStationsSettings();
   loadLabels();
   loadFeeSettings();
@@ -4070,6 +4163,8 @@ async function saveAllSettings(){
   if(printEl) cfg.print = parseInt(printEl.value)||0;
   const soundEl=document.getElementById('cfg-sound');
   if(soundEl) cfg.sound = parseInt(soundEl.value)||0;
+  const custAlertEl2=document.getElementById('cfg-customer-alert-sound');
+  if(custAlertEl2) cfg.customerAlertSound = custAlertEl2.value||'classico';
 
   // Taxa de entrega
   const feeMode = document.getElementById('fee-mode').value;
