@@ -3,21 +3,11 @@
   "version": "1.0.0",
   "description": "Agente local de impressão automática do Shogatsu — imprime pedidos direto na impressora térmica assim que chegam, sem navegador nem diálogo.",
   "main": "print-agent.js",
-  "bin": "print-agent.js",
   "scripts": {
-    "start": "node print-agent.js",
-    "build": "pkg . --targets node18-win-x64 --output dist/shogatsu-print-agent.exe"
+    "start": "node print-agent.js"
   },
   "engines": { "node": ">=18" },
   "dependencies": {
     "node-thermal-printer": "^4.6.0"
-  },
-  "devDependencies": {
-    "pkg": "^5.8.1"
-  },
-  "pkg": {
-    "assets": [],
-    "targets": ["node18-win-x64"],
-    "outputPath": "dist"
   }
 }

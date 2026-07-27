@@ -25,22 +25,12 @@ const http = require('http');
 const https = require('https');
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 
-// Quando este arquivo roda dentro do .exe empacotado (pkg), __dirname aponta pra dentro do
-// "snapshot" virtual do executável — não dá pra ler/escrever ali de verdade. Nesse caso, usamos
-// a pasta onde o .exe está de verdade (process.execPath) pra encontrar o config.json e gravar o log.
-const isPackaged = typeof process.pkg !== 'undefined';
-const BASE_DIR = isPackaged ? path.dirname(process.execPath) : __dirname;
-
-const CONFIG_PATH = path.join(BASE_DIR, 'config.json');
-const LOG_PATH = path.join(BASE_DIR, 'print-agent.log');
+const CONFIG_PATH = path.join(__dirname, 'config.json');
+const LOG_PATH = path.join(__dirname, 'print-agent.log');
 const TEST_MODE = process.env.TEST_MODE === '1'; // não manda pra impressora de verdade, só mostra no log/console
 
 if (!fs.existsSync(CONFIG_PATH)) {
-  console.error('❌ Não encontrei config.json na mesma pasta do programa. Copie config.example.json pra config.json (na mesma pasta do .exe) e preencha os dados antes de rodar.');
-  if (isPackaged) {
-    console.error('Pressione ENTER pra fechar...');
-    try { fs.readSync(0, Buffer.alloc(1), 0, 1); } catch (e) {}
-  }
+  console.error('❌ Não encontrei config.json. Copie config.example.json pra config.json e preencha os dados antes de rodar.');
   process.exit(1);
 }
 const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -237,18 +227,5 @@ async function start() {
     scheduleReconnect();
   }
 }
-
-// Se rodando como .exe (duplo-clique), um erro não tratado normalmente fecharia a janela
-// instantaneamente, sem dar tempo de ler o motivo. Aqui a gente registra o erro, avisa na tela,
-// e mantém a janela aberta esperando o usuário apertar ENTER antes de fechar de verdade.
-process.on('uncaughtException', (err) => {
-  log(`❌ Erro inesperado: ${err.message}`);
-  if (isPackaged) {
-    console.error('\nO programa encontrou um erro e vai fechar. Detalhes acima e em print-agent.log.');
-    console.error('Pressione ENTER pra fechar esta janela...');
-    try { fs.readSync(0, Buffer.alloc(1), 0, 1); } catch (e) {}
-  }
-  process.exit(1);
-});
 
 start();
