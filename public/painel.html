@@ -195,6 +195,13 @@ table{max-width:100%;}
 .oa-btn.cancel:hover{background:var(--red);color:#fff;}
 .oa-btn.print{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);}
 .oa-btn.print:hover{background:var(--blue);color:#fff;}
+/* v42: as duas ferramentas de impressão (imprimir direto / escolher via) eram dois
+   botões soltos, um do lado do outro — pareciam duas ferramentas diferentes fazendo a
+   mesma coisa. Agora são um único controle (botão principal + seta), visualmente
+   unificado, exatamente como "abrir opções" de UMA ferramenta de impressão. */
+.oa-print-group{display:flex;flex:1;min-width:100px;}
+.oa-print-group .oa-btn.print{flex:1;border-radius:6px 0 0 6px;border-right:none;}
+.oa-print-group .oa-btn.print-more{flex:0 0 auto;min-width:0;border-radius:0 6px 6px 0;padding:10px 9px;border-left:1px solid var(--blue-dk,var(--blue));}
 .oa-btn.whatsapp{background:rgba(37,211,102,.14);color:#25d366;border:1px solid #25d366;}
 .oa-btn.whatsapp:hover{background:#25d366;color:#fff;}
 .oa-btn.paid{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);}
@@ -225,17 +232,25 @@ table{max-width:100%;}
 .k-btn{width:100%;border:none;border-radius:5px;padding:6px;font-size:12px;font-weight:500;margin-top:7px;transition:all .15s;}
 
 /* ── MENU EDITOR ── */
-.menu-editor{display:grid;grid-template-columns:200px 1fr;gap:16px;height:calc(100vh - 140px);}
-.menu-cats-wrap{display:flex;flex-direction:column;gap:8px;overflow:hidden;}
-.menu-cats-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-.menu-cats{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow-y:auto;flex:1;}
-.menu-cat-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:center;gap:8px;}
+/* BUG CORRIGIDO (v42): a coluna de categorias tinha 200px fixos e o item de categoria
+   colocava ícone + nome + contador + botões de reordenar + "✏️ Editar"/"🗑" tudo numa
+   única linha sem quebrar — e o wrapper tinha overflow:hidden, então tudo que não cabia
+   nos 200px simplesmente ficava cortado (janela "cortada"). Agora a coluna é mais larga,
+   o item de categoria quebra em duas linhas (nome em cima, ações embaixo) e nada usa
+   overflow:hidden, então o conteúdo sempre aparece inteiro.  */
+.menu-editor{display:grid;grid-template-columns:260px 1fr;gap:16px;height:calc(100vh - 140px);}
+.menu-cats-wrap{display:flex;flex-direction:column;gap:8px;min-width:0;}
+.menu-cats-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.menu-cats{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow-y:auto;overflow-x:hidden;flex:1;}
+.menu-cat-item{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:6px;}
 .menu-cat-item:hover{background:var(--panel);}
 .menu-cat-item.active{background:var(--red-bg);color:var(--red-lt);border-left:2px solid var(--red);}
-.menu-cat-name{font-size:14px;}
-.menu-cat-count{font-size:12px;color:var(--muted);}
-.cat-actions{display:flex;gap:6px;margin-left:auto;}
-.cat-actions button{border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:14px;padding:6px 10px;border-radius:6px;transition:all .15s;}
+.menu-cat-item-top{display:flex;align-items:center;gap:8px;min-width:0;}
+.menu-cat-name{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.menu-cat-count{font-size:11px;color:var(--muted);flex-shrink:0;}
+.menu-cat-item-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.cat-actions{display:flex;gap:6px;}
+.cat-actions button{border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:13px;padding:4px 8px;border-radius:6px;transition:all .15s;white-space:nowrap;}
 .cat-actions button.edit{background:var(--blue-bg);color:var(--blue);border-color:var(--blue);}
 .cat-actions button.edit:hover{background:var(--blue);color:#fff;}
 .cat-actions button.del{background:var(--red-bg);color:var(--red-lt);border-color:var(--red-dk);}
@@ -1218,16 +1233,21 @@ table{max-width:100%;}
       <div class="field-row">
         <div class="field"><label>Badge (destaque)</label><input id="item-badge" placeholder="ex: 🔥 Destaque  ou  👑 Premium"/></div>
         <div class="field">
-          <label>📅 Dias do Rodízio (opcional)</label>
-          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Usado só no cardápio de rodízio presencial (QR code da mesa). Marque os dias em que esse item é servido como "extra do dia". Deixe tudo desmarcado se o item é fixo/sempre disponível ou se ele nem faz parte do rodízio.</div>
-          <div id="item-days" style="display:flex;flex-wrap:wrap;gap:10px;">
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="dom"/> Dom</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="seg"/> Seg</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="ter"/> Ter</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qua"/> Qua</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qui"/> Qui</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sex"/> Sex</label>
-            <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sab"/> Sáb</label>
+          <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="item-is-rodizio-extra" onchange="toggleRodizioDays(this.checked)"/>
+            📅 Extra do rodízio (só em dias específicos)
+          </label>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">Marque só se esse prato aparece no cardápio de rodízio presencial (QR code da mesa) em dias certos. A maioria dos pratos não precisa disso.</div>
+          <div id="item-days-wrap" style="display:none;margin-top:8px;">
+            <div id="item-days" style="display:flex;flex-wrap:wrap;gap:10px;">
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="dom"/> Dom</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="seg"/> Seg</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="ter"/> Ter</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qua"/> Qua</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qui"/> Qui</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sex"/> Sex</label>
+              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sab"/> Sáb</label>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -2764,8 +2784,10 @@ function miniOrderCard(o){
     <div class="order-actions">
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
-      <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias">🖨 Imprimir</button>
-      <button class="oa-btn print" style="padding:6px 8px;" onclick="openPrintChooser('${o.id}', event)" title="Escolher impressora">🖨▾</button>
+      <span class="oa-print-group">
+        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
+        <button class="oa-btn print print-more" onclick="openPrintChooser('${o.id}', event)" title="Escolher em quais vias imprimir">▾</button>
+      </span>
       ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
       ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
@@ -2847,8 +2869,10 @@ function renderOrdersList(){
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
-        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
-        <button class="oa-btn print" style="padding:6px 8px;" onclick="openPrintChooser('${o.id}', event)" title="Escolher impressora">🖨▾</button>
+        <span class="oa-print-group">
+          <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
+          <button class="oa-btn print print-more" onclick="openPrintChooser('${o.id}', event)" title="Escolher em quais vias imprimir">▾</button>
+        </span>
         ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
         ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
         ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
@@ -2881,7 +2905,7 @@ async function renderReservationsList(){
   if(reservationFilter==='confirmada') list = list.filter(r=>r.status==='confirmada');
   if(reservationFilter==='recusada') list = list.filter(r=>r.status==='recusada'||r.status==='cancelada');
   const div = document.getElementById('reservations-list');
-  const rsvStatusLabel = {pendente:'🕐 Pendente', confirmada:'✅ Confirmada', recusada:'✕ Recusada', cancelada:'✕ Cancelada'};
+  const rsvStatusLabel = {pendente:'🕐 Pendente', confirmada:'🪑 Reservada', recusada:'✕ Recusada', cancelada:'✕ Cancelada'};
   div.innerHTML = list.length===0
     ? '<div style="text-align:center;padding:60px;color:var(--muted);">Nenhuma reserva encontrada</div>'
     : list.map(r=>`
@@ -2983,17 +3007,21 @@ function renderMenuEditor(){
     ? '<div style="text-align:center;padding:30px 12px;color:var(--muted);font-size:12px;">Nenhuma categoria ainda.<br>Clique em + Categoria.</div>'
     : menu.map((s,i)=>`
     <div class="menu-cat-item ${i===activeCatIdx?'active':''}" onclick="selectCat(${i})">
-      <span class="cat-reorder">
-        <button onclick="event.stopPropagation();moveCategory(${i},-1)" ${i===0?'disabled':''} title="Mover para cima">▲</button>
-        <button onclick="event.stopPropagation();moveCategory(${i},1)" ${i===menu.length-1?'disabled':''} title="Mover para baixo">▼</button>
-      </span>
-      <span>${s.icon||'🍽️'}</span>
-      <span class="menu-cat-name">${s.title}</span>
-      <span class="menu-cat-count">${s.items.length}</span>
-      <span class="cat-actions">
-        <button class="edit" onclick="event.stopPropagation();openEditCategory(${i})" title="Editar categoria">✏️ Editar</button>
-        <button class="del" onclick="event.stopPropagation();deleteCategory(${i})" title="Excluir categoria">🗑</button>
-      </span>
+      <div class="menu-cat-item-top">
+        <span>${s.icon||'🍽️'}</span>
+        <span class="menu-cat-name" title="${s.title}">${s.title}</span>
+        <span class="menu-cat-count">${s.items.length}</span>
+      </div>
+      <div class="menu-cat-item-bottom">
+        <span class="cat-reorder">
+          <button onclick="event.stopPropagation();moveCategory(${i},-1)" ${i===0?'disabled':''} title="Mover para cima">▲</button>
+          <button onclick="event.stopPropagation();moveCategory(${i},1)" ${i===menu.length-1?'disabled':''} title="Mover para baixo">▼</button>
+        </span>
+        <span class="cat-actions">
+          <button class="edit" onclick="event.stopPropagation();openEditCategory(${i})" title="Editar categoria">✏️</button>
+          <button class="del" onclick="event.stopPropagation();deleteCategory(${i})" title="Excluir categoria">🗑</button>
+        </span>
+      </div>
     </div>`).join('');
   renderMenuItems();
 }
@@ -3105,25 +3133,63 @@ function resetItemPhotoPreview(url, pos){
     placeholder.style.display='flex';
   }
 }
+// BUG CORRIGIDO (v42 — "caixa de fotos bugada"): antes a foto ia pro servidor do
+// jeito que saía da câmera do celular (muitas vezes 3–8MB), o que passava perto ou
+// além do limite de tamanho do servidor e deixava o upload travado em "Enviando..."
+// sem nunca dar erro nem terminar. Agora a imagem é redimensionada/comprimida aqui
+// no navegador antes de enviar (fica ~200KB–1MB), então some o travamento e o envio
+// fica bem mais rápido — sem precisar mudar nada em quem já usa o sistema.
+function compressImageFile(file, maxSize=1600, quality=0.82){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const reader=new FileReader();
+    reader.onload=()=>{ img.onload=()=>{
+      try{
+        let {width,height}=img;
+        if(width>maxSize||height>maxSize){
+          const ratio=Math.min(maxSize/width, maxSize/height);
+          width=Math.round(width*ratio); height=Math.round(height*ratio);
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=width; canvas.height=height;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,width,height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      }catch(e){ reject(e); }
+    };
+    img.onerror=reject;
+    img.src=reader.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
 async function uploadItemPhoto(input){
   const file=input.files&&input.files[0];
   if(!file)return;
   const statusEl=document.getElementById('item-photo-status');
   statusEl.textContent='Enviando...';
   try{
-    const dataUrl = await new Promise((resolve,reject)=>{
-      const reader=new FileReader();
-      reader.onload=()=>resolve(reader.result);
-      reader.onerror=reject;
-      reader.readAsDataURL(file);
-    });
+    let dataUrl;
+    try{
+      dataUrl = await compressImageFile(file);
+    }catch(e){
+      // se por algum motivo não der pra comprimir (formato exótico, navegador antigo...),
+      // cai pro comportamento antigo de enviar o arquivo original
+      dataUrl = await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(reader.result);
+        reader.onerror=reject;
+        reader.readAsDataURL(file);
+      });
+    }
     const res = await apiPost('/api/upload', { dataUrl });
     if(!res.ok){ statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
     resetItemPhotoPreview(res.data.url);
     statusEl.textContent='✅ Foto enviada';
   }catch(e){
     statusEl.textContent='';
-    alert('Não foi possível enviar a foto.');
+    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
   }finally{
     input.value='';
   }
@@ -3146,6 +3212,8 @@ function openAddItem(){
   document.getElementById('item-price').value='';
   setItemStationCheckboxes(['cozinha']);
   document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=false);
+  document.getElementById('item-is-rodizio-extra').checked=false;
+  toggleRodizioDays(false);
   resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
@@ -3164,10 +3232,18 @@ function openEditItem(si,ii){
   setItemStationCheckboxes(item.stations && item.stations.length ? item.stations : ['cozinha']);
   const itemDays = item.days || [];
   document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=itemDays.includes(cb.value));
+  // v42: as caixinhas de dia só aparecem se o prato já usa esse recurso — a maioria
+  // dos pratos (que não são do rodízio) não mostra mais essa opção por padrão.
+  document.getElementById('item-is-rodizio-extra').checked = itemDays.length>0;
+  toggleRodizioDays(itemDays.length>0);
   resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
   document.getElementById('item-modal').classList.add('open');
+}
+function toggleRodizioDays(show){
+  document.getElementById('item-days-wrap').style.display = show ? 'block' : 'none';
+  if(!show) document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=false);
 }
 function setItemStationCheckboxes(stations){
   ['cozinha','sushibar','bar'].forEach(s=>{
