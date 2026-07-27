@@ -1,3 +1,38 @@
+# v39 — Bug da reserva, impressão de todas as vias, e ferramenta de QR Code & Links
+
+**Bug real corrigido: botão "Solicitar Reserva" continuava ativo depois da reserva já feita.**
+Depois de enviar uma reserva, a tela passava a mostrar o card de acompanhamento (status), mas o
+formulário com o botão "✅ Solicitar Reserva" continuava visível e clicável logo acima — dava pra
+clicar de novo (ou várias vezes seguidas) e criar reservas duplicadas pro mesmo cliente. Agora o
+botão é desabilitado assim que clicado (evita duplo clique enquanto a requisição está no ar) e o
+formulário inteiro some assim que a reserva é confirmada com sucesso, sobrando só o card de status
+e o botão "+ Fazer nova reserva" pra quando o cliente realmente quiser reservar de novo. O mesmo
+vale ao reabrir a tela com uma reserva já em aberto salva no navegador.
+
+**Bug real corrigido: nem toda via imprimia.** O botão "🖨 Imprimir" no painel abre uma janela por
+via (Caixa/Cozinha/Sushibar/Bar) usando a impressão do navegador. Como cada via só é confirmada
+depois de um `await` na rede, a partir da segunda via o navegador podia bloquear a janela como
+pop-up — e isso só era evitado quando o pedido já estava carregado na lista local em memória; se
+vinha de outro lugar (card do dashboard, lista filtrada, etc.) essa proteção falhava e só a
+primeira via imprimia de verdade. Agora as 4 janelas são sempre pré-abertas de forma síncrona,
+ainda dentro do clique do usuário, então nenhuma consegue ser bloqueada — as que acabam sem uso
+(via sem itens desse pedido, ou impressora de rede/USB configurada) são fechadas automaticamente.
+
+**Novo: aba "🔗 QR Code & Links" no painel.** Ferramenta dedicada (antes só existiam 2 links
+enterrados dentro de Configurações) com uma aba própria pra cada página pública do sistema —
+**Cardápio** tem a sua aba separada, além de Delivery/Pedir Agora, Cardápio Rodízio Popular,
+Divulgação, Avaliação Rodízio e Painel do Entregador. Cada aba mostra o link (com botão de copiar)
+e o QR Code correspondente, com botões de baixar, imprimir (abre uma janela só com o QR pra colar
+na mesa/conta) e abrir a página. Também tem um gerador personalizado: cola qualquer link ou texto
+e gera um QR na hora, com os mesmos botões de baixar/imprimir — útil pra promoções e cupons.
+
+## Como aplicar
+`public/index.html` e `public/painel.html` mudaram. Substitua os dois arquivos e dê push (o
+Service Worker já busca a versão nova sozinho, mas se quiser garantir, force um recarregamento
+sem cache — Ctrl+Shift+R — na primeira vez que abrir).
+
+---
+
 # v38 — Barra de categorias padrão iFood/Uber Eats, legibilidade dos pratos e revisão do PWA
 
 **Barra de categorias + busca, unificadas num só bloco fixo com blur e sombra.** Antes a barra
