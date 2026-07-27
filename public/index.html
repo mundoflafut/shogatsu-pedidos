@@ -79,18 +79,24 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .review-badge{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:8px 14px;font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;}
 .review-badge.pending{cursor:pointer;animation:couponGlow 2s ease-in-out infinite;}
 
-.cat-nav{background:color-mix(in srgb, var(--black) 82%, transparent);backdrop-filter:blur(10px) saturate(150%);-webkit-backdrop-filter:blur(10px) saturate(150%);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:108px;z-index:180;box-shadow:0 6px 18px rgba(0,0,0,.25);}
-.cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;cursor:grab;user-select:none;scroll-behavior:smooth;}
+.sticky-menu-bar{position:sticky;top:108px;z-index:180;background:color-mix(in srgb, var(--black) 85%, transparent);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 6px 20px rgba(0,0,0,.28);border-bottom:1px solid var(--border);}
+.cat-nav{padding:0 16px;}
+.cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;cursor:grab;user-select:none;scroll-behavior:smooth;position:relative;-webkit-overflow-scrolling:touch;}
 .cat-nav-inner.dragging{cursor:grabbing;scroll-behavior:auto;}
 .cat-nav-inner::-webkit-scrollbar{display:none;}
-.cat-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;padding:12px 14px;white-space:nowrap;transition:all .2s cubic-bezier(.2,.8,.3,1);display:inline-flex;align-items:center;gap:6px;flex-shrink:0;}
-.cat-btn-icon{font-size:22px;line-height:1;filter:grayscale(60%);opacity:.75;transition:filter .2s,opacity .2s,transform .2s cubic-bezier(.34,1.56,.64,1);}
+.cat-indicator{position:absolute;bottom:0;height:2px;background:var(--red);border-radius:2px;transition:left .28s cubic-bezier(.2,.8,.3,1),width .28s cubic-bezier(.2,.8,.3,1),opacity .2s;box-shadow:0 0 10px rgba(192,57,43,.7);opacity:0;pointer-events:none;will-change:left,width;}
+.cat-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:2px;text-transform:uppercase;padding:12px 14px;white-space:nowrap;transition:color .25s ease,transform .2s cubic-bezier(.2,.8,.3,1);display:inline-flex;align-items:center;gap:6px;flex-shrink:0;position:relative;z-index:1;}
+.cat-btn-icon{font-size:22px;line-height:1;filter:grayscale(60%);opacity:.75;transition:filter .25s,opacity .25s,transform .25s cubic-bezier(.34,1.56,.64,1);}
 .cat-btn.active .cat-btn-icon,.cat-btn:hover .cat-btn-icon{filter:grayscale(0%);opacity:1;transform:scale(1.15);}
 .cat-btn.active .cat-btn-icon{animation:catIconBounce .35s cubic-bezier(.34,1.56,.64,1);}
 @keyframes catIconBounce{0%{transform:scale(1);}50%{transform:scale(1.3);}100%{transform:scale(1.15);}}
 .cat-btn-badge{background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;margin-left:2px;}
-.cat-btn.active,.cat-btn:hover{color:var(--red-lt);border-bottom-color:var(--red);}
+.cat-btn.active,.cat-btn:hover{color:var(--red-lt);}
 .cat-btn.active{text-shadow:0 0 12px rgba(192,57,43,.5);}
+.search-wrap{max-width:800px;margin:0 auto;padding:8px 16px 12px;}
+#menu-search-input{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;padding:10px 16px;color:var(--white);font-size:13px;transition:border-color .25s,background .25s;}
+#menu-search-input:focus{outline:none;border-color:var(--red);background:rgba(255,255,255,.09);}
+#menu-search-input::placeholder{color:var(--muted);}
 
 .main{max-width:800px;margin:0 auto;padding:24px 16px 120px;}
 
@@ -103,10 +109,10 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .item-card:hover{border-color:var(--red-dk);}
 .item-img{width:var(--dish-img-size,80px);height:var(--dish-img-size,80px);border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
 .item-body{flex:1;}
-.item-name{font-family:'Cormorant Garamond',serif;font-size:calc(18px * var(--menu-fs-scale,1));color:var(--white);margin-bottom:3px;line-height:1.2;}
-.item-desc{font-size:calc(11px * var(--menu-fs-scale,1));color:var(--muted);line-height:1.6;margin-bottom:8px;}
+.item-name{font-family:'Cormorant Garamond',serif;font-size:calc(19px * var(--menu-fs-scale,1));font-weight:600;color:var(--white);margin-bottom:4px;line-height:1.25;letter-spacing:.2px;}
+.item-desc{font-size:calc(12px * var(--menu-fs-scale,1));color:#b8b0a8;line-height:1.65;margin-bottom:9px;letter-spacing:.1px;}
 .item-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-.item-price{font-family:'Cormorant Garamond',serif;font-size:calc(20px * var(--menu-fs-scale,1));font-weight:600;color:var(--red-lt);}
+.item-price{font-family:'Cormorant Garamond',serif;font-size:calc(21px * var(--menu-fs-scale,1));font-weight:700;color:var(--red-lt);letter-spacing:.2px;}
 .item-badge{font-size:10px;font-weight:700;letter-spacing:.5px;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:3px 10px;border-radius:20px;margin-bottom:6px;display:inline-block;}
 .item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
@@ -383,13 +389,13 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
   </div>
 </div>
 
-<div class="cat-nav">
-  <div class="cat-nav-inner" id="cat-nav-inner"></div>
-</div>
-
-<div style="max-width:800px;margin:12px auto 0;padding:0 16px;">
-  <input id="menu-search-input" placeholder="🔎 Buscar no cardápio..." oninput="onCustomerMenuSearch(this.value)"
-    style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--white);font-size:13px;"/>
+<div class="sticky-menu-bar" id="sticky-menu-bar">
+  <div class="cat-nav">
+    <div class="cat-nav-inner" id="cat-nav-inner"></div>
+  </div>
+  <div class="search-wrap">
+    <input id="menu-search-input" placeholder="🔎 Buscar no cardápio..." oninput="onCustomerMenuSearch(this.value)"/>
+  </div>
 </div>
 
 <div id="promo-banner" style="display:none;max-width:800px;margin:10px auto 0;padding:0 16px;"></div>
@@ -1651,9 +1657,9 @@ function renderMenu() {
   }
 
   const nav = document.getElementById('cat-nav-inner');
-  nav.innerHTML = `<button class="cat-btn ${showFavoritesOnly?'active':''}" onclick="toggleFavoritesFilter()" style="${showFavoritesOnly?'background:var(--gold);color:var(--black);':''}"><span class="cat-btn-icon">${showFavoritesOnly?'❤️':'🤍'}</span> Favoritos${favorites.size?` <span class="cat-btn-badge">${favorites.size}</span>`:''}</button>` + menu.map(s => {
+  nav.innerHTML = `<div class="cat-indicator" id="cat-indicator"></div><button class="cat-btn ${showFavoritesOnly?'active':''}" onclick="toggleFavoritesFilter()" style="${showFavoritesOnly?'background:var(--gold);color:var(--black);':''}"><span class="cat-btn-icon">${showFavoritesOnly?'❤️':'🤍'}</span> Favoritos${favorites.size?` <span class="cat-btn-badge">${favorites.size}</span>`:''}</button>` + menu.map(s => {
     const count = Object.values(cart).filter(c => c.baseKey && c.baseKey.startsWith(s.id + '-')).reduce((sum, c) => sum + c.qty, 0);
-    return `<button class="cat-btn" onclick="scrollCat('${s.id}')"><span class="cat-btn-icon">${s.icon}</span> ${s.title}${count > 0 ? `<span class="cat-btn-badge">${count}</span>` : ''}</button>`;
+    return `<button class="cat-btn" data-cat-id="${s.id}" onclick="scrollCat('${s.id}')"><span class="cat-btn-icon">${s.icon}</span> ${s.title}${count > 0 ? `<span class="cat-btn-badge">${count}</span>` : ''}</button>`;
   }).join('');
 
   const q = customerMenuQuery;
@@ -1713,6 +1719,7 @@ function renderMenu() {
       }).join('')}
     </div>
   `).join('');
+  setupCategoryObserver();
 }
 
 let customerMenuQuery = '';
@@ -2610,9 +2617,11 @@ function setMode(m) {
 function scrollCat(id) {
   const el = document.getElementById('sec-' + id);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // feedback imediato ao clicar, sem esperar o IntersectionObserver alcançar a seção durante a rolagem
+  setActiveCategory(id);
 }
 
-// v37: arrastar a barra de categorias com o mouse (desktop) — no celular o dedo já
+// v38: arrastar a barra de categorias com o mouse (desktop) — no celular o dedo já
 // funciona nativamente por causa do overflow-x:auto, isso aqui só cobre o mouse.
 (function enableCatNavDrag(){
   const nav = document.getElementById('cat-nav-inner');
@@ -2633,28 +2642,49 @@ function scrollCat(id) {
   nav.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); } }, true);
 })();
 
+// v38: indicador deslizante (a "trilha" animada embaixo da categoria ativa, estilo iFood/Uber Eats)
 let lastActiveCatId = null;
-window.addEventListener('scroll', () => {
+function moveIndicatorTo(btn){
+  const indicator = document.getElementById('cat-indicator');
+  if (!indicator || !btn) return;
+  indicator.style.opacity = '1';
+  indicator.style.left = btn.offsetLeft + 'px';
+  indicator.style.width = btn.offsetWidth + 'px';
+}
+function setActiveCategory(id){
+  if (id === lastActiveCatId) return; // evita trabalho repetido — mantém suave a 60fps
+  lastActiveCatId = id;
+  const nav = document.getElementById('cat-nav-inner');
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.catId === id));
+  const activeBtn = nav ? nav.querySelector('.cat-btn.active') : null;
+  if (activeBtn && nav) {
+    moveIndicatorTo(activeBtn);
+    // centraliza a categoria ativa dentro da rolagem horizontal da barra
+    const target = activeBtn.offsetLeft - (nav.clientWidth / 2) + (activeBtn.clientWidth / 2);
+    nav.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }
+}
+
+// v38: troca o cálculo manual de scroll (offsetTop) por IntersectionObserver — mais preciso,
+// mais leve pro navegador (não recalcula em todo pixel de rolagem) e mantém 60fps.
+let categoryObserver = null;
+function setupCategoryObserver(){
+  if (categoryObserver) categoryObserver.disconnect(); // renderMenu() recria as seções; descarta o observer antigo
   if (!menu.length) return;
-  let cur = menu[0].id;
+  const stickyBar = document.getElementById('sticky-menu-bar');
+  const barHeight = stickyBar ? stickyBar.offsetHeight : 90;
+  const topOffset = 108 + barHeight; // 108 = header (60) + mode-bar (48), sempre sticky acima
+  categoryObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) setActiveCategory(entry.target.id.replace('sec-', ''));
+    });
+  }, { rootMargin: `-${topOffset}px 0px -65% 0px`, threshold: 0 });
   menu.forEach(s => {
     const el = document.getElementById('sec-' + s.id);
-    if (el && window.scrollY >= el.offsetTop - 160) cur = s.id;
+    if (el) categoryObserver.observe(el);
   });
-  document.querySelectorAll('.cat-btn').forEach((b, i) => {
-    b.classList.toggle('active', menu[i] && menu[i].id === cur);
-  });
-  // v37: quando a categoria ativa muda, centraliza ela dentro da barra de rolagem horizontal
-  if (cur !== lastActiveCatId) {
-    lastActiveCatId = cur;
-    const activeBtn = document.querySelector('.cat-btn.active');
-    const nav = document.getElementById('cat-nav-inner');
-    if (activeBtn && nav) {
-      const target = activeBtn.offsetLeft - (nav.clientWidth / 2) + (activeBtn.clientWidth / 2);
-      nav.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
-    }
-  }
-});
+}
+
 
 loadCustomerSession();
 loadConfig();
