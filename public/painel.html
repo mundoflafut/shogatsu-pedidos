@@ -2421,6 +2421,9 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     ${order.ticketNumber?`<div class="t-center" style="font-size:${Math.round(26*(Number(cfg.printSize)||14)/14)}px;font-weight:800;margin:6px 0;">Nº ${order.ticketNumber}</div>`:`<div class="t-row"><b>Pedido #${order.id}</b></div>`}
     <div class="t-row" style="text-align:center;color:#666;">${time} · ref. #${order.id}</div>
     <div class="t-row">${order.mode==='delivery'?'🛵 DELIVERY':'🏪 RETIRADA'}</div>
+    ${!isCaixa?`
+    <div class="t-row"><b>Entrada:</b> ${time}</div>
+    <div class="t-row"><b>Previsão de saída:</b> ${calcPrevisaoSaida(order.createdAt, (cfg.stations&&cfg.stations[station]&&cfg.stations[station].prepTime)||15)}</div>`:''}
     <div class="t-hr"></div>
     ${bodyHTML}
     <script>
@@ -2658,6 +2661,10 @@ function miniOrderCard(o){
     </div>
     <div class="order-name">${esc(o.name)} ${o.phone?'· '+esc(o.phone):''}</div>
     <div class="order-items">${itemsText(o)}</div>
+    <div style="display:flex;gap:10px;font-size:11px;color:var(--muted);margin:2px 0 4px;">
+      <span>Entrada: <b style="color:var(--text,#eee);">${orderTime(o.createdAt)}</b></span>
+      <span>Previsão de saída: <b style="color:var(--gold);">${calcPrevisaoSaida(o.createdAt, orderPrepTime(o))}</b></span>
+    </div>
     <div class="order-footer">
       <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')}</span>
       <span class="order-mode ${o.mode}">${o.mode==='delivery'?'🛵 Delivery':'🏪 Retirada'}</span>
@@ -2734,6 +2741,10 @@ function renderOrdersList(){
         <div style="font-size:12px;color:var(--muted)">${esc(o.address)||'—'}</div>
       </div>
       <div class="order-items">${itemsText(o)}</div>
+      ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`<div style="display:flex;gap:10px;font-size:11px;color:var(--muted);margin-top:4px;">
+        <span>Entrada: <b style="color:var(--text,#eee);">${orderTime(o.createdAt)}</b></span>
+        <span>Previsão de saída: <b style="color:var(--gold);">${calcPrevisaoSaida(o.createdAt, orderPrepTime(o))}</b></span>
+      </div>`:''}
       ${o.obs?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Obs: ${esc(o.obs)}</div>`:''}
       ${o.status==='cancelado'&&o.cancelReason?`<div style="font-size:11px;color:var(--red-lt);margin-top:4px;">Cancelado ${o.cancelledBy==='cliente'?'pelo cliente':'pela loja'} · Motivo: ${o.cancelReason}</div>`:''}
       <div class="order-footer" style="margin-top:8px;">
@@ -3823,7 +3834,7 @@ function renderStationsSettings(){
   const el=document.getElementById('stations-list');
   if(!el)return;
   el.innerHTML=STATION_KEYS.map(key=>{
-    const s=(cfg.stations&&cfg.stations[key])||{label:key,method:'navegador',ip:'',port:9100,device:''};
+    const s=(cfg.stations&&cfg.stations[key])||{label:key,method:'navegador',ip:'',port:9100,device:'',prepTime:15};
     return `
     <div class="vgroup" data-station="${key}">
       <div class="vgroup-head" style="flex-wrap:wrap;">
@@ -3836,6 +3847,11 @@ function renderStationsSettings(){
         </select>
         <button type="button" class="btn secondary sm" onclick="testStationPrint('${key}')">🖨 Testar</button>
       </div>
+      ${key!=='caixa'?`
+      <div class="field" style="margin-top:6px;max-width:220px;">
+        <label style="font-size:10px;">⏱ Tempo de preparo (min) — usado na previsão de saída</label>
+        <input type="number" min="0" step="1" value="${s.prepTime??15}" oninput="updateStationField('${key}','prepTime',this.value)"/>
+      </div>`:''}
       ${s.method==='rede'?`
         <div class="field-row" style="margin-top:6px;">
           <div class="field"><label style="font-size:10px;">IP da impressora</label><input type="text" id="ip-${key}" value="${s.ip||''}" placeholder="192.168.0.50" oninput="updateStationField('${key}','ip',this.value)"/></div>
@@ -3853,8 +3869,27 @@ function renderStationsSettings(){
 }
 function updateStationField(key,field,value){
   if(!cfg.stations) cfg.stations={};
-  if(!cfg.stations[key]) cfg.stations[key]={label:key,method:'navegador',ip:'',port:9100,device:''};
-  cfg.stations[key][field] = field==='port' ? (parseInt(value)||9100) : value;
+  if(!cfg.stations[key]) cfg.stations[key]={label:key,method:'navegador',ip:'',port:9100,device:'',prepTime:15};
+  if(field==='port') cfg.stations[key][field] = parseInt(value)||9100;
+  else if(field==='prepTime') cfg.stations[key][field] = Math.max(0, parseInt(value)||0);
+  else cfg.stations[key][field] = value;
+}
+
+// v40: Entrada + tempo de preparo da estação = Previsão de saída, mostrado na comanda
+// (card interno do painel e via impressa de produção).
+function calcPrevisaoSaida(createdAt, prepMinutes){
+  const saida = new Date(new Date(createdAt).getTime() + (Number(prepMinutes)||0)*60000);
+  return saida.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+// Maior tempo de preparo entre as estações que têm itens nesse pedido (pior caso —
+// a comanda só "sai" de verdade quando a última estação envolvida terminar).
+function orderPrepTime(o){
+  const involved = new Set();
+  (o.items||[]).forEach(i=>(i.stations||[]).forEach(st=>{ if(st!=='caixa') involved.add(st); }));
+  if(!involved.size) return 15;
+  let max=0;
+  involved.forEach(st=>{ const p=(cfg.stations&&cfg.stations[st]&&cfg.stations[st].prepTime); max=Math.max(max, Number(p)||0); });
+  return max;
 }
 // ═══════════════════════════════════════════
 // SALVAR TUDO — um botão único salva todas as seções de Configurações de uma vez
