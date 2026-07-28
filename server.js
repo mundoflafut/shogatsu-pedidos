@@ -33,6 +33,32 @@ const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const webpush = require('./webpush');
 
+// ═══════════════════════════════════════════════════════════
+// v44: VERSÃO DE BUILD — sistema de atualização automática
+// A cada deploy (Render/GitHub) o processo do Node sobe do zero, então calcular a versão UMA
+// VEZ aqui no boot já basta: ela muda sozinha a cada novo deploy, sem precisar de nenhum passo
+// manual. Prioridade: commit do Git (Render expõe automaticamente em RENDER_GIT_COMMIT; local
+// tentamos ler via `git rev-parse` como fallback) > pacote + horário de início do processo.
+// Isso NÃO mexe em login, pedidos, cardápio nem nada que já funciona — é só uma etiqueta pro
+// front-end saber quando existe uma versão mais nova publicada (ver GET /api/version abaixo e
+// public/version-check.js).
+function computeBuildVersion() {
+  const commit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.SOURCE_VERSION;
+  if (commit) return commit.slice(0, 12);
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('git rev-parse --short=12 HEAD', { cwd: __dirname, timeout: 2000 }).toString().trim();
+    if (out) return out;
+  } catch (e) { /* sem git disponível (ex: build sem .git) — usa o fallback abaixo */ }
+  return 'boot-' + Date.now();
+}
+const BUILD_COMMIT = computeBuildVersion();
+const BUILD_STARTED_AT = new Date().toISOString();
+let PKG_VERSION = '1.0.0';
+try { PKG_VERSION = require('./package.json').version || PKG_VERSION; } catch (e) { /* mantém o padrão acima */ }
+// Formato "AAAA.MM.DD.HHmm-commit" — fácil de ler num log e ainda assim único por deploy.
+const APP_VERSION = new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})(\d{4})$/, '$1.$2.$3.$4') + '-' + BUILD_COMMIT;
+
 // ─── Config / Menu padrão (usados só na primeira execução) ───
 const DEFAULT_CFG = {
   whats: '552227641333', storePhone: '(22) 2764-1333', fee: 8, min: 60,
@@ -852,7 +878,16 @@ function serveStatic(req, res, pathname) {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    // v44 — sistema de atualização automática: HTML e o próprio Service Worker nunca podem
+    // ficar em cache do navegador (senão o cliente trava numa versão antiga sem saber); ícones,
+    // manifest e demais estáticos raramente mudam, então ficam com cache longo — o SW já cuida
+    // de invalidar sozinho quando a versão muda (ver public/sw.js e public/version-check.js).
+    const isHtml = ext === '.html';
+    const isSw = pathname === '/sw.js';
+    const cacheControl = (isHtml || isSw)
+      ? 'no-cache, no-store, must-revalidate'
+      : 'public, max-age=31536000, immutable';
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControl });
     res.end(data);
   });
 }
@@ -869,6 +904,13 @@ const server = http.createServer(async (req, res) => {
   const query = Object.fromEntries(parsed.searchParams);
 
   if (req.method === 'OPTIONS') { return sendJSON(res, 204, {}); }
+
+  // ── GET /api/version — usado pelo front-end (public/version-check.js) pra saber se existe
+  // uma versão mais nova publicada e, se sim, atualizar sozinho sem o cliente precisar limpar
+  // cache/histórico ou reinstalar nada. Não exige login — é só uma etiqueta pública. ──
+  if (pathname === '/api/version' && req.method === 'GET') {
+    return sendJSON(res, 200, { version: APP_VERSION, build: BUILD_COMMIT, startedAt: BUILD_STARTED_AT, pkg: PKG_VERSION });
+  }
 
   // ── GET /api/config — dados públicos do cardápio/config ──
   if (pathname === '/api/config' && req.method === 'GET') {
@@ -1579,44 +1621,85 @@ function estimateDeliveryWindow(order, cfg) {
         return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador', deliveryWindow });
       }
 
+      // v44: layout ESC/POS redesenhado — cabeçalho centralizado, blocos com título
+      // (CLIENTE/ITENS/RESUMO no comprovante; HORÁRIOS/ITENS na via de produção), valores
+      // alinhados à direita (padStart até 32 colunas = largura útil de 58/80mm), TOTAL em
+      // destaque. Sem emoji no ESC/POS puro (impressora térmica não garante suporte a eles);
+      // o emoji fica só na via impressa pelo navegador (openBrowserTicket, no painel.html).
+      const HR = '--------------------------------';
+      const HR2 = '================================';
+      const money = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+      const rightAlignRow = (label, value) => {
+        const pad = Math.max(1, 32 - label.length - value.length);
+        return label + ' '.repeat(pad) + value;
+      };
+      const refShort = String(order.id || '').slice(-11).toUpperCase();
       const lines = [];
-      lines.push(ESC.center + ESC.boldOn + (cfg.name || 'SHOGATSU').toUpperCase() + ESC.boldOff + ESC.left);
-      lines.push(((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase() + (isCaixa ? ' - COMPROVANTE' : ' - VIA DE PRODUCAO'));
-      lines.push('--------------------------------');
-      if (order.ticketNumber) lines.push(ESC.center + ESC.boldOn + ESC.doubleOn + 'Nº ' + order.ticketNumber + ESC.doubleOff + ESC.boldOff + ESC.left);
-      lines.push((order.ticketNumber ? 'ref. #' + order.id : 'Pedido #' + order.id) + '  ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-      lines.push(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
+      lines.push(ESC.center + ESC.boldOn + (cfg.name || 'SHOGATSU').toUpperCase() + ESC.boldOff);
+      lines.push((cfg.tagline || 'CULINARIA ORIENTAL').toUpperCase() + ESC.left);
+      lines.push(HR2);
 
       if (isCaixa) {
-        // ── Via do Caixa: dados completos do cliente + horário estimado ──
-        lines.push('--------------------------------');
-        lines.push('Cliente: ' + order.name);
-        lines.push('Telefone: ' + order.phone);
-        if (order.mode === 'delivery') lines.push('Endereco: ' + order.address);
-        lines.push((order.mode === 'delivery' ? 'Previsao de entrega: ' : 'Previsao de retirada: ') + deliveryWindow);
-        lines.push('--------------------------------');
-        items.forEach(i => lines.push(`${i.qty}x ${i.name}   R$ ${(i.price * i.qty).toFixed(2)}`));
-        if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
-        lines.push('--------------------------------');
-        lines.push(`Subtotal: R$ ${order.subtotal.toFixed(2)}`);
-        lines.push(`Entrega: R$ ${order.fee.toFixed(2)}`);
+        // ── Via do Caixa: comprovante completo (dados do cliente + horário estimado) ──
+        lines.push(ESC.center + 'COMPROVANTE' + ESC.left);
+        lines.push((order.ticketNumber ? 'Pedido Nº ' + order.ticketNumber : 'Pedido #' + order.id));
+        lines.push('Data: ' + new Date(order.createdAt).toLocaleDateString('pt-BR'));
+        lines.push('Hora: ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        lines.push('Ref.: #' + refShort);
+        lines.push(order.mode === 'delivery' ? 'ENTREGA (DELIVERY)' : 'RETIRADA');
+        lines.push(HR);
+        lines.push(ESC.boldOn + 'CLIENTE' + ESC.boldOff);
+        lines.push(HR);
+        lines.push(order.name);
+        lines.push('Tel: ' + order.phone);
+        if (order.mode === 'delivery') lines.push('End: ' + order.address);
+        lines.push((order.mode === 'delivery' ? 'Previsao: ' : 'Previsao retirada: ') + deliveryWindow);
+        lines.push(HR);
+        lines.push(ESC.boldOn + 'ITENS' + ESC.boldOff);
+        lines.push(HR);
+        items.forEach(i => lines.push(rightAlignRow(`${i.qty}x ${i.name}`, money(i.price * i.qty))));
+        if (order.obs) { lines.push(HR); lines.push('Obs: ' + order.obs); }
+        lines.push(HR);
+        lines.push(ESC.boldOn + 'RESUMO' + ESC.boldOff);
+        lines.push(HR);
+        lines.push(rightAlignRow('Subtotal', money(order.subtotal)));
+        lines.push(rightAlignRow('Entrega', money(order.fee)));
         if (order.discount > 0 || order.couponCode) {
-          lines.push(`Cupom ${order.couponCode}: -R$ ${(order.discount || 0).toFixed(2)}`);
+          lines.push(rightAlignRow(`Cupom ${order.couponCode}`, '-' + money(order.discount || 0)));
         }
-        lines.push(ESC.boldOn + `TOTAL: R$ ${order.total.toFixed(2)}` + ESC.boldOff);
+        lines.push(HR);
+        lines.push(ESC.boldOn + ESC.doubleOn + rightAlignRow('TOTAL', money(order.total)) + ESC.doubleOff + ESC.boldOff);
+        lines.push(HR2);
         lines.push('Pagamento: ' + order.payMethod + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
+        lines.push(ESC.center + 'Obrigado pela preferencia!' + ESC.left);
+        if (cfg.siteUrl) lines.push(ESC.center + cfg.siteUrl + ESC.left);
       } else {
-        // ── Vias de produção (cozinha/sushibar/bar): só pedido, itens e observações ──
+        // ── Vias de produção (cozinha/sushibar/bar): layout idêntico entre as três vias ──
         // v40: previsão de saída automática = Entrada + tempo de preparo configurado pra essa estação.
         const prepMin = Number((cfg.stations[st] && cfg.stations[st].prepTime)) || 15;
+        const entrada = new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         const saidaPrevista = new Date(new Date(order.createdAt).getTime() + prepMin * 60000)
           .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        lines.push('Entrada: ' + new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-        lines.push('Previsao de saida: ' + saidaPrevista);
-        lines.push('--------------------------------');
-        items.forEach(i => lines.push(`${i.qty}x ${i.name}`));
-        if (order.obs) { lines.push('--------------------------------'); lines.push('Obs: ' + order.obs); }
+        lines.push(ESC.center + ESC.boldOn + ((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase() + ESC.boldOff);
+        lines.push('VIA DE PRODUCAO' + ESC.left);
+        lines.push(HR);
+        lines.push((order.ticketNumber ? 'Pedido Nº ' + order.ticketNumber : 'Pedido #' + order.id) + '  Ref.: #' + refShort);
+        lines.push(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
+        lines.push(HR);
+        lines.push(ESC.boldOn + 'HORARIOS' + ESC.boldOff);
+        lines.push(HR);
+        lines.push(rightAlignRow('Entrada:', entrada));
+        lines.push(rightAlignRow('Saida Prevista:', saidaPrevista));
+        lines.push(HR);
+        lines.push(ESC.boldOn + ('ITENS DA ' + (((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase())) + ESC.boldOff);
+        lines.push(HR);
+        items.forEach(i => lines.push('* ' + i.qty + 'x ' + i.name));
+        lines.push(HR);
+        lines.push('Observacoes:');
+        if (order.obs) lines.push(order.obs);
+        else { lines.push('_______________________________'); lines.push('_______________________________'); }
       }
+      lines.push(HR2);
       const ticketText = buildTicketText(lines, cfg);
 
       try {
