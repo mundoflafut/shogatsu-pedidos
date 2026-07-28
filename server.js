@@ -25,6 +25,11 @@ const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subs.json');
 const COURIERS_FILE = path.join(DATA_DIR, 'couriers.json'); // v32: pré-cadastro de motoboys
+// v43: Shogatsu Custos, antes um programa separado, agora integrado direto no painel —
+// mesma pasta de dados, mesmo login, mesma sessão.
+const INGREDIENTES_FILE = path.join(DATA_DIR, 'ingredientes.json');
+const FICHAS_TECNICAS_FILE = path.join(DATA_DIR, 'fichas-tecnicas.json');
+const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const webpush = require('./webpush');
 
@@ -196,6 +201,9 @@ if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 if (!fs.existsSync(RESERVATIONS_FILE)) fs.writeFileSync(RESERVATIONS_FILE, '[]');
 if (!fs.existsSync(PUSH_SUBS_FILE)) fs.writeFileSync(PUSH_SUBS_FILE, '[]');
 if (!fs.existsSync(COURIERS_FILE)) fs.writeFileSync(COURIERS_FILE, '[]');
+if (!fs.existsSync(INGREDIENTES_FILE)) fs.writeFileSync(INGREDIENTES_FILE, '[]');
+if (!fs.existsSync(FICHAS_TECNICAS_FILE)) fs.writeFileSync(FICHAS_TECNICAS_FILE, '[]');
+if (!fs.existsSync(CUSTOS_CONFIG_FILE)) fs.writeFileSync(CUSTOS_CONFIG_FILE, JSON.stringify({ diasParaDesatualizado: 21, margemPadrao: 65 }, null, 2));
 if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
@@ -233,7 +241,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -715,18 +723,27 @@ function sendUSBPrint(devicePath, text) {
 }
 
 // Preenche valores padrão em itens antigos do cardápio (sem alterar o arquivo salvo)
+// v43: a via de impressão passou a ser escolhida por categoria (não item por item), então um
+// item sem "stations" próprio agora herda da categoria — e só cai pra "cozinha" se nem a
+// categoria tiver nada definido. Itens que já tinham uma via própria salva continuam com ela,
+// sem mudar nada de repente pra quem já configurou antes.
 function normalizeMenu(menu) {
   const validStations = ['cozinha', 'sushibar', 'bar'];
-  return (menu || []).map(sec => ({
-    ...sec,
-    items: (sec.items || []).map(it => {
-      const base = { station: 'cozinha', available: true, variants: [], ...it };
-      let stations = Array.isArray(base.stations) ? base.stations.filter(s => validStations.includes(s)) : [];
-      if (!stations.length) stations = [validStations.includes(base.station) ? base.station : 'cozinha'];
-      const { station, ...rest } = base;
-      return { ...rest, stations: [...new Set(stations)] };
-    })
-  }));
+  return (menu || []).map(sec => {
+    let catStations = Array.isArray(sec.stations) ? sec.stations.filter(s => validStations.includes(s)) : [];
+    if (!catStations.length) catStations = ['cozinha'];
+    return {
+      ...sec,
+      stations: catStations,
+      items: (sec.items || []).map(it => {
+        const base = { station: 'cozinha', available: true, variants: [], ...it };
+        let stations = Array.isArray(base.stations) ? base.stations.filter(s => validStations.includes(s)) : [];
+        if (!stations.length) stations = catStations;
+        const { station, ...rest } = base;
+        return { ...rest, stations: [...new Set(stations)] };
+      })
+    };
+  });
 }
 
 // ─── PIX — geração do payload BR Code (copia-e-cola) ───
@@ -1847,6 +1864,210 @@ function estimateDeliveryWindow(order, cfg) {
         writeJSON(PUSH_SUBS_FILE, subs);
       }
       return sendJSON(res, 200, { ok: true, ...results, total: targets.length });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ═══════════════════════════════════════════
+  // CUSTOS — cadastro de ingredientes e ficha técnica (v43: integrado no painel,
+  // antes era o programa separado "shogatsu-custos")
+  // ═══════════════════════════════════════════
+  const CUSTOS_STATIONS = ['kg', 'g', 'l', 'ml', 'un'];
+  const CUSTOS_FATOR = { kg: { kg: 1, g: 1000 }, g: { g: 1, kg: 0.001 }, l: { l: 1, ml: 1000 }, ml: { ml: 1, l: 0.001 }, un: { un: 1 } };
+  function custosDefaultConfig() { return { diasParaDesatualizado: 21, margemPadrao: 65 }; }
+  function custoDoItem(ingrediente, quantidade, unidadeUsada) {
+    const un = ingrediente.unidade;
+    const usada = unidadeUsada || un;
+    if (un === usada) return ingrediente.precoUnitario * quantidade;
+    const tabela = CUSTOS_FATOR[un];
+    if (tabela && tabela[usada] !== undefined) return ingrediente.precoUnitario * (quantidade / tabela[usada]);
+    return ingrediente.precoUnitario * quantidade;
+  }
+  function calcularFichaTecnica(ficha, ingredientesPorId, custosCfg) {
+    let custoTotal = 0, temIngredienteFaltando = false, temPrecoDefasado = false;
+    const limiteMs = (custosCfg.diasParaDesatualizado || 21) * 86400000;
+    const agora = Date.now();
+    const itensCalculados = (ficha.itens || []).map(item => {
+      const ing = ingredientesPorId[item.ingredienteId];
+      if (!ing) { temIngredienteFaltando = true; return { ...item, custo: 0, erro: 'ingrediente não encontrado' }; }
+      const custo = custoDoItem(ing, Number(item.quantidade) || 0, item.unidade);
+      custoTotal += custo;
+      const desatualizado = agora - new Date(ing.atualizadoEm).getTime() > limiteMs;
+      if (desatualizado) temPrecoDefasado = true;
+      return { ...item, nomeIngrediente: ing.nome, unidadeIngrediente: ing.unidade, precoUnitarioIngrediente: ing.precoUnitario, custo: Math.round(custo * 100) / 100, desatualizado };
+    });
+    const rendimento = Number(ficha.rendimento) || 1;
+    const custoPorPorcao = custoTotal / rendimento;
+    const margem = (ficha.margemDesejada !== undefined && ficha.margemDesejada !== null && ficha.margemDesejada !== '') ? Number(ficha.margemDesejada) : (custosCfg.margemPadrao || 65);
+    const margemFrac = Math.min(Math.max(margem, 0), 95) / 100;
+    const precoSugerido = margemFrac < 1 ? custoPorPorcao / (1 - margemFrac) : custoPorPorcao;
+    let cmv = null;
+    if (ficha.precoVendaAtual && Number(ficha.precoVendaAtual) > 0) cmv = (custoPorPorcao / Number(ficha.precoVendaAtual)) * 100;
+    return {
+      ...ficha, itensCalculados,
+      custoTotal: Math.round(custoTotal * 100) / 100,
+      custoPorPorcao: Math.round(custoPorPorcao * 100) / 100,
+      precoSugerido: Math.round(precoSugerido * 100) / 100,
+      cmvPercentual: cmv !== null ? Math.round(cmv * 10) / 10 : null,
+      temIngredienteFaltando, temPrecoDefasado
+    };
+  }
+
+  // ── GET /api/custos/ingredientes ──
+  if (pathname === '/api/custos/ingredientes' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const lista = readJSON(INGREDIENTES_FILE, []);
+    const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
+    const limiteMs = (cfg.diasParaDesatualizado || 21) * 86400000;
+    const agora = Date.now();
+    return sendJSON(res, 200, lista.map(i => ({ ...i, desatualizado: agora - new Date(i.atualizadoEm).getTime() > limiteMs })));
+  }
+  // ── POST /api/custos/ingredientes ──
+  if (pathname === '/api/custos/ingredientes' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const body = await readBody(req);
+      if (!body.nome || !body.unidade || body.precoUnitario === undefined) return sendJSON(res, 400, { error: 'nome, unidade e precoUnitario são obrigatórios' });
+      if (!CUSTOS_STATIONS.includes(body.unidade)) return sendJSON(res, 400, { error: 'Unidade inválida.' });
+      const lista = readJSON(INGREDIENTES_FILE, []);
+      const novo = {
+        id: crypto.randomBytes(8).toString('hex'),
+        nome: String(body.nome).trim().slice(0, 120),
+        categoria: body.categoria ? String(body.categoria).trim().slice(0, 60) : 'Geral',
+        unidade: body.unidade,
+        precoUnitario: Number(body.precoUnitario) || 0,
+        atualizadoEm: new Date().toISOString(),
+        referenciaWeb: false,
+        fornecedor: body.fornecedor ? String(body.fornecedor).trim().slice(0, 120) : '',
+      };
+      lista.push(novo);
+      writeJSON(INGREDIENTES_FILE, lista);
+      return sendJSON(res, 201, novo);
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  const custosIngMatch = pathname.match(/^\/api\/custos\/ingredientes\/([^/]+)$/);
+  if (custosIngMatch && req.method === 'PUT') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const id = custosIngMatch[1];
+      const body = await readBody(req);
+      const lista = readJSON(INGREDIENTES_FILE, []);
+      const idx = lista.findIndex(i => i.id === id);
+      if (idx === -1) return sendJSON(res, 404, { error: 'Ingrediente não encontrado.' });
+      const antigo = lista[idx];
+      const precoMudou = body.precoUnitario !== undefined && Number(body.precoUnitario) !== antigo.precoUnitario;
+      lista[idx] = {
+        ...antigo, ...body,
+        precoUnitario: body.precoUnitario !== undefined ? Number(body.precoUnitario) : antigo.precoUnitario,
+        atualizadoEm: precoMudou ? new Date().toISOString() : antigo.atualizadoEm,
+        referenciaWeb: precoMudou ? false : antigo.referenciaWeb,
+      };
+      writeJSON(INGREDIENTES_FILE, lista);
+      return sendJSON(res, 200, lista[idx]);
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── DELETE /api/custos/ingredientes/:id ──
+  if (custosIngMatch && req.method === 'DELETE') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const id = custosIngMatch[1];
+    let lista = readJSON(INGREDIENTES_FILE, []);
+    const antes = lista.length;
+    lista = lista.filter(i => i.id !== id);
+    writeJSON(INGREDIENTES_FILE, lista);
+    return sendJSON(res, 200, { removido: antes !== lista.length });
+  }
+
+  // ── GET /api/custos/fichas ──
+  if (pathname === '/api/custos/fichas' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+    const ingredientes = readJSON(INGREDIENTES_FILE, []);
+    const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
+    const porId = Object.fromEntries(ingredientes.map(i => [i.id, i]));
+    return sendJSON(res, 200, fichas.map(f => calcularFichaTecnica(f, porId, cfg)));
+  }
+  // ── POST /api/custos/fichas ──
+  if (pathname === '/api/custos/fichas' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const body = await readBody(req);
+      if (!body.nome) return sendJSON(res, 400, { error: 'nome é obrigatório' });
+      const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+      const nova = {
+        id: crypto.randomBytes(8).toString('hex'),
+        nome: String(body.nome).trim().slice(0, 120),
+        categoria: body.categoria ? String(body.categoria).trim().slice(0, 60) : '',
+        rendimento: Number(body.rendimento) || 1,
+        margemDesejada: body.margemDesejada ?? null,
+        precoVendaAtual: body.precoVendaAtual ?? null,
+        itens: Array.isArray(body.itens) ? body.itens : [],
+      };
+      fichas.push(nova);
+      writeJSON(FICHAS_TECNICAS_FILE, fichas);
+      const ingredientes = readJSON(INGREDIENTES_FILE, []);
+      const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
+      return sendJSON(res, 201, calcularFichaTecnica(nova, Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg));
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── PUT /api/custos/fichas/:id ──
+  const custosFichaMatch = pathname.match(/^\/api\/custos\/fichas\/([^/]+)$/);
+  if (custosFichaMatch && req.method === 'PUT') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const id = custosFichaMatch[1];
+      const body = await readBody(req);
+      const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+      const idx = fichas.findIndex(f => f.id === id);
+      if (idx === -1) return sendJSON(res, 404, { error: 'Ficha não encontrada.' });
+      fichas[idx] = { ...fichas[idx], ...body, id };
+      writeJSON(FICHAS_TECNICAS_FILE, fichas);
+      const ingredientes = readJSON(INGREDIENTES_FILE, []);
+      const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
+      return sendJSON(res, 200, calcularFichaTecnica(fichas[idx], Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg));
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── DELETE /api/custos/fichas/:id ──
+  if (custosFichaMatch && req.method === 'DELETE') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const id = custosFichaMatch[1];
+    let fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+    const antes = fichas.length;
+    fichas = fichas.filter(f => f.id !== id);
+    writeJSON(FICHAS_TECNICAS_FILE, fichas);
+    return sendJSON(res, 200, { removido: antes !== fichas.length });
+  }
+
+  // ── GET/PUT /api/custos/config ──
+  if (pathname === '/api/custos/config' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    return sendJSON(res, 200, readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig()));
+  }
+  if (pathname === '/api/custos/config' && req.method === 'PUT') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const body = await readBody(req);
+      const novo = { ...readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig()), ...body };
+      writeJSON(CUSTOS_CONFIG_FILE, novo);
+      return sendJSON(res, 200, novo);
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/custos/importar-cardapio — cria 1 ficha em branco por prato do cardápio atual ──
+  if (pathname === '/api/custos/importar-cardapio' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { cfg, menu } = readConfig();
+      const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+      const existentes = new Set(fichas.map(f => f.nome));
+      let criadas = 0;
+      for (const categoria of menu || []) {
+        for (const item of categoria.items || []) {
+          if (existentes.has(item.name)) continue;
+          fichas.push({ id: crypto.randomBytes(8).toString('hex'), nome: item.name, categoria: categoria.title, rendimento: 1, margemDesejada: null, precoVendaAtual: item.price, itens: [] });
+          existentes.add(item.name);
+          criadas++;
+        }
+      }
+      writeJSON(FICHAS_TECNICAS_FILE, fichas);
+      return sendJSON(res, 200, { ok: true, criadas });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 

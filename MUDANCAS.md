@@ -1,3 +1,35 @@
+# v43 — Notificação push, Custos integrado, reserva e limpeza do modal de prato
+
+**Bug real corrigido: notificação push não chegava no app do cliente.** A causa: o Service
+Worker tentava pré-cachear o CSS do Google Fonts (um arquivo de outro domínio) usando
+`cache.addAll`, que falha por inteiro se UM ÚNICO item da lista não puder ser baixado — qualquer
+instabilidade de rede ou bloqueio de CORS nesse arquivo específico derrubava a instalação inteira
+do Service Worker. Quando isso acontecia, o Service Worker ficava travado pra sempre em
+"installing" e nunca chegava a "activated" — e como o botão "Ativar notificações" espera
+`navigator.serviceWorker.ready` (que só resolve depois de "activated"), o clique ficava preso sem
+nunca terminar, sem erro nenhum, e a notificação nunca era registrada de verdade. Agora cada
+arquivo é cacheado individualmente: se um falhar, os outros continuam normalmente e a instalação
+sempre termina.
+
+**Shogatsu Custos integrado no painel.** O que antes era um programa separado agora é a aba
+"💰 Custos" dentro do painel principal — mesmo login, mesma sessão, mesma pasta de dados (com
+backup automático no Supabase, igual o resto do sistema). Cadastro de ingredientes, fichas
+técnicas com cálculo de custo/porção/preço sugerido/CMV, aviso de preço defasado e importação de
+fichas em branco a partir do cardápio atual — tudo dentro do painel agora.
+
+**Bug real corrigido: botão de cancelar reserva continuava ativo depois da reserva confirmada.**
+Reserva confirmada agora é estado final (só sobra o WhatsApp pra contato), igual ao padrão do
+resto do sistema — um pedido "entregue" também não tem mais botão de ação.
+
+**Removido o bloco de "Extra do rodízio" e "Imprime na(s) via(s) de" do modal de editar prato,**
+como pedido. A escolha de via de impressão (Cozinha/Sushibar/Bar) passou pra dentro da modal de
+**categoria** — é definida uma vez por categoria em vez de repetida em cada prato, o que também
+deixa o cadastro mais rápido. Pratos que já tinham uma via configurada manualmente continuam
+exatamente como estavam. ⚠️ Como consequência, a opção de marcar um prato como "extra do rodízio
+em dias específicos" não está mais disponível pela interface (pratos que já usavam isso
+continuam funcionando, só não dá mais pra criar/editar essa configuração pela tela) — avise se
+ainda precisar disso, dá pra reintroduzir de outro jeito.
+
 # v42 — Correção de bugs (categorias, reserva, fotos, impressão duplicada, edição de prato)
 
 **Bug real corrigido: janela de categorias cortada.** A coluna de categorias do editor de
