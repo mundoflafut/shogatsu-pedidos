@@ -4,16 +4,27 @@
 // Agora: páginas HTML (navegação) usam "rede primeiro" — sempre tenta buscar a versão mais nova;
 // só usa o cache guardado se estiver sem internet. Arquivos que raramente mudam (ícones, fontes,
 // manifest) continuam em cache primeiro, que é mais rápido e não tem esse risco.
-const CACHE = 'shogatsu-v3';
+const CACHE = 'shogatsu-v4';
 const ASSETS = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap'
 ];
+// BUG CORRIGIDO (v43 — "notificação push não chega"): o `cache.addAll(ASSETS)` falha por
+// inteiro se UM ÚNICO item da lista não puder ser buscado — e o CSS do Google Fonts é
+// cross-origin, então qualquer instabilidade de rede/CORS nele derruba a instalação inteira
+// do Service Worker. Quando isso acontece, o Service Worker fica travado pra sempre em
+// "installing" e nunca chega a "activated" — e como o botão de notificações espera
+// `navigator.serviceWorker.ready` (que só resolve depois de "activated"), o clique em
+// "Ativar notificações" ficava preso sem nunca terminar, sem erro nenhum. Agora cada arquivo
+// é cacheado individualmente: se um falhar, os outros continuam normalmente e a instalação
+// sempre termina.
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c =>
+      Promise.all(ASSETS.map(url => c.add(url).catch(err => console.warn('[sw] não consegui cachear', url, err))))
+    ).then(() => self.skipWaiting())
   );
 });
 

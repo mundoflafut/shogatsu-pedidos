@@ -458,6 +458,7 @@ table{max-width:100%;}
     <div class="nav-section" data-min-role="admin">Gestão</div>
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
+    <button class="nav-item" data-page="custos" data-min-role="admin" onclick="goPage('custos')"><span class="ni">💰</span> Custos</button>
     <button class="nav-item" data-page="qrlinks" data-min-role="admin" onclick="goPage('qrlinks')"><span class="ni">🔗</span> QR Code &amp; Links</button>
     <button class="nav-item" data-page="relatorios" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
     <button class="nav-item" data-page="avaliacoes" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
@@ -615,6 +616,86 @@ table{max-width:100%;}
           </div>
           <div class="menu-items-body" id="menu-items-body">
             <div style="text-align:center;padding:40px;color:var(--muted)">Selecione uma categoria</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CUSTOS & FICHA TÉCNICA (v43: antes era o programa separado "shogatsu-custos") ── -->
+    <div class="page" id="page-custos">
+      <div id="custos-stats-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;"></div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header">
+          <span class="panel-title">⚠️ Ingredientes com preço defasado</span>
+        </div>
+        <div class="panel-body" id="custos-defasados-list" style="padding:0;"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="topbar-btn active" id="custos-tabbtn-ingredientes" onclick="switchCustosTab('ingredientes')">🧄 Ingredientes</button>
+        <button class="topbar-btn" id="custos-tabbtn-fichas" onclick="switchCustosTab('fichas')">🍱 Fichas Técnicas</button>
+        <button class="btn sm secondary" style="margin-left:auto;" onclick="importarCardapioCustos()">📥 Importar cardápio</button>
+      </div>
+
+      <!-- INGREDIENTES -->
+      <div id="custos-tab-ingredientes">
+        <div class="panel" style="margin-bottom:16px;">
+          <div class="panel-header"><span class="panel-title">+ Novo ingrediente</span></div>
+          <div class="panel-body">
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+              <div class="field" style="flex:1;min-width:160px;"><label>Nome</label><input id="ni-nome" placeholder="Ex: Salmão fresco"/></div>
+              <div class="field" style="flex:1;min-width:120px;"><label>Categoria</label><input id="ni-categoria" placeholder="Ex: Peixes"/></div>
+              <div class="field" style="width:100px;"><label>Unidade</label>
+                <select id="ni-unidade">
+                  <option value="kg">kg</option><option value="g">g</option>
+                  <option value="l">l</option><option value="ml">ml</option>
+                  <option value="un">un</option>
+                </select>
+              </div>
+              <div class="field" style="width:110px;"><label>Preço (R$)</label><input id="ni-preco" type="number" step="0.01" placeholder="0,00"/></div>
+              <button class="btn primary" onclick="criarIngrediente()" style="height:38px;margin-bottom:14px;">Adicionar</button>
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">💡 Esse programa não busca preço ao vivo na internet sozinho (isso exigiria contratar uma API paga de cotação). Cada vez que você muda o preço aqui, a data de atualização é registrada automaticamente, e o sistema avisa quando ela ficar velha.</p>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><span class="panel-title">Ingredientes cadastrados</span><span id="custos-ing-count" style="color:var(--muted);font-weight:400;font-size:12px;"></span></div>
+          <div class="panel-body" style="padding:0;">
+            <table class="table">
+              <thead><tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Atualizado em</th><th>Status</th><th></th></tr></thead>
+              <tbody id="custos-tbody-ingredientes"></tbody>
+            </table>
+            <div id="custos-ing-vazio" style="text-align:center;padding:40px;color:var(--muted);display:none;">Nenhum ingrediente cadastrado ainda.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FICHAS -->
+      <div id="custos-tab-fichas" style="display:none;">
+        <div class="panel" style="margin-bottom:16px;">
+          <div class="panel-header"><span class="panel-title">+ Nova ficha técnica (prato)</span></div>
+          <div class="panel-body">
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+              <div class="field" style="flex:1;min-width:180px;"><label>Nome do prato</label><input id="nf-nome" placeholder="Ex: Hot roll salmão"/></div>
+              <div class="field" style="flex:1;min-width:120px;"><label>Categoria</label><input id="nf-categoria" placeholder="Ex: Quentes"/></div>
+              <div class="field" style="width:150px;"><label>Rendimento (porções)</label><input id="nf-rendimento" type="number" value="1" min="1"/></div>
+              <div class="field" style="width:150px;"><label>Preço de venda (R$)</label><input id="nf-preco-venda" type="number" step="0.01" placeholder="opcional"/></div>
+              <button class="btn primary" onclick="criarFichaTecnica()" style="height:38px;margin-bottom:14px;">Criar</button>
+            </div>
+          </div>
+        </div>
+        <div id="custos-lista-fichas"></div>
+        <div id="custos-fichas-vazio" style="text-align:center;padding:40px;color:var(--muted);display:none;">Nenhuma ficha técnica criada ainda. Crie uma acima e adicione os ingredientes do prato.</div>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <div class="panel-header"><span class="panel-title">⚙️ Configurações de custo</span></div>
+        <div class="panel-body">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div class="field" style="width:220px;"><label>Dias até o preço ficar "defasado"</label><input id="cc-dias" type="number" min="1"/></div>
+            <div class="field" style="width:200px;"><label>Margem padrão sugerida (%)</label><input id="cc-margem" type="number" min="0" max="95"/></div>
+            <button class="btn secondary" onclick="salvarConfigCustos()" style="height:38px;margin-bottom:14px;">Salvar</button>
           </div>
         </div>
       </div>
@@ -1232,33 +1313,6 @@ table{max-width:100%;}
       </div>
       <div class="field-row">
         <div class="field"><label>Badge (destaque)</label><input id="item-badge" placeholder="ex: 🔥 Destaque  ou  👑 Premium"/></div>
-        <div class="field">
-          <label style="display:flex;align-items:center;gap:6px;">
-            <input type="checkbox" id="item-is-rodizio-extra" onchange="toggleRodizioDays(this.checked)"/>
-            📅 Extra do rodízio (só em dias específicos)
-          </label>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px;">Marque só se esse prato aparece no cardápio de rodízio presencial (QR code da mesa) em dias certos. A maioria dos pratos não precisa disso.</div>
-          <div id="item-days-wrap" style="display:none;margin-top:8px;">
-            <div id="item-days" style="display:flex;flex-wrap:wrap;gap:10px;">
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="dom"/> Dom</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="seg"/> Seg</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="ter"/> Ter</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qua"/> Qua</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="qui"/> Qui</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sex"/> Sex</label>
-              <label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="item-day-cb" value="sab"/> Sáb</label>
-            </div>
-          </div>
-        </div>
-        <div class="field">
-          <label>Imprime na(s) via(s) de:</label>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;">
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="item-st-cozinha" checked/> 🍳 Cozinha</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="item-st-sushibar"/> 🍣 Sushibar</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="item-st-bar"/> 🍹 Bar</label>
-          </div>
-          <div style="font-size:10px;color:var(--muted);">Marque mais de uma se o prato precisa sair em duas vias juntas (ex: combo com bebida).</div>
-        </div>
       </div>
       <div class="field" style="margin-top:6px;">
         <label style="display:flex;align-items:center;justify-content:space-between;">
@@ -1289,6 +1343,15 @@ table{max-width:100%;}
         <div class="field"><label>Nome da Categoria *</label><input id="cat-title" placeholder="ex: Sobremesas"/></div>
       </div>
       <div class="field"><label>Observação (opcional)</label><input id="cat-note" placeholder="ex: Acompanha arroz japonês"/></div>
+      <div class="field" style="margin-top:6px;">
+        <label>Imprime na(s) via(s) de:</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;">
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-cozinha" checked/> 🍳 Cozinha</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-sushibar"/> 🍣 Sushibar</label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-bar"/> 🍹 Bar</label>
+        </div>
+        <div style="font-size:10px;color:var(--muted);">Todos os itens dessa categoria saem nessa(s) via(s) na hora de imprimir. Marque mais de uma se a categoria inteira precisa sair em duas vias (ex: uma categoria de combos com bebida).</div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn secondary" onclick="closeModal('cat-modal')">Cancelar</button>
@@ -1916,8 +1979,8 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
-const PAGE_MIN_ROLE = { cardapio:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
+const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
     showToast('🔒 Acesso restrito','Seu usuário não tem permissão pra essa área.');
@@ -1931,6 +1994,7 @@ function goPage(id, silent){
   if(id==='pedidos')setPedidosView(pedidosView);
   if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
+  if(id==='custos')renderCustosPage();
   if(id==='qrlinks')renderQrLinksPage();
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
@@ -2932,10 +2996,13 @@ async function renderReservationsList(){
         <button class="oa-btn accept" onclick="updateReservationStatus('${r.id}','confirmada',event)">✓ Confirmar</button>
         <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','recusada',event)">✕ Recusar</button>
         ${r.phone?`<button class="oa-btn whatsapp" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
-      </div>`:r.status==='confirmada'?`
+      </div>`:r.status==='confirmada'&&r.phone?`
+      <!-- BUG CORRIGIDO (v43): o botão "✕ Cancelar" ficava disponível pra sempre numa reserva já
+           confirmada — igual ao padrão do resto do sistema (um pedido "entregue" não tem mais
+           botão de ação), reserva confirmada agora é estado final: só sobra o WhatsApp pra
+           contato, sem botão de cancelar continuar "ativo" depois da confirmação. -->
       <div class="order-actions" id="rsv-actions-${r.id}">
-        <button class="oa-btn cancel" onclick="updateReservationStatus('${r.id}','cancelada',event)">✕ Cancelar</button>
-        ${r.phone?`<button class="oa-btn whatsapp" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>`:''}
+        <button class="oa-btn whatsapp" onclick="window.open('https://wa.me/55${r.phone.replace(/\\D/g,'')}','_blank')">💬 WhatsApp</button>
       </div>`:''}
     </div>`).join('');
 }
@@ -2994,6 +3061,236 @@ function renderKanban(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════
+// CUSTOS & FICHA TÉCNICA (v43: integrado — antes era o programa separado "shogatsu-custos")
+// ═══════════════════════════════════════════
+let custosIngredientes=[];
+let custosFichas=[];
+let custosTabAtual='ingredientes';
+function fmtMoedaCustos(v){ return 'R$ '+(Number(v)||0).toFixed(2).replace('.',','); }
+function fmtDataCustos(iso){ try{ return new Date(iso).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+function diasDesdeCustos(iso){ return Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/86400000)); }
+
+async function renderCustosPage(){
+  await Promise.all([carregarIngredientesCustos(), carregarFichasCustos()]);
+  const cfg = await apiGet('/api/custos/config').catch(()=>({diasParaDesatualizado:21,margemPadrao:65}));
+  document.getElementById('cc-dias').value = cfg.diasParaDesatualizado;
+  document.getElementById('cc-margem').value = cfg.margemPadrao;
+  switchCustosTab(custosTabAtual);
+  renderCustosDashboard();
+}
+function switchCustosTab(tab){
+  custosTabAtual=tab;
+  document.getElementById('custos-tab-ingredientes').style.display = tab==='ingredientes'?'block':'none';
+  document.getElementById('custos-tab-fichas').style.display = tab==='fichas'?'block':'none';
+  ['ingredientes','fichas'].forEach(t=>{
+    const b=document.getElementById('custos-tabbtn-'+t);
+    if(t===tab){ b.classList.add('active'); b.style.borderColor='var(--red)'; b.style.color='var(--red-lt)'; }
+    else { b.classList.remove('active'); b.style.borderColor=''; b.style.color=''; }
+  });
+}
+
+// ── Ingredientes ──
+async function carregarIngredientesCustos(){
+  custosIngredientes = await apiGet('/api/custos/ingredientes');
+  renderIngredientesCustos();
+}
+function renderIngredientesCustos(){
+  const tbody=document.getElementById('custos-tbody-ingredientes');
+  const vazio=document.getElementById('custos-ing-vazio');
+  document.getElementById('custos-ing-count').textContent = custosIngredientes.length ? `(${custosIngredientes.length})` : '';
+  if(custosIngredientes.length===0){ tbody.innerHTML=''; vazio.style.display='block'; return; }
+  vazio.style.display='none';
+  tbody.innerHTML = custosIngredientes.map(ing=>`
+    <tr>
+      <td>${esc(ing.nome)}</td>
+      <td style="color:var(--muted)">${esc(ing.categoria||'—')}</td>
+      <td>
+        <input type="number" step="0.01" value="${ing.precoUnitario}" data-id="${ing.id}" onchange="atualizarPrecoIngrediente(this)"
+          style="width:90px;background:none;border:1px solid var(--border);border-radius:6px;padding:5px 7px;color:${ing.desatualizado?'var(--orange)':'var(--white)'};font-size:13px;"/>
+        <span style="color:var(--muted);font-size:12px;">/${ing.unidade}</span>
+      </td>
+      <td style="color:var(--muted);font-size:12px;">${fmtDataCustos(ing.atualizadoEm)} (${diasDesdeCustos(ing.atualizadoEm)}d)</td>
+      <td>
+        ${ing.desatualizado?'<span class="status-badge cancelado">⚠ defasado</span>':'<span class="status-badge pronto">✓ em dia</span>'}
+      </td>
+      <td><button class="oa-btn cancel sm" style="padding:5px 10px;" onclick="excluirIngredienteCustos('${ing.id}')">Excluir</button></td>
+    </tr>`).join('');
+}
+async function criarIngrediente(){
+  const nome=document.getElementById('ni-nome').value.trim();
+  const categoria=document.getElementById('ni-categoria').value.trim();
+  const unidade=document.getElementById('ni-unidade').value;
+  const preco=document.getElementById('ni-preco').value;
+  if(!nome || preco===''){ alert('Preencha ao menos o nome e o preço.'); return; }
+  const res=await apiPost('/api/custos/ingredientes', {nome,categoria,unidade,precoUnitario:Number(preco)});
+  if(!res.ok){ alert(res.data.error||'Erro ao adicionar ingrediente.'); return; }
+  ['ni-nome','ni-categoria','ni-preco'].forEach(id=>document.getElementById(id).value='');
+  await renderCustosPage();
+  showToast('✅ Ingrediente adicionado', nome);
+}
+async function atualizarPrecoIngrediente(input){
+  const id=input.dataset.id;
+  const r=await fetch('/api/custos/ingredientes/'+id, {method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({precoUnitario:Number(input.value)})});
+  if(r.status===401){ doLogout(); return; }
+  await renderCustosPage();
+}
+async function excluirIngredienteCustos(id){
+  if(!confirm('Excluir este ingrediente? Isso pode afetar fichas técnicas que o usam.')) return;
+  const r=await fetch('/api/custos/ingredientes/'+id, {method:'DELETE', headers:authHeaders()});
+  if(r.status===401){ doLogout(); return; }
+  await renderCustosPage();
+}
+
+// ── Fichas Técnicas ──
+async function carregarFichasCustos(){
+  custosFichas = await apiGet('/api/custos/fichas');
+  renderFichasCustos();
+}
+function renderFichasCustos(){
+  const wrap=document.getElementById('custos-lista-fichas');
+  const vazio=document.getElementById('custos-fichas-vazio');
+  if(custosFichas.length===0){ wrap.innerHTML=''; vazio.style.display='block'; return; }
+  vazio.style.display='none';
+  wrap.innerHTML = custosFichas.map(f=>`
+    <div class="panel" style="margin-bottom:14px;">
+      <div class="panel-header">
+        <span class="panel-title">${esc(f.nome)} ${f.temPrecoDefasado?'<span class="status-badge cancelado" style="margin-left:6px;">⚠ ingrediente defasado</span>':''}</span>
+        <button class="oa-btn cancel sm" style="padding:5px 10px;" onclick="excluirFichaCustos('${f.id}')">Excluir ficha</button>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${esc(f.categoria||'sem categoria')} · rende ${f.rendimento} porç${f.rendimento==1?'ão':'ões'}</div>
+        <div style="margin-bottom:10px;">
+          ${(f.itensCalculados||[]).map((it,idx)=>`
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;">
+              <div>${esc(it.nomeIngrediente||'(ingrediente removido)')}</div>
+              <div style="color:var(--muted);">${it.quantidade} ${esc(it.unidade||it.unidadeIngrediente||'')}</div>
+              <div style="color:var(--muted);">${fmtMoedaCustos(it.custo)}</div>
+              <button class="oa-btn cancel sm" style="padding:3px 8px;" onclick="removerItemFichaCustos('${f.id}',${idx})">✕</button>
+            </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Nenhum ingrediente adicionado ainda.</div>'}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px;">
+          <div class="field" style="flex:1;min-width:180px;margin-bottom:0;"><label>Ingrediente</label>
+            <select id="sel-ing-${f.id}">
+              <option value="">Selecione...</option>
+              ${custosIngredientes.map(i=>`<option value="${i.id}">${esc(i.nome)} (${i.unidade})</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="width:110px;margin-bottom:0;"><label>Quantidade</label><input id="qtd-${f.id}" type="number" step="0.01" placeholder="Ex: 150"/></div>
+          <div class="field" style="width:130px;margin-bottom:0;"><label>Unidade usada</label>
+            <select id="un-${f.id}">
+              <option value="">(mesma)</option>
+              <option value="g">g</option><option value="kg">kg</option>
+              <option value="ml">ml</option><option value="l">l</option>
+              <option value="un">un</option>
+            </select>
+          </div>
+          <button class="btn secondary" style="height:38px;" onclick="adicionarItemFichaCustos('${f.id}')">+ Adicionar</button>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px;background:var(--panel);border-radius:10px;margin-bottom:10px;">
+          <div><div style="font-size:11px;color:var(--muted);">Custo total</div><div style="font-size:16px;font-weight:600;">${fmtMoedaCustos(f.custoTotal)}</div></div>
+          <div><div style="font-size:11px;color:var(--muted);">Custo por porção</div><div style="font-size:16px;font-weight:600;color:var(--gold,#e3bd6a);">${fmtMoedaCustos(f.custoPorPorcao)}</div></div>
+          <div><div style="font-size:11px;color:var(--muted);">Preço sugerido</div><div style="font-size:16px;font-weight:600;color:#4ade80;">${fmtMoedaCustos(f.precoSugerido)}</div></div>
+          ${f.cmvPercentual!==null?`<div><div style="font-size:11px;color:var(--muted);">CMV (sobre venda atual)</div><div style="font-size:16px;font-weight:600;${f.cmvPercentual>35?'color:var(--orange);':''}">${f.cmvPercentual}%</div></div>`:''}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;">
+          <div class="field" style="width:220px;margin-bottom:0;"><label>Margem desejada (%) — vazio usa a padrão</label>
+            <input type="number" min="0" max="95" value="${f.margemDesejada??''}" onchange="atualizarFichaCustos('${f.id}',{margemDesejada:this.value===''?null:Number(this.value)})"/>
+          </div>
+          <div class="field" style="width:200px;margin-bottom:0;"><label>Preço de venda atual (R$)</label>
+            <input type="number" step="0.01" value="${f.precoVendaAtual??''}" onchange="atualizarFichaCustos('${f.id}',{precoVendaAtual:this.value===''?null:Number(this.value)})"/>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+async function criarFichaTecnica(){
+  const nome=document.getElementById('nf-nome').value.trim();
+  const categoria=document.getElementById('nf-categoria').value.trim();
+  const rendimento=document.getElementById('nf-rendimento').value||1;
+  const precoVendaAtual=document.getElementById('nf-preco-venda').value||null;
+  if(!nome){ alert('Dê um nome para o prato.'); return; }
+  const res=await apiPost('/api/custos/fichas', {nome,categoria,rendimento,precoVendaAtual});
+  if(!res.ok){ alert(res.data.error||'Erro ao criar ficha técnica.'); return; }
+  ['nf-nome','nf-categoria'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('nf-rendimento').value=1;
+  document.getElementById('nf-preco-venda').value='';
+  await renderCustosPage();
+  showToast('✅ Ficha criada', nome);
+}
+async function adicionarItemFichaCustos(fichaId){
+  const ingredienteId=document.getElementById('sel-ing-'+fichaId).value;
+  const quantidade=document.getElementById('qtd-'+fichaId).value;
+  const unidade=document.getElementById('un-'+fichaId).value;
+  if(!ingredienteId||!quantidade){ alert('Escolha o ingrediente e a quantidade.'); return; }
+  const ficha=custosFichas.find(f=>f.id===fichaId);
+  const itens=(ficha.itens||ficha.itensCalculados||[]).map(it=>({ingredienteId:it.ingredienteId,quantidade:it.quantidade,unidade:it.unidade}));
+  itens.push({ingredienteId, quantidade:Number(quantidade), unidade:unidade||undefined});
+  await atualizarFichaCustos(fichaId, {itens});
+}
+async function removerItemFichaCustos(fichaId, idx){
+  const ficha=custosFichas.find(f=>f.id===fichaId);
+  const itens=(ficha.itens||ficha.itensCalculados||[]).map(it=>({ingredienteId:it.ingredienteId,quantidade:it.quantidade,unidade:it.unidade}));
+  itens.splice(idx,1);
+  await atualizarFichaCustos(fichaId, {itens});
+}
+async function atualizarFichaCustos(fichaId, patch){
+  const r=await fetch('/api/custos/fichas/'+fichaId, {method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify(patch)});
+  if(r.status===401){ doLogout(); return; }
+  await renderCustosPage();
+}
+async function excluirFichaCustos(id){
+  if(!confirm('Excluir esta ficha técnica?')) return;
+  const r=await fetch('/api/custos/fichas/'+id, {method:'DELETE', headers:authHeaders()});
+  if(r.status===401){ doLogout(); return; }
+  await renderCustosPage();
+}
+
+// ── Dashboard ──
+function renderCustosDashboard(){
+  const defasados=custosIngredientes.filter(i=>i.desatualizado);
+  const fichasComProblema=custosFichas.filter(f=>f.temPrecoDefasado).length;
+  document.getElementById('custos-stats-row').innerHTML = `
+    <div class="stat-card"><div style="font-size:11px;color:var(--muted);">Ingredientes cadastrados</div><div style="font-size:22px;font-weight:600;">${custosIngredientes.length}</div></div>
+    <div class="stat-card" style="${defasados.length?'border-color:var(--orange);':''}"><div style="font-size:11px;color:var(--muted);">Preços defasados</div><div style="font-size:22px;font-weight:600;${defasados.length?'color:var(--orange);':''}">${defasados.length}</div></div>
+    <div class="stat-card"><div style="font-size:11px;color:var(--muted);">Fichas técnicas</div><div style="font-size:22px;font-weight:600;">${custosFichas.length}</div></div>
+    <div class="stat-card" style="${fichasComProblema?'border-color:var(--orange);':''}"><div style="font-size:11px;color:var(--muted);">Fichas c/ custo desatualizado</div><div style="font-size:22px;font-weight:600;${fichasComProblema?'color:var(--orange);':''}">${fichasComProblema}</div></div>`;
+  const listEl=document.getElementById('custos-defasados-list');
+  if(defasados.length===0){
+    listEl.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);">Nenhum ingrediente defasado no momento 🎉</div>';
+  } else {
+    listEl.innerHTML = `<table class="table"><thead><tr><th>Nome</th><th>Preço atual</th><th>Última atualização</th><th></th></tr></thead><tbody>
+      ${defasados.map(i=>`
+        <tr>
+          <td>${esc(i.nome)}</td>
+          <td>${fmtMoedaCustos(i.precoUnitario)}/${i.unidade}</td>
+          <td style="color:var(--orange)">${fmtDataCustos(i.atualizadoEm)} (${diasDesdeCustos(i.atualizadoEm)} dias atrás)</td>
+          <td><button class="btn sm secondary" onclick="switchCustosTab('ingredientes')">Atualizar</button></td>
+        </tr>`).join('')}
+    </tbody></table>`;
+  }
+}
+
+// ── Config ──
+async function salvarConfigCustos(){
+  const diasParaDesatualizado=Number(document.getElementById('cc-dias').value)||21;
+  const margemPadrao=Number(document.getElementById('cc-margem').value)||65;
+  const r=await fetch('/api/custos/config', {method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({diasParaDesatualizado,margemPadrao})});
+  if(r.status===401){ doLogout(); return; }
+  await renderCustosPage();
+  showToast('✅ Configurações salvas','');
+}
+
+// ── Importar cardápio ──
+async function importarCardapioCustos(){
+  if(!confirm('Isso cria uma ficha técnica em branco pra cada prato do seu cardápio atual que ainda não tiver ficha (você adiciona os ingredientes depois). Continuar?')) return;
+  const res=await apiPost('/api/custos/importar-cardapio', {});
+  if(!res.ok){ alert(res.data.error||'Erro ao importar cardápio.'); return; }
+  await renderCustosPage();
+  switchCustosTab('fichas');
+  showToast('📥 Cardápio importado', `${res.data.criadas} ficha(s) técnica(s) criada(s).`);
 }
 
 // ═══════════════════════════════════════════
@@ -3210,10 +3507,6 @@ function openAddItem(){
   document.getElementById('item-edit-ii').value=-1;
   ['item-name','item-desc','item-qty','item-badge'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('item-price').value='';
-  setItemStationCheckboxes(['cozinha']);
-  document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=false);
-  document.getElementById('item-is-rodizio-extra').checked=false;
-  toggleRodizioDays(false);
   resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
@@ -3229,30 +3522,10 @@ function openEditItem(si,ii){
   document.getElementById('item-price').value=item.price;
   document.getElementById('item-qty').value=item.qty||'';
   document.getElementById('item-badge').value=item.badge||'';
-  setItemStationCheckboxes(item.stations && item.stations.length ? item.stations : ['cozinha']);
-  const itemDays = item.days || [];
-  document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=itemDays.includes(cb.value));
-  // v42: as caixinhas de dia só aparecem se o prato já usa esse recurso — a maioria
-  // dos pratos (que não são do rodízio) não mostra mais essa opção por padrão.
-  document.getElementById('item-is-rodizio-extra').checked = itemDays.length>0;
-  toggleRodizioDays(itemDays.length>0);
   resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
   document.getElementById('item-modal').classList.add('open');
-}
-function toggleRodizioDays(show){
-  document.getElementById('item-days-wrap').style.display = show ? 'block' : 'none';
-  if(!show) document.querySelectorAll('.item-day-cb').forEach(cb=>cb.checked=false);
-}
-function setItemStationCheckboxes(stations){
-  ['cozinha','sushibar','bar'].forEach(s=>{
-    document.getElementById('item-st-'+s).checked = stations.includes(s);
-  });
-}
-function getItemStationCheckboxes(){
-  const chosen = ['cozinha','sushibar','bar'].filter(s=>document.getElementById('item-st-'+s).checked);
-  return chosen.length ? chosen : ['cozinha']; // sempre pelo menos uma via, senão o prato nunca é impresso
 }
 // ── Variações (grupos de opções, ex: Tamanho / Adicionais) ──
 function addVariantGroup(){
@@ -3314,20 +3587,19 @@ async function saveItem(){
     .map(g=>({...g, name:g.name.trim()||'Opções', options:g.options.map(o=>({name:(o.name||'').trim(),priceDelta:Number(o.priceDelta)||0})).filter(o=>o.name)}))
     .filter(g=>g.options.length>0);
   const [posX, posY] = document.getElementById('item-image-pos').value.split(',').map(n=>parseInt(n)||50);
-  const selectedDays = [...document.querySelectorAll('.item-day-cb:checked')].map(cb=>cb.value);
+  // v43: via de impressão e dias do rodízio saíram do modal de item (agora a via é definida por
+  // categoria — veja saveCategory). Aqui só preservamos o que o item já tinha, sem sobrescrever.
   const item={
     name,desc:document.getElementById('item-desc').value.trim(),
     price:parseFloat(document.getElementById('item-price').value)||0,
     qty:document.getElementById('item-qty').value.trim(),
     badge:document.getElementById('item-badge').value.trim(),
-    stations:getItemStationCheckboxes(),
     image:document.getElementById('item-image').value.trim(),
     imagePos:{x:posX,y:posY},
-    days:selectedDays,
     variants:cleanVariants
   };
   if(ii===-1){ item.available=true; menu[si].items.push(item); }
-  else menu[si].items[ii]={...menu[si].items[ii], ...item}; // mantém o "disponível/esgotado" que já estava, não reseta ao editar
+  else menu[si].items[ii]={...menu[si].items[ii], ...item}; // mantém "disponível/esgotado", stations e days que já estavam, não reseta ao editar
   const res = await apiPost('/api/config', { cfg, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao salvar cardápio.'); return; }
   closeModal('item-modal');renderMenuEditor();
@@ -3425,12 +3697,22 @@ async function confirmImportMenu(){
   showToast('📥 Cardápio importado!', `${parsed.length} categorias, atualizado com sucesso.`);
 }
 
+function setCatStationCheckboxes(stations){
+  ['cozinha','sushibar','bar'].forEach(s=>{
+    document.getElementById('cat-st-'+s).checked = (stations||[]).includes(s);
+  });
+}
+function getCatStationCheckboxes(){
+  const chosen = ['cozinha','sushibar','bar'].filter(s=>document.getElementById('cat-st-'+s).checked);
+  return chosen.length ? chosen : ['cozinha']; // sempre pelo menos uma via, senão os itens nunca imprimem
+}
 function openAddCategory(){
   document.getElementById('cat-modal-title').textContent='Nova Categoria';
   document.getElementById('cat-edit-idx').value=-1;
   document.getElementById('cat-icon').value='🍽️';
   document.getElementById('cat-title').value='';
   document.getElementById('cat-note').value='';
+  setCatStationCheckboxes(['cozinha']);
   document.getElementById('cat-modal').classList.add('open');
 }
 function openEditCategory(i){
@@ -3440,6 +3722,7 @@ function openEditCategory(i){
   document.getElementById('cat-icon').value=sec.icon||'';
   document.getElementById('cat-title').value=sec.title||'';
   document.getElementById('cat-note').value=sec.note||'';
+  setCatStationCheckboxes(sec.stations&&sec.stations.length?sec.stations:['cozinha']);
   document.getElementById('cat-modal').classList.add('open');
 }
 async function saveCategory(){
@@ -3448,12 +3731,13 @@ async function saveCategory(){
   if(!title){alert('Digite o nome da categoria.');return;}
   const icon=document.getElementById('cat-icon').value.trim()||'🍽️';
   const note=document.getElementById('cat-note').value.trim();
+  const stations=getCatStationCheckboxes();
   if(idx===-1){
     const id=title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'cat-'+Date.now();
-    menu.push({id,icon,title,note,items:[]});
+    menu.push({id,icon,title,note,stations,items:[]});
     activeCatIdx=menu.length-1;
   }else{
-    menu[idx]={...menu[idx],icon,title,note};
+    menu[idx]={...menu[idx],icon,title,note,stations};
   }
   const res = await apiPost('/api/config', { cfg, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao salvar categoria.'); return; }
