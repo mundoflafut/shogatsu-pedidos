@@ -4,7 +4,10 @@
 // Agora: páginas HTML (navegação) usam "rede primeiro" — sempre tenta buscar a versão mais nova;
 // só usa o cache guardado se estiver sem internet. Arquivos que raramente mudam (ícones, fontes,
 // manifest) continuam em cache primeiro, que é mais rápido e não tem esse risco.
-const CACHE = 'shogatsu-v4';
+// v44: versão do cache subiu (v4 -> v5) junto com o sistema de atualização automática
+// (ver public/version-check.js) — isso já faz o próprio evento "activate" abaixo apagar o
+// cache antigo sozinho, sem tocar em IndexedDB/localStorage/cookies (dados do cliente).
+const CACHE = 'shogatsu-v5';
 const ASSETS = [
   '/manifest.json',
   '/icon-192.png',
@@ -34,6 +37,12 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// v44: permite que public/version-check.js peça pro Service Worker assumir na hora, sem
+// esperar todas as abas fecharem — parte do sistema de atualização automática.
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 function isHtmlRequest(request){
@@ -76,7 +85,11 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// ─── Notificações Push (promoções, cupons, novidades) ───
+// ─── Notificações Push (promoções, cupons, novidades, status do pedido) ───
+// v44: reforçado o alerta sonoro/tátil dessas notificações. O navegador não deixa a gente
+// anexar um arquivo de áudio próprio numa Notification (isso é decidido pelo sistema
+// operacional) — o que dá pra garantir é NÃO silenciar (silent:false, que já é o padrão, mas
+// deixamos explícito) e adicionar vibração no celular, que funciona junto com o som do sistema.
 self.addEventListener('push', e => {
   let data = { title: 'Shogatsu', body: 'Você tem uma novidade!', url: '/' };
   try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* usa os valores padrão acima */ }
@@ -85,7 +98,11 @@ self.addEventListener('push', e => {
       body: data.body,
       icon: data.icon || '/icon-192.png',
       badge: '/icon-72.png',
-      data: { url: data.url || '/' }
+      data: { url: data.url || '/' },
+      silent: false,
+      vibrate: [200, 100, 200, 100, 200],
+      requireInteraction: false,
+      tag: data.tag || 'shogatsu-update'
     })
   );
 });

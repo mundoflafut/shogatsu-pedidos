@@ -711,6 +711,63 @@ table{max-width:100%;}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;" id="qrl-tabs"></div>
       <div class="panel" id="qrl-content" style="max-width:520px;"></div>
 
+      <!-- v44: aba pra editar o conteúdo da página pública "Cardápio Rodízio Popular" (preços,
+           destaques, categorias/itens, frases e rodapé) direto pelo painel, sem mexer em código.
+           Os dados ficam em cfg.rodizioPopular (já existia no servidor) e a página pública
+           cardapio-rodizio-popular.html passou a ler daqui, com fallback pro conteúdo padrão. -->
+      <div class="panel" style="max-width:720px;margin-top:18px;">
+        <div class="panel-header" style="cursor:pointer;" onclick="toggleRpEditor()">
+          <span class="panel-title">✏️ Editar Cardápio Popular</span>
+          <span id="rp-editor-toggle-icon" style="font-size:12px;color:var(--muted);">▾ mostrar</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin:2px 0 12px;">
+          Edita o conteúdo da página pública do Rodízio Popular (a mesma do QR "Cardápio Rodízio Popular" acima) — preços por dia, destaques, categorias e itens, frases do topo e dados de rodapé.
+        </div>
+        <div id="rp-editor-body" style="display:none;">
+
+          <div class="settings-card-title" style="margin-top:4px;">💰 Preços por grupo de dias</div>
+          <div id="rp-pricegroups-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+          <button type="button" class="btn secondary sm" onclick="rpAddPriceGroup()">+ Grupo de dias</button>
+          <div class="field" style="margin-top:12px;max-width:420px;">
+            <label>Observação do preço (aceita HTML simples, ex: &lt;b&gt;18:30&lt;/b&gt;)</label>
+            <input id="rp-pricenote" placeholder="Valores válidos a partir das 18:30."/>
+          </div>
+
+          <div class="settings-card-title" style="margin-top:20px;">⭐ Destaques do rodízio</div>
+          <div id="rp-highlights-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+          <button type="button" class="btn secondary sm" onclick="rpAddHighlight()">+ Destaque</button>
+
+          <div class="settings-card-title" style="margin-top:20px;">🍽️ Categorias e itens</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Um item por linha. Pra dar um subtítulo (ex: "sob consulta"), escreva assim: <code>Nome do item | subtítulo</code></div>
+          <div id="rp-categories-list" style="display:flex;flex-direction:column;gap:14px;margin-bottom:10px;"></div>
+          <button type="button" class="btn secondary sm" onclick="rpAddCategory()">+ Categoria</button>
+
+          <div class="settings-card-title" style="margin-top:20px;">💬 Frases do topo (giram automaticamente)</div>
+          <div class="field">
+            <textarea id="rp-phrases" rows="5" placeholder="Uma frase por linha" style="width:100%;font-family:inherit;font-size:12px;padding:8px;"></textarea>
+          </div>
+
+          <div class="settings-card-title" style="margin-top:20px;">📍 Rodapé</div>
+          <div class="field-row">
+            <div class="field"><label>Endereço</label><input id="rp-address" placeholder="Av. Gov. Roberto Silveira, 109 — Costa Azul, Rio das Ostras"/></div>
+            <div class="field"><label>WhatsApp (só números, com DDI)</label><input id="rp-whatsapp" placeholder="552227641333"/></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Instagram (sem @)</label><input id="rp-instagram" placeholder="shogatsurestaurante"/></div>
+            <div class="field"><label>Link do delivery</label><input id="rp-deliveryurl" placeholder="/"/></div>
+          </div>
+          <div class="field">
+            <label>Aviso de taxa de desperdício</label>
+            <input id="rp-wastenote" placeholder="Taxa de desperdício: valor da peça do cardápio..."/>
+          </div>
+
+          <div style="margin-top:18px;display:flex;gap:10px;">
+            <button type="button" class="btn primary" onclick="saveRodizioPopular()">💾 Salvar Cardápio Popular</button>
+            <button type="button" class="btn secondary" onclick="renderRpEditor()">↺ Descartar alterações</button>
+          </div>
+        </div>
+      </div>
+
       <div class="panel" style="max-width:520px;margin-top:18px;">
         <div class="panel-title" style="margin-bottom:10px;">🔧 Gerador Personalizado</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Cole qualquer link (ou texto) e gere um QR Code na hora — útil pra promoções, cardápios de terceiros, cupons, etc.</div>
@@ -1995,7 +2052,7 @@ function goPage(id, silent){
   if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
   if(id==='custos')renderCustosPage();
-  if(id==='qrlinks')renderQrLinksPage();
+  if(id==='qrlinks'){renderQrLinksPage();renderRpEditor();}
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
   if(id==='usuarios')loadUsersPage();
@@ -2250,6 +2307,92 @@ function qrlRenderContent(){
       </div>
     </div>`;
 }
+
+// ═══════════════════════════════════════════
+// v44: EDITAR CARDÁPIO POPULAR (aba dentro de QR Code & Links)
+// Edita cfg.rodizioPopular, consumido pela página pública cardapio-rodizio-popular.html.
+// ═══════════════════════════════════════════
+let rpDraft = null; // cópia de trabalho de cfg.rodizioPopular enquanto o admin edita
+function toggleRpEditor(){
+  const body = document.getElementById('rp-editor-body');
+  const icon = document.getElementById('rp-editor-toggle-icon');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  icon.textContent = open ? '▾ mostrar' : '▴ ocultar';
+  if(!open) renderRpEditor();
+}
+function rpDefaults(){
+  return { phrases:[], heroPhoto:'', priceGroups:[], priceNote:'', highlights:[], gallery:[], categories:[], address:'', whatsapp:'', instagram:'', deliveryUrl:'/', wasteNote:'' };
+}
+function renderRpEditor(){
+  if(!document.getElementById('rp-editor-body')) return;
+  rpDraft = JSON.parse(JSON.stringify({ ...rpDefaults(), ...(cfg.rodizioPopular||{}) }));
+  document.getElementById('rp-pricenote').value = rpDraft.priceNote||'';
+  document.getElementById('rp-phrases').value = (rpDraft.phrases||[]).join('\n');
+  document.getElementById('rp-address').value = rpDraft.address||'';
+  document.getElementById('rp-whatsapp').value = rpDraft.whatsapp||'';
+  document.getElementById('rp-instagram').value = rpDraft.instagram||'';
+  document.getElementById('rp-deliveryurl').value = rpDraft.deliveryUrl||'/';
+  document.getElementById('rp-wastenote').value = rpDraft.wasteNote||'';
+  rpRenderPriceGroups(); rpRenderHighlights(); rpRenderCategories();
+}
+function rpRenderPriceGroups(){
+  document.getElementById('rp-pricegroups-list').innerHTML = (rpDraft.priceGroups||[]).map((g,i)=>`
+    <div class="field-row" style="align-items:flex-end;">
+      <div class="field"><label>Dias</label><input value="${esc(g.label||'')}" oninput="rpDraft.priceGroups[${i}].label=this.value"/></div>
+      <div class="field"><label>Dinheiro/Pix</label><input value="${esc(g.cash||'')}" oninput="rpDraft.priceGroups[${i}].cash=this.value"/></div>
+      <div class="field"><label>Cartão</label><input value="${esc(g.card||'')}" oninput="rpDraft.priceGroups[${i}].card=this.value"/></div>
+      <button type="button" class="btn secondary sm" onclick="rpRemovePriceGroup(${i})" title="Remover">🗑</button>
+    </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhum grupo de preço ainda.</div>';
+}
+function rpAddPriceGroup(){ rpDraft.priceGroups.push({label:'',cash:'',card:''}); rpRenderPriceGroups(); }
+function rpRemovePriceGroup(i){ rpDraft.priceGroups.splice(i,1); rpRenderPriceGroups(); }
+function rpRenderHighlights(){
+  document.getElementById('rp-highlights-list').innerHTML = (rpDraft.highlights||[]).map((h,i)=>`
+    <div class="field-row" style="align-items:flex-end;">
+      <div class="field" style="max-width:70px;"><label>Ícone</label><input value="${esc(h.icon||'')}" oninput="rpDraft.highlights[${i}].icon=this.value"/></div>
+      <div class="field"><label>Texto</label><input value="${esc(h.label||'')}" oninput="rpDraft.highlights[${i}].label=this.value"/></div>
+      <button type="button" class="btn secondary sm" onclick="rpRemoveHighlight(${i})" title="Remover">🗑</button>
+    </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhum destaque ainda.</div>';
+}
+function rpAddHighlight(){ rpDraft.highlights.push({icon:'✨',label:''}); rpRenderHighlights(); }
+function rpRemoveHighlight(i){ rpDraft.highlights.splice(i,1); rpRenderHighlights(); }
+function rpItemsToText(items){
+  return (items||[]).map(it => typeof it==='string' ? it : (it.sub ? `${it.name} | ${it.sub}` : (it.name||''))).join('\n');
+}
+function rpTextToItems(text){
+  return String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const parts = l.split('|').map(p=>p.trim());
+    return parts.length>1 ? { name: parts[0], sub: parts.slice(1).join(' | ') } : parts[0];
+  });
+}
+function rpRenderCategories(){
+  document.getElementById('rp-categories-list').innerHTML = (rpDraft.categories||[]).map((c,i)=>`
+    <div class="vgroup">
+      <div class="vgroup-head">
+        <input type="text" style="max-width:60px;" placeholder="🍣" value="${esc(c.icon||'')}" oninput="rpDraft.categories[${i}].icon=this.value"/>
+        <input type="text" placeholder="Nome da categoria" value="${esc(c.title||'')}" oninput="rpDraft.categories[${i}].title=this.value" style="flex:1;"/>
+        <button type="button" class="btn secondary sm" onclick="rpRemoveCategory(${i})" title="Remover categoria">🗑</button>
+      </div>
+      <textarea rows="4" style="width:100%;font-family:inherit;font-size:12px;padding:8px;margin-top:6px;" oninput="rpDraft.categories[${i}].items=rpTextToItems(this.value)">${esc(rpItemsToText(c.items))}</textarea>
+    </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhuma categoria ainda.</div>';
+}
+function rpAddCategory(){ rpDraft.categories.push({icon:'🍣',title:'',items:[]}); rpRenderCategories(); }
+function rpRemoveCategory(i){ rpDraft.categories.splice(i,1); rpRenderCategories(); }
+async function saveRodizioPopular(){
+  rpDraft.priceNote = document.getElementById('rp-pricenote').value;
+  rpDraft.phrases = document.getElementById('rp-phrases').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  rpDraft.address = document.getElementById('rp-address').value.trim();
+  rpDraft.whatsapp = document.getElementById('rp-whatsapp').value.trim();
+  rpDraft.instagram = document.getElementById('rp-instagram').value.trim();
+  rpDraft.deliveryUrl = document.getElementById('rp-deliveryurl').value.trim()||'/';
+  rpDraft.wasteNote = document.getElementById('rp-wastenote').value.trim();
+  const res = await apiPost('/api/config', { cfg: { rodizioPopular: rpDraft }, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar o Cardápio Popular.'); return; }
+  cfg.rodizioPopular = rpDraft;
+  showToast('✅ Salvo!', 'Cardápio Popular atualizado — já vale pro QR/link "Cardápio Rodízio Popular".');
+}
+
 function generateCustomQr(){
   const val = document.getElementById('qrl-custom-input').value.trim();
   if(!val){ showToast('Digite um link ou texto', 'Preencha o campo antes de gerar o QR.'); return; }
@@ -2544,30 +2687,46 @@ function confirmPrintChoice(){
 // térmica USB comum em caixa de restaurante, sem precisar configurar IP/porta).
 // Se `existingWin` for passado (pré-aberta antes do await), reaproveita a janela
 // em vez de abrir uma nova — evita o bloqueio de pop-up em pedidos multi-via.
+// v44: layout das 3 vias (Caixa/Comprovante, Cozinha, Sushibar, Bar) redesenhado e UNIFICADO —
+// cabeçalho centralizado, blocos separados por linha tracejada com título (CLIENTE/ITENS/RESUMO
+// no comprovante; HORÁRIOS/ITENS no setor de produção), valores alinhados à direita, TOTAL em
+// destaque, ícones só onde ajudam a ler rápido (🛵 entrega, 📞 telefone, 📍 endereço, ⏰ previsão),
+// e compatível com impressoras térmicas de 58mm e 80mm (largura em % da página + fonte configurável).
+const STATION_ICONS_PC = { cozinha:'🍳', sushibar:'🍣', bar:'🍹', caixa:'🧾' };
 function openBrowserTicket(order, station, deliveryWindow, existingWin){
   const isCaixa = station==='caixa';
   const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
   const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
   const money = v => 'R$ '+Number(v||0).toFixed(2).replace('.',',');
   const time = new Date(order.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const dateStr = new Date(order.createdAt).toLocaleDateString('pt-BR');
+  const modeTag = order.mode==='delivery' ? '🛵 ENTREGA (DELIVERY)' : '🏪 RETIRADA';
+  const refShort = String(order.id||'').slice(-11).toUpperCase();
 
   const bodyHTML = isCaixa ? `
-    <div class="t-row"><b>Cliente:</b> ${esc(order.name)}</div>
-    <div class="t-row"><b>Telefone:</b> ${esc(order.phone)}</div>
-    ${order.mode==='delivery'?`<div class="t-row"><b>Endereço:</b> ${esc(order.address)}</div>`:''}
-    <div class="t-row"><b>${order.mode==='delivery'?'Previsão de entrega':'Previsão de retirada'}:</b> ${deliveryWindow||'—'}</div>
+    <div class="t-block-title">CLIENTE</div>
+    <div class="t-row">${esc(order.name)}</div>
+    <div class="t-row">📞 ${esc(order.phone)}</div>
+    ${order.mode==='delivery'?`<div class="t-row">📍 ${esc(order.address)}</div>`:''}
+    <div class="t-row">⏰ ${order.mode==='delivery'?'Previsão de entrega':'Previsão de retirada'}: <b>${deliveryWindow||'—'}</b></div>
     <div class="t-hr"></div>
-    ${items.map(i=>`<div class="t-item"><span>${i.qty}x ${i.name}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
+    <div class="t-block-title">ITENS</div>
+    ${items.map(i=>`<div class="t-item"><span>${i.qty}x ${esc(i.name)}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
     ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${esc(order.obs)}</div>`:''}
     <div class="t-hr"></div>
+    <div class="t-block-title">RESUMO</div>
     <div class="t-item"><span>Subtotal</span><span>${money(order.subtotal)}</span></div>
-    <div class="t-item"><span>Taxa de entrega</span><span>${money(order.fee)}</span></div>
-    ${(order.discount>0||order.couponCode)?`<div class="t-item" style="color:#a9873c;"><span>🎟️ Cupom ${order.couponCode}</span><span>-${money(order.discount||0)}</span></div>`:''}
+    <div class="t-item"><span>Entrega</span><span>${money(order.fee)}</span></div>
+    ${(order.discount>0||order.couponCode)?`<div class="t-item" style="color:#a9873c;"><span>🎟️ Cupom ${esc(order.couponCode||'')}</span><span>-${money(order.discount||0)}</span></div>`:''}
+    <div class="t-hr"></div>
     <div class="t-item t-total"><span>TOTAL</span><span>${money(order.total)}</span></div>
-    <div class="t-row" style="margin-top:6px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${order.troco})`:''}</div>
+    <div class="t-row" style="margin-top:8px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${esc(order.troco)})`:''}</div>
   ` : `
-    ${items.map(i=>`<div class="t-item" style="font-size:${Math.round(15*(Number(cfg.printSize)||14)/14)}px;font-weight:700;"><span>${i.qty}x ${i.name}</span></div>`).join('')}
-    ${order.obs?`<div class="t-hr"></div><div class="t-row"><b>Obs:</b> ${esc(order.obs)}</div>`:''}
+    <div class="t-block-title">ITENS DA ${(stationLabels[station]||station).toUpperCase()}</div>
+    ${items.map(i=>`<div class="t-bullet-item">• ${i.qty}x ${esc(i.name)}</div>`).join('')}
+    <div class="t-hr"></div>
+    <div class="t-row"><b>Observações:</b></div>
+    ${order.obs?`<div class="t-row">${esc(order.obs)}</div>`:`<div class="t-obs-line"></div><div class="t-obs-line"></div>`}
   `;
 
   const win = existingWin || window.open('', '_blank', 'width=380,height=600');
@@ -2579,28 +2738,49 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
   win.document.open(); // limpa o "Carregando pedido..." pré-escrito antes de gravar o ticket final
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pedido ${order.id}</title>
   <style>
-    body{font-family:${pf};width:280px;margin:0 auto;padding:14px 0;color:${pc};font-size:${ps}px;}
+    @page{ margin:0; }
+    body{font-family:${pf};width:100%;max-width:302px;margin:0 auto;padding:10px 4px;color:${pc};font-size:${ps}px;box-sizing:border-box;}
     .t-center{text-align:center;}
-    .t-title{font-size:${Math.round(16*scale)}px;font-weight:700;letter-spacing:2px;}
-    .t-sub{font-size:${Math.round(11*scale)}px;letter-spacing:1px;margin-top:2px;}
+    .t-title{font-size:${Math.round(17*scale)}px;font-weight:800;letter-spacing:2px;}
+    .t-sub{font-size:${Math.round(11*scale)}px;letter-spacing:1.5px;margin-top:2px;color:#555;}
+    .t-sector{font-size:${Math.round(15*scale)}px;font-weight:800;text-align:center;margin:6px 0 2px;}
+    .t-doctype{font-size:${Math.round(11*scale)}px;text-align:center;letter-spacing:1.5px;color:#555;margin-bottom:2px;}
     .t-hr{border-top:1px dashed ${pc};margin:8px 0;}
+    .t-hr-solid{border-top:2px solid ${pc};margin:8px 0;}
+    .t-block-title{font-weight:800;font-size:${Math.round(11*scale)}px;letter-spacing:1px;margin:4px 0 6px;}
     .t-row{font-size:${Math.round(12*scale)}px;margin:3px 0;}
-    .t-item{display:flex;justify-content:space-between;font-size:${Math.round(12*scale)}px;margin:2px 0;}
-    .t-total{font-weight:700;font-size:${Math.round(14*scale)}px;border-top:1px solid ${pc};padding-top:4px;margin-top:4px;}
+    .t-item{display:flex;justify-content:space-between;gap:8px;font-size:${Math.round(12*scale)}px;margin:2px 0;}
+    .t-item span:last-child{white-space:nowrap;}
+    .t-total{font-weight:800;font-size:${Math.round(16*scale)}px;padding:4px 0;}
+    .t-bullet-item{font-size:${Math.round(15*scale)}px;font-weight:700;margin:4px 0;}
+    .t-obs-line{border-bottom:1px solid ${pc};height:${Math.round(16*scale)}px;margin:6px 4px;}
   </style></head><body>
     <div class="t-center">
       <div class="t-title">${(cfg.name||'SHOGATSU').toUpperCase()}</div>
-      <div class="t-sub">${stationLabels[station]||station} — ${isCaixa?'COMPROVANTE':'VIA DE PRODUÇÃO'}</div>
+      <div class="t-sub">${esc(cfg.tagline||'CULINÁRIA ORIENTAL')}</div>
     </div>
+    <div class="t-hr-solid"></div>
+    ${isCaixa?`
+    <div class="t-doctype">COMPROVANTE</div>
+    <div class="t-row">Pedido${order.ticketNumber?' Nº '+order.ticketNumber:' #'+order.id}</div>
+    <div class="t-row">Data: ${dateStr}</div>
+    <div class="t-row">Hora: ${time}</div>
+    <div class="t-row">Ref.: #${refShort}</div>
+    <div class="t-row">${modeTag}</div>
+    `:`
+    <div class="t-sector">${STATION_ICONS_PC[station]||''} ${(stationLabels[station]||station).toUpperCase()}</div>
+    <div class="t-doctype">VIA DE PRODUÇÃO</div>
+    <div class="t-row t-center">Pedido${order.ticketNumber?' Nº '+order.ticketNumber:' #'+order.id} · Ref.: #${refShort}</div>
+    <div class="t-row t-center">${modeTag}</div>
     <div class="t-hr"></div>
-    ${order.ticketNumber?`<div class="t-center" style="font-size:${Math.round(26*(Number(cfg.printSize)||14)/14)}px;font-weight:800;margin:6px 0;">Nº ${order.ticketNumber}</div>`:`<div class="t-row"><b>Pedido #${order.id}</b></div>`}
-    <div class="t-row" style="text-align:center;color:#666;">${time} · ref. #${order.id}</div>
-    <div class="t-row">${order.mode==='delivery'?'🛵 DELIVERY':'🏪 RETIRADA'}</div>
-    ${!isCaixa?`
-    <div class="t-row"><b>Entrada:</b> ${time}</div>
-    <div class="t-row"><b>Previsão de saída:</b> ${calcPrevisaoSaida(order.createdAt, (cfg.stations&&cfg.stations[station]&&cfg.stations[station].prepTime)||15)}</div>`:''}
+    <div class="t-block-title">HORÁRIOS</div>
+    <div class="t-item"><span>Entrada:</span><span>${time}</span></div>
+    <div class="t-item"><span>Saída prevista:</span><span>${calcPrevisaoSaida(order.createdAt, (cfg.stations&&cfg.stations[station]&&cfg.stations[station].prepTime)||15)}</span></div>
+    `}
     <div class="t-hr"></div>
     ${bodyHTML}
+    <div class="t-hr-solid"></div>
+    ${isCaixa?`<div class="t-row t-center">Obrigado pela preferência!</div>${cfg.siteUrl?`<div class="t-row t-center">${esc(cfg.siteUrl)}</div>`:''}`:''}
     <script>
       // Imprime assim que a via terminar de carregar, e fecha a janela sozinha
       // depois — tanto pelo evento "depois de imprimir" (mais confiável) quanto
@@ -2647,23 +2827,28 @@ function renderManualItemSearch(q){
   const results=[];
   menu.forEach(sec=>sec.items.forEach(item=>{
     if(item.available===false)return;
-    if((item.name||'').toLowerCase().includes(q)) results.push(item);
+    if((item.name||'').toLowerCase().includes(q)) results.push({item, sec});
   }));
   manualSearchResults=results.slice(0,10);
   if(!manualSearchResults.length){ box.innerHTML='<div style="padding:10px;font-size:11px;color:var(--muted);">Nenhum prato encontrado.</div>'; return; }
-  box.innerHTML=manualSearchResults.map((item,idx)=>`
+  box.innerHTML=manualSearchResults.map((r,idx)=>`
     <div class="o-result-row" onclick="addManualItemFromMenu(${idx})">
-      ${item.image?`<img class="o-result-thumb" src="${item.image.replace(/"/g,'&quot;')}" alt="">`:`<div class="o-result-thumb empty">🍽️</div>`}
-      <span class="o-result-name">${item.name}</span>
-      <span class="o-result-price">R$ ${Number(item.price).toFixed(2).replace('.',',')}</span>
+      ${r.item.image?`<img class="o-result-thumb" src="${r.item.image.replace(/"/g,'&quot;')}" alt="">`:`<div class="o-result-thumb empty">🍽️</div>`}
+      <span class="o-result-name">${r.item.name}</span>
+      <span class="o-result-price">R$ ${Number(r.item.price).toFixed(2).replace('.',',')}</span>
     </div>`).join('');
 }
+// v44: BUG CORRIGIDO — pedido manual criado pelo painel também caía sempre em 'cozinha' quando
+// o item não tinha stations próprias, ignorando a via configurada na categoria (mesmo bug do
+// cardápio do cliente). Agora usa a via da categoria como fallback antes de cair pra cozinha.
 function addManualItemFromMenu(idx){
-  const item=manualSearchResults[idx];
-  if(!item)return;
+  const r=manualSearchResults[idx];
+  if(!r)return;
+  const item=r.item, sec=r.sec;
+  const stations=(item.stations&&item.stations.length)?item.stations:((sec&&sec.stations&&sec.stations.length)?sec.stations:['cozinha']);
   const existing=manualOrderItems.find(i=>i.name===item.name && !i.custom);
   if(existing) existing.qty++;
-  else manualOrderItems.push({name:item.name, qty:1, price:Number(item.price)||0, image:item.image||'', stations:(item.stations&&item.stations.length)?item.stations:['cozinha']});
+  else manualOrderItems.push({name:item.name, qty:1, price:Number(item.price)||0, image:item.image||'', stations});
   document.getElementById('o-item-search').value='';
   document.getElementById('o-item-results').innerHTML='';
   renderManualOrderItems();
@@ -4647,5 +4832,6 @@ if(token){
   boot();
 }
 </script>
+<script src="/version-check.js"></script>
 </body>
 </html>

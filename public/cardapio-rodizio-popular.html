@@ -324,6 +324,25 @@ function photoBox(url, size){
   </div>`;
 }
 
+// v44: os dados dessa página agora podem vir de cfg.rodizioPopular (editável pelo painel,
+// aba "🔗 QR Code & Links" > "✏️ Editar Cardápio Popular"). O objeto DATA acima continua
+// funcionando como conteúdo padrão/fallback — se o servidor não responder (offline) ou o
+// admin nunca tiver editado nada, a página mostra exatamente o que já mostrava antes.
+async function loadRodizioPopularData(){
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return DATA;
+    const body = await res.json();
+    const saved = body && body.cfg && body.cfg.rodizioPopular;
+    if (!saved) return DATA;
+    // só sobrescreve os campos que existem salvos — o resto continua no padrão.
+    return { ...DATA, ...saved };
+  } catch (e) { return DATA; }
+}
+
+(async function renderPage(){
+  const DATA = await loadRodizioPopularData();
+
 document.getElementById('hero-photo').innerHTML = photoBox(DATA.heroPhoto, 'hero');
 
 // Frases chamativas girando embaixo do título, com fade suave.
@@ -389,6 +408,8 @@ document.getElementById('delivery-hint').innerHTML = (DATA.deliveryUrl
   + `<a href="/avaliar-rodizio.html">⭐ Já veio comer com a gente? Deixe sua avaliação</a>`;
 
 document.getElementById('waste-note').innerHTML = esc(DATA.wasteNote).replace('Taxa de desperdício', '<b>Taxa de desperdício</b>');
+
+})();
 </script>
 </body>
 </html>

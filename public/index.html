@@ -1829,11 +1829,27 @@ function getItemByKey(key) {
   const sec = menu.find(s => s.id === secId);
   return sec ? sec.items[parseInt(ii)] : null;
 }
+// v44: BUG CORRIGIDO — bar e sushibar nunca recebiam impressão. Quando o item em si não tem
+// `stations` própria, o fallback precisa cair pra via configurada na CATEGORIA (definida em
+// "Editar Cardápio" > categoria), e só usar 'cozinha' se nem a categoria tiver via definida.
+// Antes o fallback ia direto pra ['cozinha'] fixo, ignorando a categoria — então qualquer item
+// novo (sem stations gravada nele) saía sempre como cozinha, mesmo em categoria de Bar/Sushibar.
+function getSectionByKey(key) {
+  const idx = key.lastIndexOf('-');
+  const secId = key.slice(0, idx);
+  return menu.find(s => s.id === secId);
+}
+function stationsForItemKey(key, item) {
+  if (item && item.stations && item.stations.length) return item.stations;
+  const sec = getSectionByKey(key);
+  if (sec && sec.stations && sec.stations.length) return sec.stations;
+  return ['cozinha'];
+}
 function addToCart(key) {
   const item = getItemByKey(key);
   if (!item || item.available === false) return;
   if (item.variants && item.variants.length) { openVariantPicker(key); return; }
-  if (!cart[key]) cart[key] = { baseKey: key, name: item.name, price: item.price, stations: item.stations && item.stations.length ? item.stations : ['cozinha'], qty: 0 };
+  if (!cart[key]) cart[key] = { baseKey: key, name: item.name, price: item.price, stations: stationsForItemKey(key, item), qty: 0 };
   cart[key].qty++;
   updateCartUI(); renderMenu(); animateAdd(key); refreshCartSummary();
 }
@@ -1931,7 +1947,7 @@ function confirmVariantPicker() {
   const suffix = parts.length ? ` (${parts.join(' · ')})` : '';
   const unitPrice = variantUnitPrice();
   const comboKey = key + '::' + item.variants.map(g => (selections[g.id] || []).slice().sort().join(',')).join('|');
-  if (!cart[comboKey]) cart[comboKey] = { baseKey: key, name: item.name + suffix, price: unitPrice, stations: item.stations && item.stations.length ? item.stations : ['cozinha'], qty: 0 };
+  if (!cart[comboKey]) cart[comboKey] = { baseKey: key, name: item.name + suffix, price: unitPrice, stations: stationsForItemKey(key, item), qty: 0 };
   cart[comboKey].qty += qty;
   closeVariantPicker();
   updateCartUI(); renderMenu();
@@ -3023,9 +3039,17 @@ updatePushButtonState();
 
 <script>
 (function(){
-  const KEY = 'shogatsu_install_dismissed';
-  if (localStorage.getItem(KEY)) return; // já fechou antes, não mostra de novo
-  // já está instalado (rodando como app)? não mostra.
+  // v44: alerta "instalar app" virou CONTÍNUO — antes, um clique em "✕" escondia o banner
+  // pra sempre (guardava um "sim" fixo no localStorage). Agora "✕" só adia por alguns dias;
+  // o banner volta a aparecer depois, até o cliente realmente instalar o app ou continuar
+  // fechando. Assim que o app é instalado de verdade (evento appinstalled, ou detectamos que
+  // já roda em modo standalone), o alerta some de vez — nunca incomoda quem já instalou.
+  const KEY = 'shogatsu_install_dismissed_at';
+  const SNOOZE_DAYS = 3;
+  const dismissedAt = Number(localStorage.getItem(KEY) || 0);
+  const snoozedRecently = dismissedAt && (Date.now() - dismissedAt) < SNOOZE_DAYS * 24 * 60 * 60 * 1000;
+  if (snoozedRecently) return; // fechou faz pouco tempo — não insiste agora, volta depois
+  // já está instalado (rodando como app)? não mostra, nunca mais precisa perguntar.
   if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
 
   const banner = document.getElementById('install-banner');
@@ -3036,15 +3060,16 @@ updatePushButtonState();
   let deferredPrompt = null;
 
   function showBanner(){ banner.style.display = 'flex'; }
-  function dismiss(){ banner.style.display = 'none'; localStorage.setItem(KEY, '1'); }
+  function snooze(){ banner.style.display = 'none'; localStorage.setItem(KEY, String(Date.now())); }
+  function dismissForever(){ banner.style.display = 'none'; localStorage.setItem(KEY, String(Date.now() * 10)); } // data bem no futuro = não volta
 
-  closeBtn.addEventListener('click', dismiss);
+  closeBtn.addEventListener('click', snooze);
 
   if (isIOS) {
     // Safari não tem instalação em 1 toque — mostra o passo a passo e não precisa esperar evento nenhum
     textEl.textContent = 'Toque em Compartilhar (⬆️) e depois em "Adicionar à Tela de Início".';
     btn.textContent = 'Entendi';
-    btn.addEventListener('click', dismiss);
+    btn.addEventListener('click', snooze);
     setTimeout(showBanner, 4000);
   } else {
     // Chrome/Android/Edge: espera o navegador avisar que dá pra instalar
@@ -3058,11 +3083,12 @@ updatePushButtonState();
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       deferredPrompt = null;
-      dismiss();
+      dismissForever();
     });
-    window.addEventListener('appinstalled', dismiss);
+    window.addEventListener('appinstalled', dismissForever);
   }
 })();
 </script>
+<script src="/version-check.js"></script>
 </body>
 </html>
