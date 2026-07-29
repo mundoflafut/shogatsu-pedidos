@@ -190,6 +190,9 @@ const DEFAULT_CFG = {
   reservations: { enabled: true, maxPeoplePerTable: 12, note: '' },
   // ── Agendamento de Pedidos (cliente escolhe um horário futuro pra retirada/entrega) ──
   scheduling: { enabled: true, minMinutesAhead: 60, maxDaysAhead: 7 },
+  // ── v47: Splash Screen Premium — sequência de fotos em tela cheia ao abrir o app, com
+  // animação suave (zoom/fade/parallax), configurável pelo painel (Configurações → Splash). ──
+  splash: { enabled: false, durationSeconds: 3, transition: 'zoom', photos: [] },
   // ── Cardápio do Rodízio Popular (página pública cardapio-rodizio-popular.html) — v39:
   // antes esses dados ficavam fixos dentro do próprio HTML; agora vêm daqui, editáveis pela
   // aba "🔗 QR Code & Links" do painel, sem precisar mexer em nenhum arquivo.
@@ -393,7 +396,8 @@ function readConfig() {
     vapid: { ...DEFAULT_CFG.vapid, ...(data.cfg.vapid || {}) },
     reservations: { ...DEFAULT_CFG.reservations, ...(data.cfg.reservations || {}) },
     scheduling: { ...DEFAULT_CFG.scheduling, ...(data.cfg.scheduling || {}) },
-    rodizioPopular: { ...DEFAULT_CFG.rodizioPopular, ...(data.cfg.rodizioPopular || {}) }
+    rodizioPopular: { ...DEFAULT_CFG.rodizioPopular, ...(data.cfg.rodizioPopular || {}) },
+    splash: { ...DEFAULT_CFG.splash, ...(data.cfg.splash || {}), photos: Array.isArray(data.cfg.splash && data.cfg.splash.photos) ? data.cfg.splash.photos : DEFAULT_CFG.splash.photos }
   };
   // Se a auto-programação de horário estiver ativada, o status aberto/fechado
   // passa a ser calculado sozinho a partir do horário configurado — o toggle
@@ -958,7 +962,12 @@ const server = http.createServer(async (req, res) => {
           weekSchedule: (Array.isArray(body.cfg && body.cfg.weekSchedule) && body.cfg.weekSchedule.length === 7)
             ? current.cfg.weekSchedule.map((d, i) => ({ ...d, ...(body.cfg.weekSchedule[i] || {}) }))
             : current.cfg.weekSchedule,
-          rodizioPopular: { ...current.cfg.rodizioPopular, ...(body.cfg && body.cfg.rodizioPopular || {}) }
+          rodizioPopular: { ...current.cfg.rodizioPopular, ...(body.cfg && body.cfg.rodizioPopular || {}) },
+          splash: {
+            ...current.cfg.splash,
+            ...(body.cfg && body.cfg.splash || {}),
+            photos: Array.isArray(body.cfg && body.cfg.splash && body.cfg.splash.photos) ? body.cfg.splash.photos : current.cfg.splash.photos
+          }
         },
         menu: body.menu || current.menu
       };
@@ -985,6 +994,27 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── Gerenciamento de usuários do painel (só o usuário master pode mexer) ──
+  // ── GET /api/admin/customer-lookup?phone=... — v47: usado pela tela de Novo Pedido Manual
+  // pra preencher nome/endereço/CEP sozinho quando o telefone já é de um cliente conhecido, sem
+  // precisar redigitar tudo de novo. Primeiro tenta o cadastro (customers.json); se o cliente
+  // nunca criou conta mas já tem pedido anterior, usa os dados do pedido mais recente dele. ──
+  if (pathname === '/api/admin/customer-lookup' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const phone = normalizePhone(query.phone || '');
+    if (!phone) return sendJSON(res, 200, { found: false });
+    const customers = readJSON(CUSTOMERS_FILE);
+    const cust = findCustomer(customers, phone);
+    const orders = readJSON(ORDERS_FILE).filter(o => normalizePhone(o.phone) === phone).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const lastOrder = orders[0];
+    if (!cust && !lastOrder) return sendJSON(res, 200, { found: false });
+    return sendJSON(res, 200, {
+      found: true,
+      name: (cust && cust.name) || (lastOrder && lastOrder.name) || '',
+      address: (cust && cust.lastAddress) || (lastOrder && lastOrder.mode === 'delivery' ? lastOrder.address : '') || '',
+      ordersCount: orders.length
+    });
+  }
+
   // ── GET /api/admin/customers — lista clientes cadastrados com estatísticas (painel, promoções por SMS) ──
   if (pathname === '/api/admin/customers' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver os clientes.' });
@@ -1965,7 +1995,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/admin/send-push' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra enviar notificações.' });
     try {
-      const { phones, title, message, url: targetUrl } = await readBody(req);
+      const { phones, title, message, url: targetUrl, image, sound } = await readBody(req);
       const { cfg } = readConfig();
       if (!cfg.vapid || !cfg.vapid.publicKey || !cfg.vapid.privateKeyJwk) return sendJSON(res, 400, { error: 'Chaves VAPID ainda não configuradas — reinicie o servidor.' });
       const msg = String(message || '').slice(0, 200).trim();
@@ -1975,7 +2005,11 @@ function estimateDeliveryWindow(order, cfg) {
       const segment = Array.isArray(phones) && phones.length ? new Set(phones.map(normalizePhone)) : null;
       const targets = segment ? subs.filter(s => segment.has(s.phone)) : subs;
       if (!targets.length) return sendJSON(res, 400, { error: 'Nenhum inscrito encontrado pra esse envio.' });
-      const payload = { title: ttl, body: msg, url: targetUrl || '/', icon: '/icon-192.png' };
+      // v47 — BUG CORRIGIDO: o formulário de campanha (painel.html) já mandava "image" e
+      // "sound" desde a v45, mas esse endpoint nunca lia esses campos do corpo da requisição —
+      // então toda notificação saía sem banner e sem o sinal pra tocar o sino oriental,
+      // mesmo quando o admin preenchia a imagem. Agora repassa os dois pro payload de verdade.
+      const payload = { title: ttl, body: msg, url: targetUrl || '/', icon: '/icon-192.png', image: image || undefined, sound: sound || 'oriental', tag: 'shogatsu-campanha-' + Date.now() };
       const results = { sent: 0, failed: 0, errors: [] };
       const expiredEndpoints = [];
       for (const sub of targets) {
