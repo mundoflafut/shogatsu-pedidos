@@ -55,84 +55,113 @@ function buildPrinter() {
 }
 
 const money = (n) => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+// v46: quais vias esse agente é responsável por imprimir (um computador pode rodar mais de um
+// agente, um por impressora física — ex: um pro Caixa, outro pra Cozinha). Se não configurar
+// nada, assume só "caixa" (comportamento antigo, continua funcionando sem quebrar quem já usava).
+const MY_STATIONS = Array.isArray(cfg.stations) && cfg.stations.length ? cfg.stations : ['caixa'];
+const STATION_LABELS = { caixa: 'Caixa', cozinha: 'Cozinha', sushibar: 'Sushibar', bar: 'Bar' };
 
-function buildReceiptLines(order, storeName) {
-  // Monta o texto do ticket de forma independente da biblioteca, pra poder logar em TEST_MODE
-  // exatamente o que seria impresso, sem precisar de impressora real pra conferir o conteúdo.
-  const lines = [];
-  lines.push(`== ${storeName || 'PEDIDO'} ==`);
-  lines.push(`Pedido: ${order.ticketNumber ? '#' + order.ticketNumber : order.id}`);
-  lines.push(`Hora: ${new Date(order.createdAt).toLocaleString('pt-BR')}`);
-  lines.push(`Cliente: ${order.name || '-'}`);
-  if (order.phone) lines.push(`Telefone: ${order.phone}`);
-  lines.push(`Modo: ${order.mode === 'delivery' ? 'Entrega' : 'Retirada'}`);
-  if (order.mode === 'delivery' && order.address) lines.push(`Endereço: ${order.address}`);
-  if (order.scheduledFor) lines.push(`Agendado para: ${new Date(order.scheduledFor).toLocaleString('pt-BR')}`);
-  lines.push('---');
-  (order.items || []).forEach(it => lines.push(`${it.qty}x ${it.name}`));
-  lines.push('---');
-  if (order.obs) lines.push(`Obs: ${order.obs}`);
-  lines.push(`Pagamento: ${(order.payMethod || '-').toUpperCase()}${order.paid ? ' (PAGO)' : ''}`);
-  lines.push(`TOTAL: ${money(order.total)}`);
-  return lines;
+// v46: layout igual ao das outras vias do sistema (painel.html/server.js) — cabeçalho
+// centralizado, blocos com título, "TOTAL" em destaque na via do caixa, e "ITENS
+// DA <SETOR>" + espaço de observações nas vias de produção (cozinha/sushibar/bar).
+function printStationTicket(printer, order, station, storeName) {
+  const isCaixa = station === 'caixa';
+  const items = isCaixa ? (order.items || []) : (order.items || []).filter(i => (i.stations || []).includes(station));
+  if (!items.length) return false; // essa via não tem nada desse pedido — não desperdiça papel
+
+  printer.alignCenter();
+  printer.bold(true); printer.setTextDoubleHeight();
+  printer.println((storeName || 'SHOGATSU').toUpperCase());
+  printer.setTextNormal(); printer.bold(false);
+  printer.println('CULINARIA ORIENTAL');
+  printer.drawLine();
+
+  if (isCaixa) {
+    printer.println('COMPROVANTE');
+    printer.alignLeft();
+    printer.println(order.ticketNumber ? `Pedido Nº ${order.ticketNumber}` : `Pedido #${order.id}`);
+    printer.println(`Hora: ${new Date(order.createdAt).toLocaleString('pt-BR')}`);
+    printer.println(order.mode === 'delivery' ? 'ENTREGA (DELIVERY)' : 'RETIRADA');
+    printer.drawLine();
+    printer.bold(true); printer.println('CLIENTE'); printer.bold(false);
+    printer.drawLine();
+    printer.println(order.name || '-');
+    if (order.phone) printer.println('Tel: ' + order.phone);
+    if (order.mode === 'delivery' && order.address) printer.println('End: ' + order.address);
+    if (order.scheduledFor) printer.println('Agendado: ' + new Date(order.scheduledFor).toLocaleString('pt-BR'));
+    printer.drawLine();
+    printer.bold(true); printer.println('ITENS'); printer.bold(false);
+    printer.drawLine();
+    items.forEach(it => { printer.bold(true); printer.leftRight(`${it.qty}x ${it.name}`, money(it.price * it.qty)); printer.bold(false); });
+    if (order.obs) { printer.drawLine(); printer.println('Obs: ' + order.obs); }
+    printer.drawLine();
+    printer.println(`Pagamento: ${(order.payMethod || '-').toUpperCase()}${order.paid ? ' (PAGO)' : ''}`);
+    printer.setTextDoubleHeight(); printer.bold(true);
+    printer.leftRight('TOTAL', money(order.total));
+    printer.bold(false); printer.setTextNormal();
+  } else {
+    printer.println((STATION_LABELS[station] || station).toUpperCase());
+    printer.println('VIA DE PRODUCAO');
+    printer.alignLeft();
+    printer.println((order.ticketNumber ? `Pedido Nº ${order.ticketNumber}` : `Pedido #${order.id}`) + `  Ref.: #${String(order.id).slice(-11).toUpperCase()}`);
+    printer.println(order.mode === 'delivery' ? 'DELIVERY' : 'RETIRADA');
+    printer.drawLine();
+    printer.bold(true); printer.println('ITENS DA ' + (STATION_LABELS[station] || station).toUpperCase()); printer.bold(false);
+    printer.drawLine();
+    items.forEach(it => printer.println('* ' + it.qty + 'x ' + it.name));
+    printer.drawLine();
+    printer.println('Observacoes:');
+    if (order.obs) printer.println(order.obs);
+    else { printer.println('_______________________________'); printer.println('_______________________________'); }
+  }
+  printer.newLine();
+  printer.cut();
+  return true;
 }
 
 async function printOrder(order) {
-  const lines = buildReceiptLines(order, cfg.storeName);
-
   if (TEST_MODE) {
-    log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id}:\n   ` + lines.join('\n   '));
+    log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
     return true;
   }
+  let anyPrinted = false;
+  for (const station of MY_STATIONS) {
+    const printer = buildPrinter();
+    try {
+      const connected = await printer.isPrinterConnected();
+      if (!connected) throw new Error('Impressora não respondeu (verifique se está ligada e na mesma rede/USB).');
+      const hadItems = printStationTicket(printer, order, station, cfg.storeName);
+      if (!hadItems) continue; // sem itens dessa via nesse pedido — pula sem imprimir papel em branco
+      await printer.execute();
+      anyPrinted = true;
+      log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso.`);
+    } catch (err) {
+      log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}"): ${err.message}`);
+    }
+  }
+  return anyPrinted;
+}
 
+// v46: teste de impressão pedido pelo painel ("🖨 Testar" numa via com método Automática) —
+// imprime só se essa via for uma das que ESTE agente cuida (evita confusão quando tem mais de
+// um agente rodando, cada um numa impressora diferente).
+async function printTestTicket(payload) {
+  if (!MY_STATIONS.includes(payload.station)) return;
+  if (TEST_MODE) { log(`🧪 [TEST_MODE] Teste de impressão pra via "${payload.station}":\n   ` + String(payload.text || '').split('\n').join('\n   ')); return; }
   const printer = buildPrinter();
   try {
     const connected = await printer.isPrinterConnected();
-    if (!connected) throw new Error('Impressora não respondeu (verifique se está ligada e na mesma rede/USB).');
-
-    printer.alignCenter();
-    printer.setTextDoubleHeight();
-    printer.bold(true);
-    printer.println(cfg.storeName || 'PEDIDO');
+    if (!connected) throw new Error('Impressora não respondeu.');
+    printer.alignCenter(); printer.bold(true);
+    printer.println('TESTE DE IMPRESSAO');
     printer.bold(false);
-    printer.setTextNormal();
-    printer.println(order.ticketNumber ? `Pedido #${order.ticketNumber}` : order.id);
-    printer.drawLine();
-
-    printer.alignLeft();
-    printer.println(`Hora: ${new Date(order.createdAt).toLocaleString('pt-BR')}`);
-    printer.println(`Cliente: ${order.name || '-'}`);
-    if (order.phone) printer.println(`Telefone: ${order.phone}`);
-    printer.println(`Modo: ${order.mode === 'delivery' ? 'ENTREGA' : 'RETIRADA'}`);
-    if (order.mode === 'delivery' && order.address) printer.println(`Endereço: ${order.address}`);
-    if (order.scheduledFor) printer.println(`Agendado: ${new Date(order.scheduledFor).toLocaleString('pt-BR')}`);
-    printer.drawLine();
-
-    (order.items || []).forEach(it => {
-      printer.bold(true);
-      printer.println(`${it.qty}x ${it.name}`);
-      printer.bold(false);
-    });
-    printer.drawLine();
-
-    if (order.obs) { printer.println(`Obs: ${order.obs}`); printer.drawLine(); }
-
-    printer.println(`Pagamento: ${(order.payMethod || '-').toUpperCase()}${order.paid ? ' (PAGO)' : ''}`);
-    printer.setTextDoubleHeight();
-    printer.bold(true);
-    printer.leftRight('TOTAL', money(order.total));
-    printer.bold(false);
-    printer.setTextNormal();
-
-    printer.newLine();
-    printer.cut();
-
+    printer.println('Via: ' + (payload.label || payload.station));
+    printer.println(new Date().toLocaleString('pt-BR'));
+    printer.newLine(); printer.cut();
     await printer.execute();
-    log(`✅ Pedido ${order.id} impresso com sucesso.`);
-    return true;
+    log(`✅ Teste de impressão da via "${payload.station}" concluído.`);
   } catch (err) {
-    log(`❌ Falha ao imprimir pedido ${order.id}: ${err.message}`);
-    return false;
+    log(`❌ Falha no teste de impressão (via "${payload.station}"): ${err.message}`);
   }
 }
 
@@ -195,12 +224,21 @@ function connectStream() {
         const dataLine = part.split('\n').find(l => l.startsWith('data:'));
         if (!eventLine || !dataLine) continue;
         const eventName = eventLine.slice(6).trim();
-        if (eventName !== 'new-order') continue;
-        try {
-          const order = JSON.parse(dataLine.slice(5).trim());
-          log(`🆕 Pedido novo recebido: ${order.id} (${order.name})`);
-          printOrder(order);
-        } catch (e) { log(`⚠️  Não consegui interpretar o pedido recebido: ${e.message}`); }
+        if (eventName === 'new-order') {
+          try {
+            const order = JSON.parse(dataLine.slice(5).trim());
+            log(`🆕 Pedido novo recebido: ${order.id} (${order.name})`);
+            printOrder(order);
+          } catch (e) { log(`⚠️  Não consegui interpretar o pedido recebido: ${e.message}`); }
+        } else if (eventName === 'print-test') {
+          // v46: teste de impressão sob demanda, disparado pelo botão "🖨 Testar" no painel
+          // quando a via está configurada como "Automática".
+          try {
+            const payload = JSON.parse(dataLine.slice(5).trim());
+            log(`🧪 Teste de impressão recebido pra via "${payload.station}".`);
+            printTestTicket(payload);
+          } catch (e) { log(`⚠️  Não consegui interpretar o teste de impressão: ${e.message}`); }
+        }
       }
     });
     res.on('end', () => { log('🔌 Conexão encerrada pelo servidor. Reconectando...'); scheduleReconnect(); });

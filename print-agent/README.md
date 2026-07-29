@@ -46,6 +46,16 @@ Copie `config.example.json` pra `config.json` e preencha:
     "Dispositivos e Impressoras")
   - **USB (Linux)**: geralmente `"/dev/usb/lp0"`
 - `printerWidth`: `42` pra impressora de 58mm, `48` pra 80mm (a mais comum)
+- `stations`: lista das vias que ESSE agente/computador vai imprimir, ex:
+  `["caixa", "cozinha"]`. Se a loja tiver uma impressora só, pode listar todas
+  (`["caixa","cozinha","sushibar","bar"]`) que ele imprime uma via separada pra cada uma no
+  mesmo pedido. Se tiver mais de uma impressora, rode um agente por computador/impressora,
+  cada um com o `stations` só das vias daquela impressora.
+
+⚠️ **Pra esse agente ter efeito, a via correspondente precisa estar configurada como
+"🤖 Automática" no painel (Configurações → Impressoras) — não como "Navegador".** É a
+combinação dos dois que dá a impressão automática de verdade: o painel para de tentar
+imprimir pelo navegador (que sempre pede confirmação) e esse agente assume sozinho.
 
 ### 5. Teste sem imprimir de verdade (opcional, mas recomendado)
 ```bash
