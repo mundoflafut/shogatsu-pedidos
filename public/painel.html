@@ -1111,6 +1111,42 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
       </div>
 
+      <div class="settings-section-title">🎬 Splash Screen (Tela de Abertura)</div>
+      <div class="settings-grid">
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">✨ Sequência de fotos ao abrir o app</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Mostra fotos em tela cheia (pratos, ambiente, promoções) com animação suave por
+            alguns segundos antes de abrir o cardápio — estilo iFood/Uber Eats/Airbnb.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="splash-enabled"/> Ativar Splash Screen
+          </label>
+          <div class="field-row">
+            <div class="field">
+              <label>Duração total (2 a 5 segundos)</label>
+              <input type="number" id="splash-duration" min="2" max="5" step="0.5" value="3"/>
+            </div>
+            <div class="field">
+              <label>Efeito de transição</label>
+              <select id="splash-transition">
+                <option value="zoom">Zoom lento (Ken Burns)</option>
+                <option value="parallax">Parallax (zoom + deslocamento)</option>
+                <option value="fade">Fade simples</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:6px;">
+            <label>Fotos (uma por linha)</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Cole o link de cada foto — pode usar as mesmas fotos já enviadas no cardápio/galeria. Ordem aqui é a ordem de exibição.</div>
+            <div id="splash-photos-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+            <button type="button" class="btn secondary sm" onclick="splashAddPhoto()">+ Foto</button>
+          </div>
+          <button type="button" class="btn primary" style="margin-top:14px;" onclick="saveSplashConfig()">💾 Salvar Splash Screen</button>
+          <div id="splash-save-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+      </div>
+
       <div class="settings-section-title">🖨 Impressão</div>
       <div class="settings-grid">
         <div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
@@ -1488,8 +1524,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="modal-body">
       <div class="field-row">
         <div class="field"><label>Nome do Cliente *</label><input id="o-name" placeholder="Nome"/></div>
-        <div class="field"><label>Telefone</label><input id="o-phone" placeholder="(22) 99999-9999"/></div>
+        <div class="field"><label>Telefone</label><input id="o-phone" placeholder="(22) 99999-9999" onblur="lookupManualOrderCustomer()"/></div>
       </div>
+      <p id="o-lookup-hint" style="display:none;font-size:11px;color:var(--gold);margin:2px 0 8px;"></p>
       <div class="field"><label>Endereço / Obs</label><input id="o-addr" placeholder="Rua, número, bairro (ou RETIRADA)"/></div>
       <div class="field">
         <label>Itens do Pedido</label>
@@ -2407,14 +2444,15 @@ function rpRenderHighlights(){
 }
 function rpAddHighlight(){ rpDraft.highlights.push({icon:'✨',label:''}); rpRenderHighlights(); }
 function rpRemoveHighlight(i){ rpDraft.highlights.splice(i,1); rpRenderHighlights(); }
-function rpItemsToText(items){
-  return (items||[]).map(it => typeof it==='string' ? it : (it.sub ? `${it.name} | ${it.sub}` : (it.name||''))).join('\n');
+// v47: edição de itens ficou mais fácil — cada item agora é uma linha própria (nome + sub-
+// título opcional + botão de remover), em vez de uma caixa de texto só onde era fácil bagunçar
+// a formatação "Nome | subtítulo" digitando errado. Ainda guarda os dados no mesmo formato de
+// sempre (string simples ou {name, sub}) — só mudou a forma de editar, não o que é salvo.
+function rpNormalizeItem(it){
+  return typeof it === 'string' ? { name: it, sub: '' } : { name: it.name || '', sub: it.sub || '' };
 }
-function rpTextToItems(text){
-  return String(text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
-    const parts = l.split('|').map(p=>p.trim());
-    return parts.length>1 ? { name: parts[0], sub: parts.slice(1).join(' | ') } : parts[0];
-  });
+function rpItemToSave(it){
+  return it.sub ? { name: it.name, sub: it.sub } : it.name;
 }
 function rpRenderCategories(){
   document.getElementById('rp-categories-list').innerHTML = (rpDraft.categories||[]).map((c,i)=>`
@@ -2427,9 +2465,28 @@ function rpRenderCategories(){
         <button type="button" class="btn secondary sm" onclick="rpDuplicateCategory(${i})" title="Duplicar categoria">⧉</button>
         <button type="button" class="btn secondary sm" onclick="rpRemoveCategory(${i})" title="Remover categoria">🗑</button>
       </div>
-      <textarea rows="4" style="width:100%;font-family:inherit;font-size:12px;padding:8px;margin-top:6px;" oninput="rpDraft.categories[${i}].items=rpTextToItems(this.value)">${esc(rpItemsToText(c.items))}</textarea>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+        ${(c.items||[]).map((rawIt,j)=>{ const it = rpNormalizeItem(rawIt); return `
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="text" placeholder="Nome do item" value="${esc(it.name)}" style="flex:2;" oninput="rpItemField(${i},${j},'name',this.value)"/>
+          <input type="text" placeholder="Subtítulo (opcional — ex: sob consulta)" value="${esc(it.sub)}" style="flex:2;" oninput="rpItemField(${i},${j},'sub',this.value)"/>
+          <button type="button" class="btn secondary sm" onclick="rpMoveItem(${i},${j},-1)" title="Mover pra cima" ${j===0?'disabled':''}>↑</button>
+          <button type="button" class="btn secondary sm" onclick="rpMoveItem(${i},${j},1)" title="Mover pra baixo" ${j===((c.items||[]).length-1)?'disabled':''}>↓</button>
+          <button type="button" class="btn secondary sm" onclick="rpRemoveItem(${i},${j})" title="Remover item">🗑</button>
+        </div>`; }).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhum item nessa categoria ainda.</div>'}
+      </div>
+      <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="rpAddItem(${i})">+ Item</button>
     </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhuma categoria ainda.</div>';
 }
+function rpItemField(catIdx, itemIdx, field, value){
+  const it = rpNormalizeItem(rpDraft.categories[catIdx].items[itemIdx]);
+  it[field] = value;
+  rpDraft.categories[catIdx].items[itemIdx] = rpItemToSave(it);
+  // não re-renderiza aqui — re-renderizar a cada tecla digitada faria o input perder o foco
+}
+function rpAddItem(catIdx){ rpDraft.categories[catIdx].items.push(''); rpRenderCategories(); }
+function rpRemoveItem(catIdx, itemIdx){ rpDraft.categories[catIdx].items.splice(itemIdx,1); rpRenderCategories(); }
+function rpMoveItem(catIdx, itemIdx, dir){ rpMove(rpDraft.categories[catIdx].items, itemIdx, dir, rpRenderCategories); }
 function rpAddCategory(){ rpDraft.categories.push({icon:'🍣',title:'',items:[]}); rpRenderCategories(); }
 function rpRemoveCategory(i){ rpDraft.categories.splice(i,1); rpRenderCategories(); }
 // v45.1: duplicar uma categoria inteira (com os itens) — útil quando duas categorias são bem
@@ -2485,6 +2542,50 @@ function collectWeekScheduleFromEditor(){
     openTime: document.getElementById('ws-openTime-'+i).value || '18:00',
     closeTime: document.getElementById('ws-closeTime-'+i).value || '23:00'
   }));
+}
+
+// ═══════════════════════════════════════════
+// v47: SPLASH SCREEN PREMIUM — administração das fotos/duração/efeito
+// ═══════════════════════════════════════════
+let splashDraftPhotos = [];
+function renderSplashEditor(){
+  if(!document.getElementById('splash-enabled')) return;
+  const s = cfg.splash || { enabled:false, durationSeconds:3, transition:'zoom', photos:[] };
+  document.getElementById('splash-enabled').checked = !!s.enabled;
+  document.getElementById('splash-duration').value = s.durationSeconds || 3;
+  document.getElementById('splash-transition').value = s.transition || 'zoom';
+  splashDraftPhotos = JSON.parse(JSON.stringify(s.photos || []));
+  renderSplashPhotosList();
+}
+function renderSplashPhotosList(){
+  const el = document.getElementById('splash-photos-list');
+  el.innerHTML = splashDraftPhotos.map((p,i)=>{
+    const url = typeof p === 'string' ? p : (p.url||'');
+    return `
+    <div style="display:flex;align-items:center;gap:8px;">
+      ${url ? `<img src="${url.replace(/"/g,'&quot;')}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none';"/>` : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}
+      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg" style="flex:1;" oninput="splashDraftPhotos[${i}]={url:this.value};"/>
+      <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},-1,renderSplashPhotosList)" ${i===0?'disabled':''} title="Mover pra cima">↑</button>
+      <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},1,renderSplashPhotosList)" ${i===(splashDraftPhotos.length-1)?'disabled':''} title="Mover pra baixo">↓</button>
+      <button type="button" class="btn secondary sm" onclick="splashRemovePhoto(${i})" title="Remover">🗑</button>
+    </div>`;
+  }).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhuma foto ainda — adicione pelo menos uma pra ativar a splash screen.</div>';
+}
+function splashAddPhoto(){ splashDraftPhotos.push({url:''}); renderSplashPhotosList(); }
+function splashRemovePhoto(i){ splashDraftPhotos.splice(i,1); renderSplashPhotosList(); }
+async function saveSplashConfig(){
+  const statusEl = document.getElementById('splash-save-status');
+  const enabled = document.getElementById('splash-enabled').checked;
+  const photos = splashDraftPhotos.filter(p => (typeof p==='string'?p:p.url||'').trim());
+  if(enabled && !photos.length){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Adicione pelo menos uma foto pra poder ativar.</span>'; return; }
+  const durationSeconds = Math.max(2, Math.min(5, Number(document.getElementById('splash-duration').value)||3));
+  const transition = document.getElementById('splash-transition').value;
+  const splash = { enabled, durationSeconds, transition, photos };
+  const res = await apiPost('/api/config', { cfg: { splash }, menu });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  cfg.splash = splash;
+  statusEl.innerHTML = '<span style="color:var(--green);">✅ Salvo! Já vale na próxima vez que o cardápio for aberto.</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
 }
 
 function generateCustomQr(){
@@ -2744,10 +2845,18 @@ async function printOrder(id, ev, stations){
       printedAny=true;
     }
     else if(d.method==='automatica'){
-      // v46: NADA de janela, NADA de diálogo — quem imprime de verdade é o Agente Local, que já
-      // está escutando os pedidos novos em tempo real por conta própria (ver print-agent.js).
+      // v46/v47: NADA de janela, NADA de diálogo. Primeiro tenta a Extensão (mais fácil de
+      // instalar — ver chrome-extension/); se ela não estiver instalada ou falhar, deixa por
+      // conta do Agente Local, que já está escutando os pedidos novos em tempo real por conta
+      // própria (print-agent.js) — as duas formas convivem, sem exigir escolher uma só.
       if(preOpened[st]) preOpened[st].close();
-      delegatedAny=true;
+      if(shogatsuExtDetected){
+        const r = await printViaExtension(d.order, d.station, d.deliveryWindow);
+        if(r.ok){ printedAny=true; }
+        else { showToast('⚠️ Extensão não conseguiu imprimir', r.error||'Erro desconhecido — o Agente Local (se estiver rodando) ainda pode imprimir essa via.', 6000); delegatedAny=true; }
+      } else {
+        delegatedAny=true;
+      }
     }
     else { if(preOpened[st]) preOpened[st].close(); if(d.printed) printedAny=true; if(d.usedCaixaFallback) fellBackAny=true; }
   }
@@ -2800,6 +2909,84 @@ function confirmPrintChoice(){
 // destaque, ícones só onde ajudam a ler rápido (🛵 entrega, 📞 telefone, 📍 endereço, ⏰ previsão),
 // e compatível com impressoras térmicas de 58mm e 80mm (largura em % da página + fonte configurável).
 const STATION_ICONS_PC = { cozinha:'🍳', sushibar:'🍣', bar:'🍹', caixa:'🧾' };
+// ═══════════════════════════════════════════
+// v47: IMPRESSÃO VIA EXTENSÃO DO NAVEGADOR (chrome-extension/) — outra forma de imprimir
+// sozinho, sem diálogo, além do Agente Local. Ver chrome-extension/README.md pra instalar.
+// ═══════════════════════════════════════════
+let shogatsuExtDetected = false;
+window.addEventListener('message', (e) => {
+  if (e.source !== window || !e.data || e.data.source !== 'shogatsu-ext') return;
+  if (e.data.type === 'shogatsu-ext-pong') shogatsuExtDetected = true;
+});
+// "Toca a porta" assim que o painel carrega — se a extensão estiver instalada, ela responde
+// (content-script.js dela fica ouvindo essa mensagem). Se não estiver, simplesmente não
+// acontece nada, sem erro nenhum — o painel segue confiando só no Agente Local pra essa via.
+window.postMessage({ source: 'shogatsu-page', type: 'shogatsu-ext-ping' }, '*');
+
+// Monta as mesmas linhas do ticket, só que em texto puro (sem tags ESC/POS nem HTML) — é o
+// formato que o gerador de PDF da extensão usa (ver chrome-extension/pdf-lite.js).
+function buildPlainTicketLines(order, station, deliveryWindow){
+  const isCaixa = station==='caixa';
+  const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
+  const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
+  const money = v => 'R$ '+Number(v||0).toFixed(2).replace('.',',');
+  const HR = '--------------------------------', HR2='================================';
+  const L = [];
+  L.push({text:(cfg.name||'SHOGATSU').toUpperCase(), size:12, bold:true, center:true});
+  L.push({text:(cfg.tagline||'CULINARIA ORIENTAL').toUpperCase()});
+  L.push(HR2);
+  if(isCaixa){
+    L.push('COMPROVANTE');
+    L.push(order.ticketNumber?`Pedido Nº ${order.ticketNumber}`:`Pedido #${order.id}`);
+    L.push('Hora: '+new Date(order.createdAt).toLocaleString('pt-BR'));
+    L.push(order.mode==='delivery'?'ENTREGA (DELIVERY)':'RETIRADA');
+    L.push(HR); L.push({text:'CLIENTE',bold:true}); L.push(HR);
+    L.push(order.name||'-');
+    if(order.phone) L.push('Tel: '+order.phone);
+    if(order.mode==='delivery' && order.address) L.push('End: '+order.address);
+    L.push((order.mode==='delivery'?'Previsao: ':'Previsao retirada: ')+(deliveryWindow||'—'));
+    L.push(HR); L.push({text:'ITENS',bold:true}); L.push(HR);
+    items.forEach(i=>L.push(`${i.qty}x ${i.name}  ${money(i.price*i.qty)}`));
+    if(order.obs){ L.push(HR); L.push('Obs: '+order.obs); }
+    L.push(HR); L.push({text:'RESUMO',bold:true}); L.push(HR);
+    L.push(`Subtotal  ${money(order.subtotal)}`);
+    L.push(`Entrega  ${money(order.fee)}`);
+    L.push(HR);
+    L.push({text:`TOTAL  ${money(order.total)}`, bold:true, size:12});
+    L.push(HR2);
+    L.push('Pagamento: '+(order.payMethod||'-'));
+  } else {
+    L.push({text:(stationLabels[station]||station).toUpperCase(), bold:true, center:true});
+    L.push('VIA DE PRODUCAO');
+    L.push(HR);
+    L.push((order.ticketNumber?`Pedido Nº ${order.ticketNumber}`:`Pedido #${order.id}`));
+    L.push(order.mode==='delivery'?'DELIVERY':'RETIRADA');
+    L.push(HR); L.push({text:'ITENS DA '+(stationLabels[station]||station).toUpperCase(), bold:true}); L.push(HR);
+    items.forEach(i=>L.push('* '+i.qty+'x '+i.name));
+    L.push(HR);
+    L.push('Observacoes:');
+    if(order.obs) L.push(order.obs); else { L.push('_______________________________'); }
+  }
+  return L;
+}
+// Manda pra extensão e espera a resposta (sucesso/erro) — timeout de segurança caso a
+// extensão não responda por algum motivo (ex: foi desinstalada depois do "ping" inicial).
+function printViaExtension(order, station, deliveryWindow){
+  return new Promise((resolve) => {
+    const requestId = 'p'+Date.now()+Math.random();
+    const lines = buildPlainTicketLines(order, station, deliveryWindow);
+    const onMsg = (e) => {
+      if(e.source!==window || !e.data || e.data.source!=='shogatsu-ext' || e.data.type!=='shogatsu-print-result') return;
+      if(e.data.requestId!==requestId) return;
+      window.removeEventListener('message', onMsg);
+      resolve(e.data.result || {ok:false, error:'Sem resposta da extensão.'});
+    };
+    window.addEventListener('message', onMsg);
+    window.postMessage({ source:'shogatsu-page', type:'shogatsu-print', requestId, payload:{ station, lines, widthMode: cfg.printWidth||'80mm' } }, '*');
+    setTimeout(() => { window.removeEventListener('message', onMsg); resolve({ok:false, error:'Extensão não respondeu a tempo.'}); }, 8000);
+  });
+}
+
 function openBrowserTicket(order, station, deliveryWindow, existingWin){
   const isCaixa = station==='caixa';
   const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
@@ -2950,6 +3137,23 @@ function openNewOrder(){
 // PEDIDO MANUAL — busca de itens do cardápio (com foto) pra facilitar
 // ═══════════════════════════════════════════
 let manualOrderItems=[]; // { name, qty, price, image, stations }
+// v47 — BUG CORRIGIDO ("tela de pedidos deve manter os dados do cadastro"): o Pedido Manual
+// não puxava nada do cliente que já tinha pedido antes — a equipe precisava redigitar nome e
+// endereço toda vez, mesmo pra quem já é cliente conhecido. Agora, ao sair do campo telefone,
+// busca automaticamente (GET /api/admin/customer-lookup) e preenche nome/endereço sozinho —
+// só quando os campos ainda estão vazios, pra nunca sobrescrever o que a equipe já digitou.
+async function lookupManualOrderCustomer(){
+  const phone = document.getElementById('o-phone').value.trim();
+  const hint = document.getElementById('o-lookup-hint');
+  if(phone.replace(/\D/g,'').length < 10){ hint.style.display='none'; return; }
+  const res = await apiGet('/api/admin/customer-lookup?phone='+encodeURIComponent(phone));
+  if(!res.ok || !res.data.found){ hint.style.display='none'; return; }
+  const nameEl = document.getElementById('o-name'), addrEl = document.getElementById('o-addr');
+  if(!nameEl.value.trim() && res.data.name) nameEl.value = res.data.name;
+  if(!addrEl.value.trim() && res.data.address) addrEl.value = res.data.address;
+  hint.style.display = 'block';
+  hint.textContent = `👤 Cliente conhecido (${res.data.ordersCount} pedido${res.data.ordersCount===1?'':'s'} anterior${res.data.ordersCount===1?'':'es'}) — nome e endereço preenchidos automaticamente.`;
+}
 let manualSearchResults=[];
 function renderManualItemSearch(q){
   q=(q||'').trim().toLowerCase();
@@ -3039,6 +3243,7 @@ async function createOrder(){
   updateNewBadge();
   closeModal('order-modal');
   ['o-name','o-phone','o-addr','o-total'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const lh=document.getElementById('o-lookup-hint'); if(lh) lh.style.display='none';
   manualOrderItems=[];
   showToast('🛒 Pedido criado!',`Pedido ${res.data.order.id} de ${name} adicionado.`);
   refreshCurrentPage();
@@ -4355,6 +4560,7 @@ function loadSettings(){
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
   renderWeekScheduleEditor();
+  renderSplashEditor();
   // v33: aparência do cardápio (foto do prato e fonte)
   const dpsEl=document.getElementById('cfg-dishphotosize');
   if(dpsEl){ dpsEl.value = cfg.dishPhotoSize || 80; document.getElementById('cfg-dishphoto-val').textContent = (cfg.dishPhotoSize||80)+'px'; }
@@ -4636,12 +4842,13 @@ function renderStationsSettings(){
         </div>`:''}
       ${s.method==='automatica'?`
         <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5;">
-          🤖 Imprime sozinha, sem abrir o navegador e sem pedir confirmação nenhuma — mas pra isso
-          funcionar de verdade precisa ter o <b>Agente Local de Impressão</b> rodando num
-          computador dentro da loja, ligado na impressora (pasta <code>print-agent/</code> do
-          sistema — veja o README dessa pasta). É a ÚNICA forma real de impressão 100%
-          automática: nenhum navegador consegue mandar pra uma impressora sem abrir alguma
-          janela de confirmação, isso é uma trava de segurança do próprio navegador.
+          🤖 Imprime sozinha, sem abrir o navegador e sem pedir confirmação — pra isso funcionar,
+          use UMA das duas opções: a <b>Extensão do Chrome/Edge</b> (mais fácil de instalar, veja
+          <code>chrome-extension/README.md</code>) ou o <b>Agente Local</b>
+          (<code>print-agent/README.md</code>, roda por terminal/Node.js — mais robusto pra usar
+          o tempo todo). Se as duas estiverem instaladas, o painel tenta a extensão primeiro.
+          Sem nenhuma das duas, essa via simplesmente não imprime nada — nunca trava nem abre
+          janela.
         </div>`:''}
       ${s.method==='rede'?`
         <div class="field-row" style="margin-top:6px;">
@@ -4926,7 +5133,14 @@ async function saveAllSettings(){
 async function testStationPrint(key){
   const res = await apiPost('/api/print-test', { station:key });
   if(!res.ok){ showToast('⚠️ Falha no teste', res.data.error||'Não foi possível imprimir.', 5000); return; }
-  if(res.data.method==='automatica'){ showToast('🤖 Teste enviado pro Agente Local', 'Se o Agente Local estiver rodando e conectado, ele imprime sozinho agora. Se nada sair, confira se ele está aberto/logado (veja o print-agent.log).', 7000); return; }
+  if(res.data.method==='automatica'){
+    if(shogatsuExtDetected){
+      const r = await printViaExtension({ id:'teste', ticketNumber:null, items:[{name:'Item de teste',qty:1,price:0}], createdAt:new Date().toISOString(), mode:'retirada', name:'Teste', total:0, subtotal:0, fee:0 }, key, null);
+      if(r.ok){ showToast('✅ Teste enviado pela Extensão', 'Se a impressora estiver ligada, deve sair agora.'); return; }
+      showToast('⚠️ Extensão instalada mas falhou', r.error||'Confira a impressora escolhida nas opções da extensão.', 7000); return;
+    }
+    showToast('🤖 Teste enviado pro Agente Local', 'Se o Agente Local estiver rodando e conectado, ele imprime sozinho agora. Se nada sair, confira se ele está aberto/logado (veja o print-agent.log) — ou instale a Extensão (chrome-extension/) pra uma opção mais fácil.', 8000); return;
+  }
   if(res.data.method==='navegador'){ showToast('ℹ️ Via por navegador', 'Essa via imprime pela janela do navegador — use o botão 🖨 num pedido real pra testar.', 6000); return; }
   showToast('✅ Teste enviado', `Ticket de teste enviado pra via "${cfg.stations[key]?.label||key}".`);
 }
