@@ -78,6 +78,19 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .mode-btn.active .mode-btn-icon{background:rgba(255,255,255,.22);}
 .review-badge{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:8px 14px;font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;}
 .review-badge.pending{cursor:pointer;animation:couponGlow 2s ease-in-out infinite;}
+/* v45: coração pulsante com a nota média do restaurante dentro — usado no badge de avaliação
+   do cardápio (ver refreshPendingReviewBadge() em index.html). */
+.rating-heart-wrap{display:flex;align-items:center;gap:6px;}
+.rating-heart{position:relative;width:26px;height:24px;flex-shrink:0;animation:ratingHeartBeat 1.6s ease-in-out infinite;}
+.rating-heart svg{width:100%;height:100%;filter:drop-shadow(0 0 4px rgba(227,189,106,.55));}
+.rating-heart .rh-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#2a1400;padding-top:2px;}
+@keyframes ratingHeartBeat{
+  0%,100%{transform:scale(1);}
+  15%{transform:scale(1.18);}
+  30%{transform:scale(0.96);}
+  45%{transform:scale(1.1);}
+  60%{transform:scale(1);}
+}
 
 .sticky-menu-bar{position:sticky;top:108px;z-index:180;background:color-mix(in srgb, var(--black) 85%, transparent);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 6px 20px rgba(0,0,0,.28);border-bottom:1px solid var(--border);}
 .cat-nav{padding:0 16px;}
@@ -147,7 +160,14 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .promo-banner b{color:var(--gold);}
 .btn-locate-me{width:100%;background:var(--card);border:1px dashed var(--gold);color:var(--gold);border-radius:8px;padding:12px;font-size:13px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .btn-order-here{width:100%;background:linear-gradient(90deg,var(--red),var(--red-dk));border:none;color:#fff;border-radius:8px;padding:16px;margin-top:16px;font-size:15px;font-weight:700;letter-spacing:1px;box-shadow:0 6px 20px rgba(192,57,43,.35);}
-.btn-received{width:100%;background:var(--green);border:none;color:#fff;border-radius:8px;padding:14px;margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:.5px;}
+.btn-received{width:100%;background:var(--green);border:none;color:#fff;border-radius:8px;padding:14px;margin:0 0 12px;font-size:14px;font-weight:700;letter-spacing:.5px;
+  /* v45: botão pulsa pra chamar atenção assim que aparece (pedido saiu/chegou e ainda não foi confirmado) */
+  animation:btnReceivedPulse 1.4s ease-in-out infinite;
+}
+@keyframes btnReceivedPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(46,204,113,.55);}
+  50%{box-shadow:0 0 0 10px rgba(46,204,113,0);}
+}
 .star-picker{display:flex;justify-content:center;gap:10px;margin:16px 0 20px;}
 .star-picker .star{font-size:40px;cursor:pointer;color:#5a5248;opacity:.55;transition:all .15s;}
 .star-picker .star.on{color:#FFC300;opacity:1;transform:scale(1.08);text-shadow:0 0 12px rgba(255,195,0,.6);}
@@ -335,6 +355,16 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 }
 @keyframes bounceIn{0%{transform:scale(0);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
 .closed-banner{background:rgba(192,57,43,.15);border:1px solid var(--red-dk);color:var(--red-lt);text-align:center;padding:10px;font-size:12px;letter-spacing:1px;}
+/* v45: TODOS os botões mudam de cor ao toque/clique — feedback visual imediato, sem precisar
+   mexer botão por botão. filter: brightness já funciona em qualquer cor de fundo (claro ou
+   escuro) sem precisar declarar uma cor de "hover" própria pra cada botão existente. */
+button, .btn, [role="button"], .pay-opt, .cat-tab, .qty-btn, .place-btn {
+  transition: filter .12s ease, transform .08s ease;
+}
+button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:active, .qty-btn:active, .place-btn:active {
+  filter: brightness(1.25) saturate(1.15);
+  transform: scale(0.97);
+}
 </style>
 </head>
 <body>
@@ -726,8 +756,15 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
       <div class="form-group"><label>Nome completo *</label><input type="text" id="rsv-name"/></div>
       <div class="form-group"><label>WhatsApp / Telefone *</label><input type="tel" id="rsv-phone" placeholder="(22) 99999-9999"/></div>
       <div class="form-row">
-        <div class="form-group"><label>Data *</label><input type="date" id="rsv-date"/></div>
-        <div class="form-group"><label>Horário *</label><input type="time" id="rsv-time"/></div>
+        <div class="form-group"><label>Data *</label><input type="date" id="rsv-date" onchange="onRsvDateChange()"/></div>
+        <div class="form-group"><label>Horário *</label><input type="hidden" id="rsv-time"/></div>
+      </div>
+      <p class="hint" id="rsv-date-warning" style="display:none;color:var(--red-lt);font-size:12px;"></p>
+      <div class="form-group" id="rsv-time-slots-wrap" style="display:none;">
+        <label>Horário *</label>
+        <!-- v45: "relógio pré-estabelecido pra clique" — em vez de digitar/rolar um horário
+             qualquer, o cliente escolhe entre os horários já dentro do funcionamento do dia. -->
+        <div id="rsv-time-slots" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"></div>
       </div>
       <div class="form-group"><label>Quantas pessoas? *</label><input type="number" min="1" id="rsv-people" placeholder="ex: 4"/></div>
       <div class="form-group"><label>Observações</label><textarea id="rsv-notes" placeholder="Aniversário, preferência de mesa, restrições..."></textarea></div>
@@ -987,20 +1024,37 @@ function closeAccountScreen() { document.getElementById('account-screen').classL
 // ═══════════════════════════════════════════
 // AGENDAMENTO DE PEDIDOS
 // ═══════════════════════════════════════════
+// v45: agendamento agora é SÓ PRA HOJE (o campo de data fica travado no dia de hoje — sem
+// like escolher um dia da semana que vem) e o horário só pode cair dentro do funcionamento
+// de hoje (cfg.weekSchedule) — se a loja estiver fechada hoje, a opção de agendar nem aparece.
 function initScheduleSection() {
   const sec = document.getElementById('schedule-section');
   if (!sec) return;
   const enabled = cfg.scheduling && cfg.scheduling.enabled;
-  sec.style.display = enabled ? 'block' : 'none';
-  if (!enabled) { document.getElementById('f-schedule-toggle').checked = false; toggleScheduleFields(); return; }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todaySchedule = (cfg.weekSchedule && cfg.weekSchedule[new Date().getDay()]) || null;
+  const closedToday = todaySchedule && todaySchedule.open === false;
+  sec.style.display = (enabled && !closedToday) ? 'block' : 'none';
+  if (!enabled || closedToday) { document.getElementById('f-schedule-toggle').checked = false; toggleScheduleFields(); return; }
   const minMin = Number(cfg.scheduling.minMinutesAhead) || 60;
-  const maxDays = Number(cfg.scheduling.maxDaysAhead) || 7;
   const minDate = new Date(Date.now() + minMin * 60000);
-  const maxDate = new Date(Date.now() + maxDays * 86400000);
-  document.getElementById('f-schedule-date').min = minDate.toISOString().slice(0,10);
-  document.getElementById('f-schedule-date').max = maxDate.toISOString().slice(0,10);
-  document.getElementById('schedule-hint').textContent = `Escolha um horário a partir de ${minDate.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}, em até ${maxDays} dia(s).`;
+  const dateEl = document.getElementById('f-schedule-date');
+  const timeEl = document.getElementById('f-schedule-time');
+  // Só hoje: min e max iguais trava o seletor nativo de data no dia de hoje.
+  dateEl.min = todayStr; dateEl.max = todayStr; dateEl.value = todayStr;
+  // Horário só dentro do funcionamento de hoje, e nunca antes do tempo mínimo de antecedência.
+  let hintMsg = `Agendamento disponível só pra hoje.`;
+  if (todaySchedule) {
+    const openM = timeStrToMinutes(todaySchedule.openTime), closeM = timeStrToMinutes(todaySchedule.closeTime);
+    const minMinutesToday = Math.max(openM, minDate.getHours() * 60 + minDate.getMinutes());
+    timeEl.min = minutesToTimeStr(Math.min(minMinutesToday, closeM));
+    timeEl.max = todaySchedule.closeTime;
+    hintMsg += ` Horário de hoje: ${todaySchedule.openTime} às ${todaySchedule.closeTime} — a partir de ${minutesToTimeStr(minMinutesToday)}.`;
+  }
+  document.getElementById('schedule-hint').textContent = hintMsg;
 }
+function timeStrToMinutes(t) { const [h, m] = String(t || '00:00').split(':').map(Number); return h * 60 + (m || 0); }
+function minutesToTimeStr(m) { m = Math.max(0, Math.min(1439, m)); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 function toggleScheduleFields() {
   const on = document.getElementById('f-schedule-toggle').checked;
   document.getElementById('schedule-fields').style.display = on ? 'block' : 'none';
@@ -1028,6 +1082,43 @@ function openReservationScreen() {
   const lastId = localStorage.getItem('shogatsu_last_reservation');
   if (lastId) { document.getElementById('rsv-form-section').style.display = 'none'; refreshReservationStatus(lastId); startReservationPolling(); }
   else { document.getElementById('rsv-form-section').style.display = ''; document.getElementById('rsv-status-card').style.display = 'none'; }
+}
+// v45: ao escolher a data da reserva, confere se a loja funciona nesse dia da semana (avisa
+// "fechado" se não) e, se funcionar, mostra os horários certos como botões clicáveis — "relógio
+// pré-estabelecido" — em vez de um campo de hora livre onde dava pra digitar qualquer horário.
+function onRsvDateChange(){
+  const dateVal = document.getElementById('rsv-date').value;
+  const warnEl = document.getElementById('rsv-date-warning');
+  const slotsWrap = document.getElementById('rsv-time-slots-wrap');
+  const slotsEl = document.getElementById('rsv-time-slots');
+  document.getElementById('rsv-time').value = '';
+  if (!dateVal) { warnEl.style.display='none'; slotsWrap.style.display='none'; return; }
+  const weekday = new Date(dateVal + 'T00:00').getDay();
+  const daySchedule = (cfg.weekSchedule && cfg.weekSchedule[weekday]) || null;
+  if (daySchedule && daySchedule.open === false) {
+    warnEl.textContent = '⛔ Fechado nesse dia — escolha outra data.';
+    warnEl.style.display = 'block';
+    slotsWrap.style.display = 'none';
+    return;
+  }
+  warnEl.style.display = 'none';
+  slotsWrap.style.display = 'block';
+  const openT = (daySchedule && daySchedule.openTime) || '18:00';
+  const closeT = (daySchedule && daySchedule.closeTime) || '23:00';
+  const openM = timeStrToMinutes(openT), closeM = timeStrToMinutes(closeT);
+  const slots = [];
+  for (let m = openM; m <= closeM - 30; m += 30) slots.push(minutesToTimeStr(m));
+  slotsEl.innerHTML = slots.map(t => `<button type="button" class="rsv-slot-btn" data-t="${t}" onclick="selectRsvSlot('${t}')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--white);font-size:13px;cursor:pointer;">${t}</button>`).join('')
+    || `<span style="font-size:11px;color:var(--muted);">Sem horários disponíveis nesse dia.</span>`;
+}
+function selectRsvSlot(t){
+  document.getElementById('rsv-time').value = t;
+  document.querySelectorAll('.rsv-slot-btn').forEach(b => {
+    const on = b.dataset.t === t;
+    b.style.background = on ? 'var(--gold)' : 'var(--card)';
+    b.style.color = on ? '#1a1400' : 'var(--white)';
+    b.style.borderColor = on ? 'var(--gold)' : 'var(--border)';
+  });
 }
 function closeReservationScreen() {
   document.getElementById('reservation-screen').classList.remove('open');
@@ -1434,12 +1525,19 @@ async function refreshPendingReviewBadge(){
       }
     }catch(e){}
   }
-  // Sem avaliação pendente — mostra a nota média do restaurante, se tiver alguma avaliação
+  // Sem avaliação pendente — mostra a nota média do restaurante, se tiver alguma avaliação,
+  // dentro de um coraçãozinho pulsante (v45).
   try{
     const r = await fetch('/api/reviews');
     const data = await r.json();
     if(data.count > 0){
-      badge.innerHTML = `⭐ ${data.average} <span style="opacity:.6;">(${data.count})</span>`;
+      badge.innerHTML = `<span class="rating-heart-wrap">
+        <span class="rating-heart">
+          <svg viewBox="0 0 32 29" xmlns="http://www.w3.org/2000/svg"><path fill="#e3bd6a" d="M16 28.4S1.6 19.6 1.6 9.9C1.6 4.9 5.5 1 10.4 1c2.7 0 5.2 1.3 6.8 3.4C18.8 2.3 21.3 1 24 1c4.9 0 8.8 3.9 8.8 8.9 0 9.7-14.4 18.5-14.4 18.5z"/></svg>
+          <span class="rh-num">${data.average}</span>
+        </span>
+        <span style="opacity:.75;">(${data.count} avaliações)</span>
+      </span>`;
       badge.className = 'review-badge';
       badge.style.display = 'block';
       badge.onclick = null;
@@ -2672,6 +2770,17 @@ function playAlertOriental() {
 function playConfirmSound() {
   const kind = (cfg && cfg.customerAlertSound) || 'classico';
   (ALERT_SOUNDS[kind] || ALERT_SOUNDS.classico).play();
+}
+// v45: quando chega uma notificação push (promoção, cupom etc.) com o site aberto na aba, o
+// Service Worker avisa a página aqui pra tocar o sino oriental — além do som padrão do
+// sistema, que toca de qualquer forma mesmo com o site fechado (ver sw.js).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'shogatsu-push-sound') {
+      if (e.data.sound === 'oriental') playAlertOriental();
+      else playAlertSino();
+    }
+  });
 }
 
 // ═══════════════════════════════════════════

@@ -82,6 +82,19 @@ input,select,textarea{font-family:'Inter',sans-serif;}
   .stats-grid{grid-template-columns:1fr !important;}
   .topbar-right{flex-wrap:wrap;gap:6px;}
 }
+/* v45: mais uma leva de ajustes pra uso no celular — modal ocupando a tela inteira (mais fácil
+   de rolar/preencher com o teclado aberto), campos lado a lado empilhando em coluna única, e
+   alvos de toque maiores (botão/input pequeno demais é a principal reclamação de quem usa
+   painel administrativo no celular). Isso é aditivo — não muda nada do layout no desktop. */
+@media (max-width:760px){
+  .modal{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;}
+  .modal-overlay{padding:0;}
+  .field-row{grid-template-columns:1fr;}
+  button, .btn, input, select, textarea{min-height:38px;}
+  .btn, button{padding-top:10px;padding-bottom:10px;}
+  table{display:block;overflow-x:auto;white-space:nowrap;}
+  .settings-card{padding:14px;}
+}
 .mobile-menu-btn{
   display:none; background:var(--panel); border:1px solid var(--border); color:var(--white);
   border-radius:14px; width:34px; height:34px; font-size:16px; align-items:center; justify-content:center;
@@ -420,6 +433,10 @@ table{max-width:100%;}
 .nav-item .ni{transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
 .nav-item:hover .ni{transform:scale(1.15);}
 .nav-item.active .ni{transform:scale(1.1);}
+/* v45: TODOS os botões do painel admin/master mudam de cor ao toque/clique — regra global,
+   não precisa declarar em cada botão que já existe hoje ou que for criado depois. */
+button, .btn, [role="button"] { transition: filter .12s ease, transform .08s ease; }
+button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) saturate(1.15); transform: scale(0.97); }
 </style>
 </head>
 <body>
@@ -718,7 +735,10 @@ table{max-width:100%;}
       <div class="panel" style="max-width:720px;margin-top:18px;">
         <div class="panel-header" style="cursor:pointer;" onclick="toggleRpEditor()">
           <span class="panel-title">✏️ Editar Cardápio Popular</span>
-          <span id="rp-editor-toggle-icon" style="font-size:12px;color:var(--muted);">▾ mostrar</span>
+          <span style="display:flex;align-items:center;gap:10px;">
+            <a href="/cardapio-rodizio-popular.html" target="_blank" onclick="event.stopPropagation();" style="font-size:11px;color:var(--gold);text-decoration:none;">🔗 Pré-visualizar página</a>
+            <span id="rp-editor-toggle-icon" style="font-size:12px;color:var(--muted);">▾ mostrar</span>
+          </span>
         </div>
         <div style="font-size:11px;color:var(--muted);margin:2px 0 12px;">
           Edita o conteúdo da página pública do Rodízio Popular (a mesma do QR "Cardápio Rodízio Popular" acima) — preços por dia, destaques, categorias e itens, frases do topo e dados de rodapé.
@@ -881,6 +901,13 @@ table{max-width:100%;}
           <div class="field-row">
             <div class="field"><label>Horário</label><input id="cfg-hours" placeholder="18h30–23h"/></div>
             <div class="field"><label>Dias</label><input id="cfg-days" placeholder="Ter–Dom"/></div>
+          </div>
+          <div class="field">
+            <label>📅 Dias e horário de funcionamento (por dia da semana)</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">
+              Usado pra avisar "fechado" e travar o relógio de agendamento/reserva dentro do horário certo de cada dia.
+            </div>
+            <div id="week-schedule-editor" style="display:flex;flex-direction:column;gap:6px;"></div>
           </div>
           <div class="field"><label>Frase da avaliação (pedida ao cliente após receber o pedido)</label><input id="cfg-reviewPrompt" placeholder="O que você achou do seu pedido?"/></div>
           <div class="field">
@@ -1067,6 +1094,10 @@ table{max-width:100%;}
           </label>
           <div class="field"><label style="font-size:10px;">Título da notificação</label><input id="push-title" placeholder="Ex: Shogatsu"/></div>
           <textarea id="push-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;margin-top:8px;"></textarea>
+          <div class="field" style="margin-top:8px;">
+            <label style="font-size:10px;">Imagem grande (opcional — deixa a notificação parecida com apps de delivery tipo iFood; cole o link de uma foto do prato/promoção)</label>
+            <input id="push-image" placeholder="https://.../foto-promocao.jpg"/>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
             <label style="font-size:10px;color:var(--muted);">Clientes cadastrados (que também ativaram push)</label>
             <div>
@@ -2006,7 +2037,13 @@ function connectSSE(){
   evtSource.addEventListener('order-updated', e=>{
     const upd = JSON.parse(e.data);
     const idx = orders.findIndex(o=>o.id===upd.id);
+    const wasConfirmed = idx>-1 && orders[idx].receivedByCustomer;
     if(idx>-1) orders[idx]=upd; else orders.unshift(upd);
+    // v45: cliente confirmou o recebimento da entrega pelo próprio app — avisa quem está no painel
+    if(upd.receivedByCustomer && !wasConfirmed){
+      if(Number(cfg.sound)!==0) playBeep();
+      showToast('✅ Entrega confirmada pelo cliente', `Pedido ${upd.ticketNumber?('Nº '+upd.ticketNumber):('#'+upd.id)} — ${upd.name} confirmou que recebeu.`, 6000);
+    }
     updateNewBadge();
     refreshCurrentPage();
   });
@@ -2336,12 +2373,23 @@ function renderRpEditor(){
   document.getElementById('rp-wastenote').value = rpDraft.wasteNote||'';
   rpRenderPriceGroups(); rpRenderHighlights(); rpRenderCategories();
 }
+// v45.1: reordenar arrastando é complexo de fazer direito em pouco código e sem biblioteca —
+// botões ↑/↓ resolvem o mesmo problema (mover categoria/grupo de preço pra cima ou baixo) de
+// forma simples e confiável em qualquer navegador/celular.
+function rpMove(list, i, dir, rerender){
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  rerender();
+}
 function rpRenderPriceGroups(){
   document.getElementById('rp-pricegroups-list').innerHTML = (rpDraft.priceGroups||[]).map((g,i)=>`
     <div class="field-row" style="align-items:flex-end;">
       <div class="field"><label>Dias</label><input value="${esc(g.label||'')}" oninput="rpDraft.priceGroups[${i}].label=this.value"/></div>
       <div class="field"><label>Dinheiro/Pix</label><input value="${esc(g.cash||'')}" oninput="rpDraft.priceGroups[${i}].cash=this.value"/></div>
       <div class="field"><label>Cartão</label><input value="${esc(g.card||'')}" oninput="rpDraft.priceGroups[${i}].card=this.value"/></div>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.priceGroups,${i},-1,rpRenderPriceGroups)" title="Mover pra cima" ${i===0?'disabled':''}>↑</button>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.priceGroups,${i},1,rpRenderPriceGroups)" title="Mover pra baixo" ${i===(rpDraft.priceGroups.length-1)?'disabled':''}>↓</button>
       <button type="button" class="btn secondary sm" onclick="rpRemovePriceGroup(${i})" title="Remover">🗑</button>
     </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhum grupo de preço ainda.</div>';
 }
@@ -2352,6 +2400,8 @@ function rpRenderHighlights(){
     <div class="field-row" style="align-items:flex-end;">
       <div class="field" style="max-width:70px;"><label>Ícone</label><input value="${esc(h.icon||'')}" oninput="rpDraft.highlights[${i}].icon=this.value"/></div>
       <div class="field"><label>Texto</label><input value="${esc(h.label||'')}" oninput="rpDraft.highlights[${i}].label=this.value"/></div>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.highlights,${i},-1,rpRenderHighlights)" title="Mover pra cima" ${i===0?'disabled':''}>↑</button>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.highlights,${i},1,rpRenderHighlights)" title="Mover pra baixo" ${i===(rpDraft.highlights.length-1)?'disabled':''}>↓</button>
       <button type="button" class="btn secondary sm" onclick="rpRemoveHighlight(${i})" title="Remover">🗑</button>
     </div>`).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhum destaque ainda.</div>';
 }
@@ -2372,6 +2422,9 @@ function rpRenderCategories(){
       <div class="vgroup-head">
         <input type="text" style="max-width:60px;" placeholder="🍣" value="${esc(c.icon||'')}" oninput="rpDraft.categories[${i}].icon=this.value"/>
         <input type="text" placeholder="Nome da categoria" value="${esc(c.title||'')}" oninput="rpDraft.categories[${i}].title=this.value" style="flex:1;"/>
+        <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.categories,${i},-1,rpRenderCategories)" title="Mover pra cima" ${i===0?'disabled':''}>↑</button>
+        <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.categories,${i},1,rpRenderCategories)" title="Mover pra baixo" ${i===(rpDraft.categories.length-1)?'disabled':''}>↓</button>
+        <button type="button" class="btn secondary sm" onclick="rpDuplicateCategory(${i})" title="Duplicar categoria">⧉</button>
         <button type="button" class="btn secondary sm" onclick="rpRemoveCategory(${i})" title="Remover categoria">🗑</button>
       </div>
       <textarea rows="4" style="width:100%;font-family:inherit;font-size:12px;padding:8px;margin-top:6px;" oninput="rpDraft.categories[${i}].items=rpTextToItems(this.value)">${esc(rpItemsToText(c.items))}</textarea>
@@ -2379,6 +2432,14 @@ function rpRenderCategories(){
 }
 function rpAddCategory(){ rpDraft.categories.push({icon:'🍣',title:'',items:[]}); rpRenderCategories(); }
 function rpRemoveCategory(i){ rpDraft.categories.splice(i,1); rpRenderCategories(); }
+// v45.1: duplicar uma categoria inteira (com os itens) — útil quando duas categorias são bem
+// parecidas (ex: "Sushis" e "Sushis especiais") e é mais rápido copiar e ajustar do que digitar tudo de novo.
+function rpDuplicateCategory(i){
+  const copy = JSON.parse(JSON.stringify(rpDraft.categories[i]));
+  copy.title = copy.title ? copy.title + ' (cópia)' : '';
+  rpDraft.categories.splice(i+1, 0, copy);
+  rpRenderCategories();
+}
 async function saveRodizioPopular(){
   rpDraft.priceNote = document.getElementById('rp-pricenote').value;
   rpDraft.phrases = document.getElementById('rp-phrases').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -2391,6 +2452,39 @@ async function saveRodizioPopular(){
   if(!res.ok){ alert(res.data.error||'Erro ao salvar o Cardápio Popular.'); return; }
   cfg.rodizioPopular = rpDraft;
   showToast('✅ Salvo!', 'Cardápio Popular atualizado — já vale pro QR/link "Cardápio Rodízio Popular".');
+}
+
+// ═══════════════════════════════════════════
+// v45: DIAS E HORÁRIO DE FUNCIONAMENTO POR DIA DA SEMANA
+// Usado pra travar/avisar no agendamento de delivery e nas reservas (index.html).
+// ═══════════════════════════════════════════
+const WEEK_DAY_LABELS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+function renderWeekScheduleEditor(){
+  const el = document.getElementById('week-schedule-editor');
+  if(!el) return;
+  const ws = (cfg.weekSchedule && cfg.weekSchedule.length===7) ? cfg.weekSchedule : WEEK_DAY_LABELS.map(()=>({open:true,openTime:'18:00',closeTime:'23:00'}));
+  el.innerHTML = ws.map((d,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;">
+      <label style="display:flex;align-items:center;gap:6px;width:70px;font-size:12px;cursor:pointer;">
+        <input type="checkbox" id="ws-open-${i}" ${d.open?'checked':''} onchange="wsToggleDay(${i})"/> ${WEEK_DAY_LABELS[i]}
+      </label>
+      <input type="time" id="ws-openTime-${i}" value="${d.openTime||'18:00'}" style="flex:1;" ${d.open?'':'disabled'}/>
+      <span style="font-size:11px;color:var(--muted);">até</span>
+      <input type="time" id="ws-closeTime-${i}" value="${d.closeTime||'23:00'}" style="flex:1;" ${d.open?'':'disabled'}/>
+    </div>`).join('');
+}
+function wsToggleDay(i){
+  const on = document.getElementById('ws-open-'+i).checked;
+  document.getElementById('ws-openTime-'+i).disabled = !on;
+  document.getElementById('ws-closeTime-'+i).disabled = !on;
+}
+function collectWeekScheduleFromEditor(){
+  if(!document.getElementById('week-schedule-editor')) return cfg.weekSchedule;
+  return WEEK_DAY_LABELS.map((_,i)=>({
+    open: document.getElementById('ws-open-'+i).checked,
+    openTime: document.getElementById('ws-openTime-'+i).value || '18:00',
+    closeTime: document.getElementById('ws-closeTime-'+i).value || '23:00'
+  }));
 }
 
 function generateCustomQr(){
@@ -2629,10 +2723,13 @@ async function printOrder(id, ev, stations){
   // que acabam sem uso (via "pulada" ou impressora de rede/USB) são simplesmente fechadas.
   const preOpened={};
   targetStations.forEach(st=>{
+    // v46: método "automática" nunca deve abrir NENHUMA janela, nem um popup em branco por um
+    // instante — quem imprime é o Agente Local, o navegador fica fora dessa via por completo.
+    if((cfg.stations && cfg.stations[st] && cfg.stations[st].method) === 'automatica') return;
     const w=window.open('', '_blank', 'width=380,height=600');
     if(w){ w.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>'); preOpened[st]=w; }
   });
-  let printedAny=false, blockedAny=false, fellBackAny=false;
+  let printedAny=false, blockedAny=false, fellBackAny=false, delegatedAny=false;
   for(const st of targetStations){
     const res = await apiPost('/api/print', { orderId:id, station: st });
     if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); if(preOpened[st]) preOpened[st].close(); continue; }
@@ -2640,11 +2737,21 @@ async function printOrder(id, ev, stations){
     if(d.skipped) { if(preOpened[st]) preOpened[st].close(); continue; } // essa via não tem itens desse pedido, pula sem incomodar
     if(d.method==='navegador'){
       if(!preOpened[st]) blockedAny=true; // não foi possível pré-abrir (navegador bloqueou mesmo o pré-open) — avisa o usuário
-      else openBrowserTicket(d.order, d.station, d.deliveryWindow, preOpened[st]);
+      // v45: espera essa via terminar de imprimir (ver openBrowserTicket) antes de seguir pra
+      // próxima — chamar window.print() em várias janelas quase ao mesmo tempo é o que travava
+      // o navegador/sistema.
+      else await openBrowserTicket(d.order, d.station, d.deliveryWindow, preOpened[st]);
       printedAny=true;
+    }
+    else if(d.method==='automatica'){
+      // v46: NADA de janela, NADA de diálogo — quem imprime de verdade é o Agente Local, que já
+      // está escutando os pedidos novos em tempo real por conta própria (ver print-agent.js).
+      if(preOpened[st]) preOpened[st].close();
+      delegatedAny=true;
     }
     else { if(preOpened[st]) preOpened[st].close(); if(d.printed) printedAny=true; if(d.usedCaixaFallback) fellBackAny=true; }
   }
+  if(delegatedAny) showToast('🤖 Impressão automática', 'Enviado pro Agente Local — imprime sozinho, sem precisar confirmar nada aqui.', 4000);
   if(blockedAny) showToast('⚠️ Pop-up pode ter sido bloqueado', 'Permita pop-ups pra esse site nas configurações do navegador — sem isso nem todas as vias conseguem imprimir.', 6000);
   else if(printedAny){
     showToast('🖨 Impressão enviada', `Pedido ${id} enviado para as vias configuradas.`, 3500);
@@ -2782,15 +2889,39 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-hr-solid"></div>
     ${isCaixa?`<div class="t-row t-center">Obrigado pela preferência!</div>${cfg.siteUrl?`<div class="t-row t-center">${esc(cfg.siteUrl)}</div>`:''}`:''}
     <script>
-      // Imprime assim que a via terminar de carregar, e fecha a janela sozinha
-      // depois — tanto pelo evento "depois de imprimir" (mais confiável) quanto
-      // por um tempo limite de segurança, caso o navegador não dispare esse evento.
-      window.onload = function(){ window.print(); };
-      window.onafterprint = function(){ try{ window.close(); }catch(e){} };
-      setTimeout(function(){ try{ window.close(); }catch(e){} }, 45000);
+      // v45 — BUG CORRIGIDO ("impressão trava o sistema"): window.print() é uma chamada
+      // BLOQUEANTE — enquanto a caixa de diálogo de impressão do navegador está aberta numa
+      // janela, o navegador trava a interação (às vezes até de outras janelas/abas) até o
+      // usuário confirmar ou cancelar. O bug antigo abria várias janelas de via (caixa,
+      // cozinha, sushibar, bar) e chamava print() em TODAS quase ao mesmo tempo — várias
+      // caixas de diálogo empilhadas travavam o navegador inteiro. Agora cada via avisa o
+      // painel (window opener) quando o print() terminou, via postMessage, e o painel só
+      // manda a via seguinte DEPOIS que a anterior terminou (ver printOrder/openBrowserTicket
+      // no painel.html) — nunca duas caixas de diálogo de impressão abertas ao mesmo tempo.
+      function notifyOpenerDone(){
+        try { if (window.opener && !window.opener.closed) window.opener.postMessage({ type: 'shogatsu-print-done' }, '*'); } catch(e) {}
+      }
+      window.onload = function(){ setTimeout(function(){ window.print(); }, 60); };
+      window.onafterprint = function(){ notifyOpenerDone(); try{ window.close(); }catch(e){} };
+      // Rede de segurança: se o navegador não disparar "afterprint" (acontece em alguns
+      // navegadores/SOs), garante que o painel não fica esperando pra sempre a via seguinte.
+      setTimeout(function(){ notifyOpenerDone(); try{ window.close(); }catch(e){} }, 20000);
     <\/script>
   </body></html>`);
   win.document.close();
+  // v45: a Promise só resolve quando ESSA via termina de imprimir (evento acima ou o timeout
+  // de segurança) — é o que permite ao painel esperar uma via terminar antes de abrir/imprimir
+  // a próxima, em vez de disparar todas juntas (a causa do travamento).
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; window.removeEventListener('message', onMsg); resolve(); };
+    const onMsg = (e) => { if (e.data && e.data.type === 'shogatsu-print-done' && e.source === win) finish(); };
+    window.addEventListener('message', onMsg);
+    // Se a janela for fechada por qualquer motivo (usuário fechou na mão, por ex.) sem mandar
+    // a mensagem, não trava o painel esperando: confere periodicamente se ainda existe.
+    const closedCheck = setInterval(() => { if (win.closed) { clearInterval(closedCheck); finish(); } }, 400);
+    setTimeout(() => { clearInterval(closedCheck); finish(); }, 21000);
+  });
 }
 
 function updateNewBadge(){
@@ -4223,6 +4354,7 @@ function loadSettings(){
   document.getElementById('cfg-hours').value=cfg.hours||'';
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
+  renderWeekScheduleEditor();
   // v33: aparência do cardápio (foto do prato e fonte)
   const dpsEl=document.getElementById('cfg-dishphotosize');
   if(dpsEl){ dpsEl.value = cfg.dishPhotoSize || 80; document.getElementById('cfg-dishphoto-val').textContent = (cfg.dishPhotoSize||80)+'px'; }
@@ -4367,12 +4499,15 @@ async function sendPushCampaign(){
   const phones = sendAll ? null : [...document.querySelectorAll('.push-cust-chk:checked')].map(el=>el.dataset.phone);
   const title = document.getElementById('push-title').value.trim();
   const message = document.getElementById('push-message').value.trim();
+  const image = document.getElementById('push-image').value.trim();
   const statusEl = document.getElementById('push-send-status');
   if(!sendAll && !phones.length){ alert('Selecione pelo menos um cliente, ou marque "Enviar pra todos os inscritos".'); return; }
   if(!message){ alert('Escreva a mensagem da notificação.'); return; }
   statusEl.style.color='var(--muted)';
   statusEl.textContent='Enviando...';
-  const res = await apiPost('/api/admin/send-push', { phones: sendAll?undefined:phones, title, message });
+  // v45: notificação sai no estilo apps de delivery (imagem grande, se enviada) e toca o
+  // sino oriental pra quem estiver com o site aberto no momento (ver sw.js + index.html).
+  const res = await apiPost('/api/admin/send-push', { phones: sendAll?undefined:phones, title, message, image, sound:'oriental' });
   if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data.error||'Erro ao enviar.'; return; }
   const d=res.data;
   statusEl.style.color = d.failed>0 ? 'var(--orange)' : '#50c878';
@@ -4480,6 +4615,7 @@ function renderStationsSettings(){
           oninput="updateStationField('${key}','label',this.value)" style="flex:1;min-width:140px;"/>
         <select onchange="updateStationField('${key}','method',this.value);renderStationsSettings();">
           <option value="navegador" ${s.method==='navegador'?'selected':''}>🖥 Navegador (mais simples)</option>
+          <option value="automatica" ${s.method==='automatica'?'selected':''}>🤖 Automática — sem clique, sem confirmação</option>
           <option value="rede" ${s.method==='rede'?'selected':''}>🌐 Impressora de Rede (IP)</option>
           <option value="usb" ${s.method==='usb'?'selected':''}>🔌 Impressora USB</option>
         </select>
@@ -4490,6 +4626,23 @@ function renderStationsSettings(){
         <label style="font-size:10px;">⏱ Tempo de preparo (min) — usado na previsão de saída</label>
         <input type="number" min="0" step="1" value="${s.prepTime??15}" oninput="updateStationField('${key}','prepTime',this.value)"/>
       </div>`:''}
+      ${s.method==='navegador'?`
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5;">
+          🖥 Essa via sempre vai pedir confirmação de impressão — nenhum site consegue evitar essa
+          caixa de diálogo do navegador. Se quiser <b>zero cliques</b> mesmo, veja a opção
+          "🤖 Automática" acima. (Avançado: dá pra eliminar a caixa de diálogo abrindo o Chrome
+          com a flag <code>--kiosk-printing</code>, mas isso é uma configuração do computador,
+          não do sistema.)
+        </div>`:''}
+      ${s.method==='automatica'?`
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5;">
+          🤖 Imprime sozinha, sem abrir o navegador e sem pedir confirmação nenhuma — mas pra isso
+          funcionar de verdade precisa ter o <b>Agente Local de Impressão</b> rodando num
+          computador dentro da loja, ligado na impressora (pasta <code>print-agent/</code> do
+          sistema — veja o README dessa pasta). É a ÚNICA forma real de impressão 100%
+          automática: nenhum navegador consegue mandar pra uma impressora sem abrir alguma
+          janela de confirmação, isso é uma trava de segurança do próprio navegador.
+        </div>`:''}
       ${s.method==='rede'?`
         <div class="field-row" style="margin-top:6px;">
           <div class="field"><label style="font-size:10px;">IP da impressora</label><input type="text" id="ip-${key}" value="${s.ip||''}" placeholder="192.168.0.50" oninput="updateStationField('${key}','ip',this.value)"/></div>
@@ -4679,6 +4832,7 @@ async function saveAllSettings(){
   cfg.hours  = document.getElementById('cfg-hours').value.trim();
   cfg.name   = document.getElementById('cfg-name').value.trim();
   cfg.days   = document.getElementById('cfg-days').value.trim();
+  cfg.weekSchedule = collectWeekScheduleFromEditor();
   // v33: aparência do cardápio
   const dpsEl2=document.getElementById('cfg-dishphotosize'); if(dpsEl2) cfg.dishPhotoSize = parseInt(dpsEl2.value)||80;
   const mfsEl2=document.getElementById('cfg-menufontscale'); if(mfsEl2) cfg.menuFontScale = parseFloat(mfsEl2.value)||1;
@@ -4772,6 +4926,7 @@ async function saveAllSettings(){
 async function testStationPrint(key){
   const res = await apiPost('/api/print-test', { station:key });
   if(!res.ok){ showToast('⚠️ Falha no teste', res.data.error||'Não foi possível imprimir.', 5000); return; }
+  if(res.data.method==='automatica'){ showToast('🤖 Teste enviado pro Agente Local', 'Se o Agente Local estiver rodando e conectado, ele imprime sozinho agora. Se nada sair, confira se ele está aberto/logado (veja o print-agent.log).', 7000); return; }
   if(res.data.method==='navegador'){ showToast('ℹ️ Via por navegador', 'Essa via imprime pela janela do navegador — use o botão 🖨 num pedido real pra testar.', 6000); return; }
   showToast('✅ Teste enviado', `Ticket de teste enviado pra via "${cfg.stations[key]?.label||key}".`);
 }

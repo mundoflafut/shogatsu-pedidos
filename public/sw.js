@@ -94,16 +94,24 @@ self.addEventListener('push', e => {
   let data = { title: 'Shogatsu', body: 'Você tem uma novidade!', url: '/' };
   try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* usa os valores padrão acima */ }
   e.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon || '/icon-192.png',
-      badge: '/icon-72.png',
-      data: { url: data.url || '/' },
-      silent: false,
-      vibrate: [200, 100, 200, 100, 200],
-      requireInteraction: false,
-      tag: data.tag || 'shogatsu-update'
-    })
+    Promise.all([
+      self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: data.icon || '/icon-192.png',
+        image: data.image || undefined, // v45: banner grande, estilo apps de delivery (iFood etc)
+        badge: '/icon-72.png',
+        data: { url: data.url || '/' },
+        silent: false,
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: false,
+        tag: data.tag || 'shogatsu-update'
+      }),
+      // v45: quem já está com o site/painel aberto na hora não depende só do som do sistema —
+      // avisa a página pra tocar o sino oriental sintetizado (ver index.html/painel.html).
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+        list.forEach(c => c.postMessage({ type: 'shogatsu-push-sound', sound: data.sound || 'oriental' }));
+      })
+    ])
   );
 });
 
