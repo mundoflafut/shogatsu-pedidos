@@ -67,6 +67,20 @@ const DEFAULT_CFG = {
   hours: '18h30–23h', open: 1,
   // ── Auto-abertura/fechamento por horário (se ativado, cfg.open passa a ser calculado sozinho) ──
   schedule: { enabled: false, openTime: '18:00', closeTime: '23:00' },
+  // v45: horário POR DIA DA SEMANA — usado pra validar agendamento de delivery e reservas
+  // (avisa "fechado" no dia certo, e trava o relógio dentro do horário de funcionamento
+  // daquele dia). Índice 0 = domingo, 1 = segunda... igual Date.prototype.getDay(). Por
+  // padrão segue o texto "Ter–Dom" que já existia (fechado só na segunda), com o mesmo
+  // horário de cfg.schedule pros dias abertos — o admin pode customizar dia a dia depois.
+  weekSchedule: [
+    { open: true, openTime: '18:00', closeTime: '23:00' },  // domingo
+    { open: false, openTime: '18:00', closeTime: '23:00' }, // segunda
+    { open: true, openTime: '18:00', closeTime: '23:00' },  // terça
+    { open: true, openTime: '18:00', closeTime: '23:00' },  // quarta
+    { open: true, openTime: '18:00', closeTime: '23:00' },  // quinta
+    { open: true, openTime: '18:00', closeTime: '23:00' },  // sexta
+    { open: true, openTime: '18:00', closeTime: '23:00' }   // sábado
+  ],
   adminPass: 'shogatsu2026',
   masterPass: 'shogatsuMaster2026',
   // ── Usuários do painel (login por usuário + senha, com nível de acesso) ──
@@ -118,6 +132,9 @@ const DEFAULT_CFG = {
     sushibar: { label: 'Sushibar', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 },
     bar:      { label: 'Bar',      method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8 },
     caixa:    { label: 'Caixa',    method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 }
+    // v46: método "automatica" — imprime sozinho, sem abrir navegador nem pedir confirmação,
+    // através do Agente Local de Impressão (print-agent/), que roda num computador dentro da
+    // loja ligado na impressora. Ver POST /api/print abaixo e print-agent/print-agent.js.
   },
   // ── Motivos de cancelamento/recusa (chips rápidos no painel) ──
   cancelReasons: ['Item em falta', 'Fora da área de entrega', 'Pedido duplicado', 'Cliente desistiu', 'Loja fechada no momento'],
@@ -370,6 +387,9 @@ function readConfig() {
     users: (Array.isArray(data.cfg.users) && data.cfg.users.length) ? data.cfg.users : DEFAULT_CFG.users,
     sms: { ...DEFAULT_CFG.sms, ...(data.cfg.sms || {}) },
     schedule: { ...DEFAULT_CFG.schedule, ...(data.cfg.schedule || {}) },
+    weekSchedule: Array.isArray(data.cfg.weekSchedule) && data.cfg.weekSchedule.length === 7
+      ? DEFAULT_CFG.weekSchedule.map((d, i) => ({ ...d, ...(data.cfg.weekSchedule[i] || {}) }))
+      : DEFAULT_CFG.weekSchedule,
     vapid: { ...DEFAULT_CFG.vapid, ...(data.cfg.vapid || {}) },
     reservations: { ...DEFAULT_CFG.reservations, ...(data.cfg.reservations || {}) },
     scheduling: { ...DEFAULT_CFG.scheduling, ...(data.cfg.scheduling || {}) },
@@ -935,6 +955,9 @@ const server = http.createServer(async (req, res) => {
           theme: { ...current.cfg.theme, ...(body.cfg && body.cfg.theme || {}) },
           sms: { ...current.cfg.sms, ...(body.cfg && body.cfg.sms || {}) },
           schedule: { ...current.cfg.schedule, ...(body.cfg && body.cfg.schedule || {}) },
+          weekSchedule: (Array.isArray(body.cfg && body.cfg.weekSchedule) && body.cfg.weekSchedule.length === 7)
+            ? current.cfg.weekSchedule.map((d, i) => ({ ...d, ...(body.cfg.weekSchedule[i] || {}) }))
+            : current.cfg.weekSchedule,
           rodizioPopular: { ...current.cfg.rodizioPopular, ...(body.cfg && body.cfg.rodizioPopular || {}) }
         },
         menu: body.menu || current.menu
@@ -1620,6 +1643,17 @@ function estimateDeliveryWindow(order, cfg) {
         // O navegador do cliente (painel) monta e imprime o ticket — servidor só confirma os dados.
         return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador', deliveryWindow });
       }
+      // v46 — BUG CORRIGIDO ("impressora deve imprimir automaticamente sem navegar sem
+      // confirmação"): a raiz do problema é que um navegador NUNCA consegue mandar pra
+      // impressora sem abrir alguma janela e pedir confirmação — isso é uma trava de
+      // segurança do próprio navegador, nenhum código de site consegue contornar isso sozinho.
+      // A única forma real de "imprime sozinho, sem clicar em nada" é ter um programinha rodando
+      // no computador da loja que fala direto com a impressora — é o que o método "Automática"
+      // faz: delega pro Agente Local de Impressão (print-agent/), que já está escutando os
+      // pedidos novos em tempo real e imprime sozinho, sem qualquer participação do navegador.
+      if (printerCfg.method === 'automatica') {
+        return sendJSON(res, 200, { ok: true, printed: false, delegated: true, order, station: st, method: 'automatica' });
+      }
 
       // v44: layout ESC/POS redesenhado — cabeçalho centralizado, blocos com título
       // (CLIENTE/ITENS/RESUMO no comprovante; HORÁRIOS/ITENS na via de produção), valores
@@ -1731,6 +1765,13 @@ function estimateDeliveryWindow(order, cfg) {
         'Via: ' + (printerCfg.label || station),
         new Date().toLocaleString('pt-BR')
       ], cfg);
+      if (printerCfg.method === 'automatica') {
+        // v46: não tem como o servidor (na nuvem) mandar isso direto pra impressora — quem
+        // imprime é o Agente Local, que fica escutando esse evento também (junto com
+        // "new-order") e imprime sozinho assim que o administrador clica em "Testar".
+        broadcast('print-test', { station, text, label: printerCfg.label || station });
+        return sendJSON(res, 200, { ok: true, method: 'automatica', delegated: true });
+      }
       if (printerCfg.method === 'rede') {
         if (!printerCfg.ip) return sendJSON(res, 400, { error: 'Informe o IP da impressora.' });
         await sendNetworkPrint(printerCfg.ip, printerCfg.port, text);
@@ -2667,6 +2708,9 @@ function estimateDeliveryWindow(order, cfg) {
     order.receivedByCustomer = true;
     order.receivedAt = new Date().toISOString();
     writeJSON(ORDERS_FILE, orders);
+    // v45: antes essa confirmação só ficava salva no pedido, sem avisar ninguém — a equipe só
+    // ficava sabendo se abrisse o pedido manualmente. Agora avisa o painel na hora (toast).
+    broadcast('order-updated', order);
     return sendJSON(res, 200, { ok: true });
   }
 
