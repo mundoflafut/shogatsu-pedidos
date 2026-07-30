@@ -128,14 +128,23 @@ const DEFAULT_CFG = {
   // prepTime = tempo médio de preparo dessa estação, em minutos, usado para calcular
   // a previsão de saída automática na comanda (Entrada + prepTime = Previsão de saída).
   stations: {
-    cozinha:  { label: 'Cozinha',  method: 'navegador', ip: '', port: 9100, device: '', prepTime: 20 },
-    sushibar: { label: 'Sushibar', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 },
-    bar:      { label: 'Bar',      method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8 },
-    caixa:    { label: 'Caixa',    method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 }
+    caixa:     { label: 'Caixa',     icon: '🧾', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 },
+    cozinha:   { label: 'Cozinha',   icon: '🍳', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 20 },
+    sushibar:  { label: 'Sushibar',  icon: '🍣', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 },
+    bar:       { label: 'Bar',       icon: '🍹', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8 },
+    delivery:  { label: 'Delivery',  icon: '🛵', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 },
+    expedicao: { label: 'Expedição', icon: '📦', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 5 }
     // v46: método "automatica" — imprime sozinho, sem abrir navegador nem pedir confirmação,
     // através do Agente Local de Impressão (print-agent/), que roda num computador dentro da
     // loja ligado na impressora. Ver POST /api/print abaixo e print-agent/print-agent.js.
+    // v49: estações agora são totalmente dinâmicas — o admin pode criar/renomear/excluir vias
+    // próprias além destas 6 padrão (📠 Estações de Impressão, em Editar Cardápio, e Configurações
+    // → 📠 Impressoras por Estação). Qualquer chave nova aqui é preservada normalmente pelo
+    // resto do sistema (ver readConfig/normalizeMenu/POST /api/config/POST /api/print abaixo).
   },
+  // v49: estação padrão usada quando um item do cardápio não tem NENHUMA estação marcada —
+  // configurável em Configurações → 📠 Impressoras por Estação.
+  defaultStation: 'cozinha',
   // ── Motivos de cancelamento/recusa (chips rápidos no painel) ──
   cancelReasons: ['Item em falta', 'Fora da área de entrega', 'Pedido duplicado', 'Cliente desistiu', 'Loja fechada no momento'],
   // ── Aparência do painel (tamanho de fonte por aba) ──
@@ -378,10 +387,22 @@ function readConfig() {
   const cfg = {
     ...DEFAULT_CFG,
     ...data.cfg,
-    stations: Object.fromEntries(Object.keys(DEFAULT_CFG.stations).map(st => [st, {
-      ...DEFAULT_CFG.stations[st],
-      ...((data.cfg.stations && data.cfg.stations[st]) || {})
-    }])),
+    // v49 — BUG CORRIGIDO ("impressora não imprime" em vias novas): antes só as 4 chaves de
+    // DEFAULT_CFG.stations sobreviviam a essa leitura — qualquer estação nova criada pelo admin
+    // (ex: uma via customizada, ou mesmo "delivery"/"expedicao" adicionadas nesta versão) era
+    // APAGADA sozinha no próximo carregamento, porque esse merge só olhava pras chaves padrão.
+    // Agora a lista de chaves é a UNIÃO entre as padrão e as que já estão salvas — nenhuma
+    // estação criada pelo admin some mais.
+    stations: (() => {
+      const saved = (data.cfg && data.cfg.stations) || {};
+      const keys = new Set([...Object.keys(DEFAULT_CFG.stations), ...Object.keys(saved)]);
+      const shape = { label: '', icon: '📠', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 };
+      return Object.fromEntries([...keys].map(st => [st, {
+        ...shape, label: st,
+        ...(DEFAULT_CFG.stations[st] || {}),
+        ...(saved[st] || {})
+      }]));
+    })(),
     labels: { ...DEFAULT_CFG.labels, ...(data.cfg.labels || {}) },
     uiFonts: { ...DEFAULT_CFG.uiFonts, ...(data.cfg.uiFonts || {}) },
     theme: { ...DEFAULT_CFG.theme, ...(data.cfg.theme || {}) },
@@ -405,7 +426,7 @@ function readConfig() {
   if (cfg.schedule && cfg.schedule.enabled) {
     cfg.open = isWithinSchedule(cfg.schedule.openTime, cfg.schedule.closeTime) ? 1 : 0;
   }
-  return { cfg, menu: normalizeMenu(data.menu) };
+  return { cfg, menu: normalizeMenu(data.menu, Object.keys(cfg.stations), cfg.defaultStation) };
 }
 
 // ─── Sessões admin (em memória) ───
@@ -777,16 +798,25 @@ function sendUSBPrint(devicePath, text) {
 // item sem "stations" próprio agora herda da categoria — e só cai pra "cozinha" se nem a
 // categoria tiver nada definido. Itens que já tinham uma via própria salva continuam com ela,
 // sem mudar nada de repente pra quem já configurou antes.
-function normalizeMenu(menu) {
-  const validStations = ['cozinha', 'sushibar', 'bar'];
+// v49: `validStations` agora vem de fora (chaves reais de cfg.stations, incluindo qualquer via
+// customizada que o admin tenha criado) em vez de uma lista fixa de 3 — antes, itens marcados
+// pra uma estação nova (delivery, expedição, ou qualquer via customizada) tinham a marcação
+// APAGADA sozinha aqui, e caíam de volta pra "cozinha" sem explicação nenhuma.
+function normalizeMenu(menu, validStations, defaultStation) {
+  validStations = (Array.isArray(validStations) && validStations.length)
+    ? validStations
+    : ['caixa', 'cozinha', 'sushibar', 'bar', 'delivery', 'expedicao'];
+  const fallback = (defaultStation && validStations.includes(defaultStation))
+    ? defaultStation
+    : (validStations.includes('cozinha') ? 'cozinha' : validStations[0]);
   return (menu || []).map(sec => {
     let catStations = Array.isArray(sec.stations) ? sec.stations.filter(s => validStations.includes(s)) : [];
-    if (!catStations.length) catStations = ['cozinha'];
+    if (!catStations.length) catStations = [fallback];
     return {
       ...sec,
       stations: catStations,
       items: (sec.items || []).map(it => {
-        const base = { station: 'cozinha', available: true, variants: [], ...it };
+        const base = { station: fallback, available: true, variants: [], ...it };
         let stations = Array.isArray(base.stations) ? base.stations.filter(s => validStations.includes(s)) : [];
         if (!stations.length) stations = catStations;
         const { station, ...rest } = base;
@@ -949,11 +979,30 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       const current = readConfig();
+      // v49 — BUG CORRIGIDO ("excluir estação não excluía de verdade"): o merge antigo só
+      // ACRESCENTAVA chaves em cfg.stations (spread de current + spread do que veio no body),
+      // então uma estação removida no painel (apagada do objeto antes de enviar) reaparecia
+      // sozinha aqui porque ainda existia em `current.cfg.stations`. Agora, sempre que o body
+      // manda um objeto `stations` explícito, ele é tratado como a lista COMPLETA e definitiva
+      // (substitui, não acrescenta) — é exatamente como o painel já trabalha (edita o cfg.stations
+      // inteiro em memória e manda tudo de uma vez em "Salvar Tudo"/Configurações).
+      const stationsProvided = body.cfg && body.cfg.stations && typeof body.cfg.stations === 'object';
+      const stationsSrc = stationsProvided ? body.cfg.stations : current.cfg.stations;
+      const stationShape = { label: '', icon: '📠', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 };
+      const mergedStations = Object.fromEntries(Object.keys(stationsSrc).map(k => [k, {
+        ...stationShape, label: k,
+        ...(current.cfg.stations[k] || {}),
+        ...(stationsSrc[k] || {})
+      }]));
+      // Se alguma estação foi excluída, tira a referência dela de todas as categorias/itens do
+      // cardápio também — senão o item continuava "marcado" pra uma via que não existe mais.
+      const validStationKeys = Object.keys(mergedStations);
+      const menuBeforeNormalize = body.menu || current.menu;
       const merged = {
         cfg: {
           ...current.cfg, ...body.cfg,
           adminPass: current.cfg.adminPass, masterPass: current.cfg.masterPass,
-          stations: { ...current.cfg.stations, ...(body.cfg && body.cfg.stations || {}) },
+          stations: mergedStations,
           labels: { ...current.cfg.labels, ...(body.cfg && body.cfg.labels || {}) },
           uiFonts: { ...current.cfg.uiFonts, ...(body.cfg && body.cfg.uiFonts || {}) },
           theme: { ...current.cfg.theme, ...(body.cfg && body.cfg.theme || {}) },
@@ -969,7 +1018,7 @@ const server = http.createServer(async (req, res) => {
             photos: Array.isArray(body.cfg && body.cfg.splash && body.cfg.splash.photos) ? body.cfg.splash.photos : current.cfg.splash.photos
           }
         },
-        menu: body.menu || current.menu
+        menu: normalizeMenu(menuBeforeNormalize, validStationKeys, (body.cfg && body.cfg.defaultStation) || current.cfg.defaultStation)
       };
       writeJSON(CONFIG_FILE, merged);
       broadcast('config-updated', {});
@@ -1641,12 +1690,17 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const { orderId, station } = await readBody(req);
-      const st = ['cozinha', 'sushibar', 'bar', 'caixa'].includes(station) ? station : null;
+      const { cfg } = readConfig();
+      // v49 — BUG CORRIGIDO ("impressora não imprime" em vias novas): essa checagem só aceitava
+      // as 4 vias originais — qualquer via nova (delivery, expedição, ou uma via customizada
+      // criada pelo admin) caía nesse "Via inválida" e nunca imprimia nada, mesmo com tudo
+      // configurado certinho em Estações de Impressão. Agora aceita qualquer via que exista de
+      // fato em cfg.stations.
+      const st = Object.keys(cfg.stations || {}).includes(station) ? station : null;
       if (!st) return sendJSON(res, 400, { error: 'Via inválida.' });
       const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === orderId);
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
-      const { cfg } = readConfig();
       const isCaixa = st === 'caixa';
 
       // Caixa: comprovante completo (todos os itens + dados do cliente + horário).
@@ -2382,9 +2436,15 @@ function estimateDeliveryWindow(order, cfg) {
         phone: String(body.phone || '').slice(0, 30),
         address: String(body.address || '').slice(0, 200),
         items: (body.items || []).slice(0, 60).map(i => {
-          const validStations = ['cozinha', 'sushibar', 'bar'];
+          // v49 — BUG CORRIGIDO ("impressora não imprime"): essa lista só aceitava 3 vias
+          // (cozinha/sushibar/bar) — um item marcado pra "delivery", "expedição" ou uma via
+          // customizada tinha a marcação APAGADA bem aqui, no exato instante em que o pedido
+          // era criado, e caía sempre em "cozinha" sem aviso nenhum. Agora usa as vias reais
+          // configuradas no sistema (cfg.stations), então qualquer via nova funciona de verdade.
+          const validStations = Object.keys(cfg.stations || {});
+          const fallbackStation = cfg.defaultStation && validStations.includes(cfg.defaultStation) ? cfg.defaultStation : 'cozinha';
           let stations = Array.isArray(i.stations) ? i.stations.filter(s => validStations.includes(s)) : [];
-          if (!stations.length) stations = [validStations.includes(i.station) ? i.station : 'cozinha'];
+          if (!stations.length) stations = [validStations.includes(i.station) ? i.station : fallbackStation];
           return {
             name: String(i.name || '').slice(0, 80),
             qty: Math.max(1, parseInt(i.qty) || 1),
