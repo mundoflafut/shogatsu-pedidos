@@ -128,12 +128,12 @@ const DEFAULT_CFG = {
   // prepTime = tempo médio de preparo dessa estação, em minutos, usado para calcular
   // a previsão de saída automática na comanda (Entrada + prepTime = Previsão de saída).
   stations: {
-    caixa:     { label: 'Caixa',     icon: '🧾', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 },
-    cozinha:   { label: 'Cozinha',   icon: '🍳', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 20 },
-    sushibar:  { label: 'Sushibar',  icon: '🍣', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15 },
-    bar:       { label: 'Bar',       icon: '🍹', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8 },
-    delivery:  { label: 'Delivery',  icon: '🛵', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0 },
-    expedicao: { label: 'Expedição', icon: '📦', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 5 }
+    caixa:     { label: 'Caixa',     icon: '🧾', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0, active: true },
+    cozinha:   { label: 'Cozinha',   icon: '🍳', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 20, active: true },
+    sushibar:  { label: 'Sushibar',  icon: '🍣', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 15, active: true },
+    bar:       { label: 'Bar',       icon: '🍹', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 8, active: true },
+    delivery:  { label: 'Delivery',  icon: '🛵', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 0, active: true },
+    expedicao: { label: 'Expedição', icon: '📦', method: 'navegador', ip: '', port: 9100, device: '', prepTime: 5, active: true }
     // v46: método "automatica" — imprime sozinho, sem abrir navegador nem pedir confirmação,
     // através do Agente Local de Impressão (print-agent/), que roda num computador dentro da
     // loja ligado na impressora. Ver POST /api/print abaixo e print-agent/print-agent.js.
@@ -141,6 +141,9 @@ const DEFAULT_CFG = {
     // próprias além destas 6 padrão (📠 Estações de Impressão, em Editar Cardápio, e Configurações
     // → 📠 Impressoras por Estação). Qualquer chave nova aqui é preservada normalmente pelo
     // resto do sistema (ver readConfig/normalizeMenu/POST /api/config/POST /api/print abaixo).
+    // v50: campo "active" — desativar uma estação (impressora quebrada, fechada por um tempo,
+    // etc.) sem precisar excluir a via nem desmarcar ela de todos os itens. Enquanto active for
+    // false, POST /api/print pula essa via de propósito (nem tenta imprimir, sem erro nenhum).
   },
   // v49: estação padrão usada quando um item do cardápio não tem NENHUMA estação marcada —
   // configurável em Configurações → 📠 Impressoras por Estação.
@@ -1150,7 +1153,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/admin/couriers' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra cadastrar motoboys.' });
     try {
-      const { name, phone, plate, notes } = await readBody(req);
+      const { name, phone, plate, notes, photo } = await readBody(req);
       const nm = String(name || '').trim();
       if (!nm || nm.length < 2) return sendJSON(res, 400, { error: 'Digite o nome do motoboy.' });
       const couriers = readJSON(COURIERS_FILE);
@@ -1160,6 +1163,7 @@ const server = http.createServer(async (req, res) => {
         phone: String(phone || '').replace(/\D/g, ''),
         plate: String(plate || '').trim().toUpperCase(),
         notes: String(notes || '').trim().slice(0, 200),
+        photo: String(photo || '').trim(), // v50: foto do motoboy (upload via /api/upload)
         active: true,
         createdAt: new Date().toISOString()
       };
@@ -1181,6 +1185,7 @@ const server = http.createServer(async (req, res) => {
       if (body.phone !== undefined) courier.phone = String(body.phone).replace(/\D/g, '');
       if (body.plate !== undefined) courier.plate = String(body.plate).trim().toUpperCase();
       if (body.notes !== undefined) courier.notes = String(body.notes).trim().slice(0, 200);
+      if (body.photo !== undefined) courier.photo = String(body.photo).trim(); // v50
       if (body.active !== undefined) courier.active = !!body.active;
       writeJSON(COURIERS_FILE, couriers);
       return sendJSON(res, 200, { ok: true, courier, couriers });
@@ -1703,6 +1708,13 @@ function estimateDeliveryWindow(order, cfg) {
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
       const isCaixa = st === 'caixa';
 
+      // v50: via desativada (Configurações → 📠 Impressoras por Estação → impressora
+      // temporariamente fora do ar) — pula de propósito, sem tentar imprimir e sem erro. Igual
+      // ao caso de "sem itens pra essa via", só que por escolha do admin em vez de automático.
+      if (cfg.stations[st] && cfg.stations[st].active === false) {
+        return sendJSON(res, 200, { ok: true, printed: false, skipped: true, disabled: true, order, station: st });
+      }
+
       // Caixa: comprovante completo (todos os itens + dados do cliente + horário).
       // Cozinha/Sushibar/Bar: só os itens daquela estação + observações, sem dados pessoais.
       const items = isCaixa ? order.items : order.items.filter(i => (i.stations || []).includes(st));
@@ -1843,6 +1855,7 @@ function estimateDeliveryWindow(order, cfg) {
       const { cfg } = readConfig();
       const printerCfg = cfg.stations[station];
       if (!printerCfg) return sendJSON(res, 400, { error: 'Via inválida.' });
+      if (printerCfg.active === false) return sendJSON(res, 400, { error: 'Essa via está desativada — ative em Configurações → 📠 Impressoras por Estação pra poder testar.' });
       if (printerCfg.method === 'navegador') return sendJSON(res, 200, { ok: true, method: 'navegador' });
       const text = buildTicketText([
         ESC.center + ESC.boldOn + 'TESTE DE IMPRESSAO' + ESC.boldOff + ESC.left,
