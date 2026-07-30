@@ -1358,6 +1358,12 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div id="couriers-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
           <div class="settings-card-title" style="font-size:13px;">+ Novo Motoboy</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <img id="nc-photo-preview" src="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;background:var(--bg);display:none;"/>
+            <div id="nc-photo-placeholder" style="width:56px;height:56px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:22px;">🛵</div>
+            <label class="btn secondary sm" style="cursor:pointer;">📤 Foto do motoboy<input type="file" accept="image/*" style="display:none;" onchange="uploadCourierPhoto(this,'nc')"/></label>
+            <span id="nc-photo-status" style="font-size:11px;color:var(--muted);"></span>
+          </div>
           <div class="field-row">
             <div class="field"><label style="font-size:10px;">Nome</label><input id="nc-name" placeholder="ex: João da moto"/></div>
             <div class="field"><label style="font-size:10px;">Telefone</label><input id="nc-phone" placeholder="ex: 22999991234"/></div>
@@ -5076,10 +5082,14 @@ function renderStationsSettings(){
   if(!el)return;
   const keys = getStationKeys();
   el.innerHTML=keys.map(key=>{
-    const s=cfg.stations[key]||{label:key,icon:'📠',method:'navegador',ip:'',port:9100,device:'',prepTime:15};
+    const s=cfg.stations[key]||{label:key,icon:'📠',method:'navegador',ip:'',port:9100,device:'',prepTime:15,active:true};
+    const isActive = s.active !== false;
     return `
-    <div class="vgroup" data-station="${key}">
+    <div class="vgroup" data-station="${key}" style="${isActive?'':'opacity:.55;'}">
       <div class="vgroup-head" style="flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;flex:0 0 auto;cursor:pointer;" title="Desativar pausa essa via sem excluir nem desmarcar de nenhum item — útil se a impressora quebrar ou ficar fora do ar por um tempo.">
+          <input type="checkbox" ${isActive?'checked':''} onchange="updateStationField('${key}','active',this.checked);renderStationsSettings();"/> Ativa
+        </label>
         <input type="text" value="${(s.icon||'📠').replace(/"/g,'&quot;')}" maxlength="2" placeholder="📠"
           oninput="updateStationField('${key}','icon',this.value)" style="max-width:44px;text-align:center;flex:0 0 auto;" title="Ícone dessa via"/>
         <input type="text" value="${(s.label||key).replace(/"/g,'&quot;')}" placeholder="Nome dessa via"
@@ -5090,9 +5100,10 @@ function renderStationsSettings(){
           <option value="rede" ${s.method==='rede'?'selected':''}>🌐 Impressora de Rede (IP)</option>
           <option value="usb" ${s.method==='usb'?'selected':''}>🔌 Impressora USB</option>
         </select>
-        <button type="button" class="btn secondary sm" onclick="testStationPrint('${key}')">🖨 Testar</button>
+        <button type="button" class="btn secondary sm" onclick="testStationPrint('${key}')" ${isActive?'':'disabled title="Ative essa via pra poder testar"'}>🖨 Testar</button>
         ${key!=='caixa'?`<button type="button" class="btn secondary sm" style="color:var(--red-lt);" onclick="removeStation('${key}')" title="Excluir esta via">🗑 Excluir</button>`:''}
       </div>
+      ${!isActive?`<div style="font-size:10px;color:var(--red-lt);margin-top:4px;">🔴 Via desativada — pedidos com itens marcados pra essa via não vão gerar nenhuma impressão (e não dá erro nenhum, é intencional) até você reativar aqui.</div>`:''}
       ${key!=='caixa'?`
       <div class="field" style="margin-top:6px;max-width:220px;">
         <label style="font-size:10px;">⏱ Tempo de preparo (min) — usado na previsão de saída</label>
@@ -5280,6 +5291,33 @@ async function deleteUser(username){
 // MOTOBOYS (v32) — pré-cadastro de entregadores
 // ═══════════════════════════════════════════
 let couriers = [];
+// v50: foto do motoboy — reaproveita o mesmo upload genérico (compressão + /api/upload) já
+// usado nas fotos de item do cardápio/splash/rodízio popular.
+let newCourierPhotoUrl = '';
+async function uploadCourierPhoto(input, prefix){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById(prefix+'-photo-status');
+  if(statusEl) statusEl.textContent = 'Enviando...';
+  const url = await uploadImageAndGetUrl(file);
+  input.value = '';
+  if(!url){ if(statusEl) statusEl.textContent=''; return; }
+  if(prefix==='nc'){
+    newCourierPhotoUrl = url;
+    document.getElementById('nc-photo-preview').src = url;
+    document.getElementById('nc-photo-preview').style.display = 'block';
+    document.getElementById('nc-photo-placeholder').style.display = 'none';
+  } else {
+    // edição de foto de um motoboy já cadastrado (botão 📷 na lista)
+    const id = prefix.replace('courier-','');
+    const res = await apiPatch('/api/admin/couriers/'+encodeURIComponent(id), { photo: url });
+    if(!res.ok){ alert(res.data.error||'Erro ao salvar a foto.'); if(statusEl) statusEl.textContent=''; return; }
+    couriers = res.data.couriers;
+    renderCouriersList(couriers);
+    return;
+  }
+  if(statusEl) statusEl.textContent = '✅ Foto pronta';
+}
 async function loadCouriersPage(){
   const res = await apiGet('/api/admin/couriers');
   if(!Array.isArray(res?.couriers)){ document.getElementById('couriers-list').innerHTML=`<div style="font-size:12px;color:var(--red-lt);">${res?.error||'Não foi possível carregar os motoboys.'}</div>`; return; }
@@ -5291,10 +5329,12 @@ function renderCouriersList(list){
   if(!list.length){ el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:12px;">Nenhum motoboy cadastrado ainda.</div>'; return; }
   el.innerHTML = list.map(c=>`
     <div class="vgroup" style="display:flex;align-items:center;gap:12px;${c.active===false?'opacity:.55;':''}">
+      ${c.photo ? `<img src="${c.photo.replace(/"/g,'&quot;')}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;"/>` : `<div style="width:44px;height:44px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🛵</div>`}
       <div style="flex:1;">
         <div style="font-weight:600;font-size:13px;">🛵 ${esc(c.name)}${c.active===false?' <span style="color:var(--muted);font-size:10px;">(inativo)</span>':''}</div>
         <div style="font-size:11px;color:var(--muted);">${c.phone?esc(c.phone):'sem telefone'}${c.plate?' · '+esc(c.plate):''}${c.notes?' · '+esc(c.notes):''}</div>
       </div>
+      <label class="btn secondary sm" style="cursor:pointer;" title="Trocar foto">📷<input type="file" accept="image/*" style="display:none;" onchange="uploadCourierPhoto(this,'courier-${c.id}')"/></label>
       <button type="button" class="btn secondary sm" onclick="toggleCourierActive('${c.id}',${c.active===false})">${c.active===false?'✅ Reativar':'⏸ Desativar'}</button>
       <button type="button" class="mi-btn del" onclick="deleteCourier('${c.id}','${String(c.name).replace(/'/g,"\\'")}')">🗑</button>
     </div>`).join('');
@@ -5305,12 +5345,16 @@ async function createCourier(){
   const plate = document.getElementById('nc-plate').value.trim();
   const notes = document.getElementById('nc-notes').value.trim();
   if(!name || name.length<2){ alert('Digite o nome do motoboy.'); return; }
-  const res = await apiPost('/api/admin/couriers', { name, phone, plate, notes });
+  const res = await apiPost('/api/admin/couriers', { name, phone, plate, notes, photo: newCourierPhotoUrl });
   if(!res.ok){ alert(res.data.error||'Erro ao cadastrar motoboy.'); return; }
   document.getElementById('nc-name').value='';
   document.getElementById('nc-phone').value='';
   document.getElementById('nc-plate').value='';
   document.getElementById('nc-notes').value='';
+  document.getElementById('nc-photo-status').textContent='';
+  document.getElementById('nc-photo-preview').style.display='none';
+  document.getElementById('nc-photo-placeholder').style.display='flex';
+  newCourierPhotoUrl='';
   couriers = res.data.couriers;
   renderCouriersList(couriers);
   showToast('✅ Motoboy cadastrado!', name);
