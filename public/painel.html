@@ -1049,6 +1049,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <a href="https://www.twilio.com" target="_blank" style="color:var(--gold);">Twilio</a> (serviço pago de
             terceiros — cobra por SMS enviado). Sem isso configurado, o envio falha com um aviso claro.
           </div>
+          <div style="font-size:11px;color:var(--gold);margin-bottom:12px;line-height:1.5;">
+            ⚠️ Se a conta Twilio ainda for do tipo <b>Trial (gratuita)</b>, TODA mensagem chega
+            pro cliente com um aviso automático em inglês grudado na frente (algo como
+            "Sent from your Twilio trial account - "). Isso não é o Shogatsu escrevendo em
+            inglês — é a própria Twilio quem obriga esse aviso em contas trial, e não tem como
+            tirar por configuração nenhuma. Some sozinho assim que a conta Twilio vira paga.
+          </div>
           <div class="field-row">
             <div class="field"><label style="font-size:10px;">Account SID</label><input id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx"/></div>
             <div class="field"><label style="font-size:10px;">Auth Token</label><input id="sms-token" type="password" placeholder="••••••••••"/></div>

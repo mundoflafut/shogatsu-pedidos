@@ -416,6 +416,9 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="header-status" id="store-status-badge">Aberto</div>
+      <!-- v48: atalho de status sempre visível no topo, além do balãozinho flutuante — pra
+           quem quer conferir o pedido sem precisar rolar a tela até achar o widget minimizado. -->
+      <button class="cart-btn" style="background:none;border:1px solid var(--gold,#e3bd6a);display:none;" onclick="reopenOrderTracking()" id="header-track-btn" title="Ver status do meu pedido">📦 <span>Status</span></button>
       <button class="cart-btn" style="background:none;border:1px solid var(--border);padding:8px 10px;" onclick="toggleClientTheme()" title="Alternar modo claro/escuro"><span id="client-theme-icon">🌙</span></button>
       <button class="cart-btn" style="background:none;border:1px solid var(--border);padding:8px 10px;" onclick="openContactSheet()" title="Falar com o restaurante">📞</button>
       <button class="cart-btn" style="background:none;border:1px solid var(--border);" onclick="openAccountScreen()" id="account-btn">👤 <span id="account-btn-label">Entrar</span></button>
@@ -884,6 +887,18 @@ let cart = {};
 let mode = 'delivery';
 let payMethod = '';
 let currentOrderId = null;
+// v48 — BUG CORRIGIDO ("cliente fizer outra compra fica com múltiplas telas de visualização"):
+// as telas cheias (conta, reserva, avaliação, checkout, acompanhamento do pedido) só ligavam a
+// própria classe "open" — nada garantia que a tela anterior tivesse sido desligada antes, então
+// em alguns fluxos (ex: abrir Conta enquanto ainda tem um pedido em acompanhamento, ou fazer um
+// segundo pedido rapidinho) duas telas cheias podiam ficar abertas ao mesmo tempo, uma por cima
+// da outra. Agora toda tela cheia passa por aqui antes de abrir, que desliga TODAS as outras —
+// só existe uma tela cheia visível por vez, sempre.
+const FULLSCREEN_IDS = ['account-screen','reservation-screen','review-screen','checkout-screen','success-screen'];
+function openFullScreen(id){
+  FULLSCREEN_IDS.forEach(fid => { if(fid!==id) document.getElementById(fid)?.classList.remove('open'); });
+  document.getElementById(id)?.classList.add('open');
+}
 let trackTimer = null;
 let currentOrderTotal = 0;
 let currentOrderCreatedAt = null;
@@ -1057,7 +1072,7 @@ function openAccountScreen() {
   } else {
     closeRecoveryBox();
   }
-  document.getElementById('account-screen').classList.add('open');
+  openFullScreen('account-screen');
 }
 function closeAccountScreen() { document.getElementById('account-screen').classList.remove('open'); }
 
@@ -1117,7 +1132,7 @@ function openReservationScreen() {
     if(!document.getElementById('rsv-name').value) document.getElementById('rsv-name').value = customer.name;
     if(!document.getElementById('rsv-phone').value) document.getElementById('rsv-phone').value = customer.phone;
   }
-  document.getElementById('reservation-screen').classList.add('open');
+  openFullScreen('reservation-screen');
   // v33: se o cliente já tem uma reserva em aberto, mostra o card de status e busca o que há de novo
   const lastId = localStorage.getItem('shogatsu_last_reservation');
   if (lastId) { document.getElementById('rsv-form-section').style.display = 'none'; refreshReservationStatus(lastId); startReservationPolling(); }
@@ -1494,7 +1509,7 @@ function openReviewSheet(){
     <textarea id="review-comment" placeholder="Quer contar mais alguma coisa? (opcional)" style="width:100%;min-height:80px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--white);font-size:13px;"></textarea>
     <button class="checkout-btn" style="margin-top:16px;" onclick="submitReview()">Enviar Avaliação</button>
     <button style="width:100%;background:none;border:none;color:var(--muted);padding:12px;font-size:12px;" onclick="closeReviewSheet()">Agora não</button>`;
-  document.getElementById('review-screen').classList.add('open');
+  openFullScreen('review-screen');
 }
 function addReviewPhrase(chipEl, phrase){
   const ta = document.getElementById('review-comment');
@@ -1704,10 +1719,40 @@ async function loadConfig() {
   }
   applyTheme();
   initSplashScreen();
+  restoreActiveOrderTracking();
   renderSlider();
   renderMenu();
   renderPromoBanner();
   updateCartUI();
+}
+
+// v48: o atalho de status (botão "📦 Status" no topo + balãozinho flutuante) sumia se o
+// cliente atualizasse a página ou fechasse e reabrisse o navegador, mesmo com um pedido ainda
+// em andamento — currentOrderId é só uma variável em memória, que zera a cada carregamento.
+// Agora, ao abrir o site, confere se o último pedido salvo (localStorage) ainda está ativo e,
+// se estiver, restaura o estado pra mostrar o atalho de novo — sem abrir a tela cheia sozinho,
+// só deixa o atalho disponível pra quem quiser conferir.
+async function restoreActiveOrderTracking(){
+  if(currentOrderId) return; // já tem um pedido "vivo" nessa mesma sessão (acabou de pedir agora)
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem('shogatsu_last_order')||'null'); }catch(e){}
+  if(!saved || !saved.id) return;
+  try{
+    const r = await fetch('/api/track/'+saved.id);
+    if(!r.ok) return;
+    const data = await r.json();
+    if(data.status === 'entregue' || data.status === 'cancelado') return; // pedido já encerrado, não precisa de atalho
+    currentOrderId = saved.id;
+    currentOrderTotal = data.total;
+    currentOrderMode = data.mode;
+    currentOrderCreatedAt = data.createdAt;
+    currentOrderTicket = data.ticketNumber || null;
+    currentOrderStatus = data.status;
+    lastTrackedStatus = data.status;
+    renderOrderTrackFloat();
+    document.getElementById('order-track-float').classList.add('visible');
+    startTracking(saved.id); // volta a acompanhar em tempo real, igual quando o pedido é feito na hora
+  }catch(e){}
 }
 
 // ═══════════════════════════════════════════
@@ -2249,7 +2294,7 @@ function openCheckout(silent) {
     else if (!feeCalcBusy) setPlaceBtnState('idle');
   }
   if (!silent) {
-    document.getElementById('checkout-screen').classList.add('open');
+    openFullScreen('checkout-screen');
     if (mode === 'delivery') calcDeliveryFee(); // recalcula caso o cliente volte pra editar
     if (!autoCouponChecked) tryAutoApplyCoupon();
     const saveBox = document.getElementById('checkout-save-account-box');
@@ -2496,7 +2541,7 @@ async function placeOrder() {
   // com o estado real do carrinho.
   cart = {}; updateCartUI(); renderMenu(); // limpa o carrinho na hora — evita pedido duplicado se o cliente minimizar e voltar ao cardápio
   document.getElementById('checkout-screen').classList.remove('open');
-  document.getElementById('success-screen').classList.add('open');
+  openFullScreen('success-screen');
   document.getElementById('order-track-float').classList.remove('visible');
   syncFavoriteOrderBtn();
   document.getElementById('success-order-id').textContent = order.ticketNumber ? '#' + order.ticketNumber : '⏳';
@@ -2716,7 +2761,13 @@ function startTracking(id) {
       const receivedBtn = document.getElementById('btn-received');
       const ratingCard = document.getElementById('ss-rating-card');
       if (receivedBtn) {
-        const canReview = (data.status === 'saiu' || data.status === 'entregue') && !data.receivedByCustomer && !data.review;
+        // v48 — BUG CORRIGIDO ("mensagem recebi a entrega deve sumir após confirmado pelo
+        // admin"): antes o botão continuava aparecendo mesmo depois do pedido já estar marcado
+        // como Entregue pelo painel (a condição incluía status 'entregue' no "pode mostrar"),
+        // pedindo pro cliente confirmar uma coisa que a loja já tinha fechado. Agora só mostra
+        // enquanto está "saiu para entrega" — assim que vira "entregue" (seja pelo cliente
+        // clicando ou pelo admin confirmando no painel), a mensagem some.
+        const canReview = (data.status === 'saiu') && !data.receivedByCustomer && !data.review;
         receivedBtn.style.display = canReview ? 'block' : 'none';
         if (ratingCard) ratingCard.style.display = canReview ? 'block' : 'none';
         if (canReview) refreshPendingReviewBadge();
@@ -2932,6 +2983,15 @@ function renderOrderTrackFloat() {
   const orderLabel = currentOrderTicket ? `Pedido nº ${currentOrderTicket}` : `Pedido (aguardando confirmação)`;
   document.getElementById('otf-status').textContent = `${orderLabel} · ${statusText}`;
   document.getElementById('otf-total-eta').innerHTML = `R$ ${Number(currentOrderTotal).toFixed(2).replace('.', ',')}${eta ? `<br><span style="font-size:10px;font-weight:400;">${eta}</span>` : ''}`;
+  updateHeaderTrackBtn();
+}
+// v48: mostra/esconde o atalho "📦 Status" no topo — só aparece enquanto tem um pedido ativo
+// sendo acompanhado (não entregue nem cancelado ainda).
+function updateHeaderTrackBtn(){
+  const btn = document.getElementById('header-track-btn');
+  if(!btn) return;
+  const active = !!currentOrderId && currentOrderStatus !== 'entregue' && currentOrderStatus !== 'cancelado';
+  btn.style.display = active ? 'flex' : 'none';
 }
 function minimizeOrderTracking() {
   document.getElementById('success-screen').classList.remove('open');
@@ -2939,10 +2999,11 @@ function minimizeOrderTracking() {
     renderOrderTrackFloat();
     document.getElementById('order-track-float').classList.add('visible');
   }
+  updateHeaderTrackBtn();
 }
 function reopenOrderTracking() {
   document.getElementById('order-track-float').classList.remove('visible');
-  document.getElementById('success-screen').classList.add('open');
+  openFullScreen('success-screen');
   syncFavoriteOrderBtn();
 }
 
