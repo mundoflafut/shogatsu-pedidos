@@ -312,8 +312,35 @@ table{max-width:100%;}
 .mi-btn{border:none;border-radius:5px;padding:6px 12px;font-size:13px;transition:all .15s;}
 .mi-btn.edit{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);font-size:15px;font-weight:600;padding:9px 16px;}
 .mi-btn.edit:hover{background:var(--blue);color:#fff;transform:scale(1.04);}
+.mi-btn.stations{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);font-size:15px;font-weight:600;padding:9px 16px;}
+.mi-btn.stations:hover{background:var(--gold);color:#1a1405;transform:scale(1.04);}
 .mi-btn.del{background:var(--red-bg);color:var(--red-lt);border:1px solid var(--red-dk);}
 .mi-btn.del:hover{background:var(--red);color:#fff;}
+
+/* ── MODAL: 📠 Estações de Impressão (por item do cardápio) ── */
+.station-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:4px;}
+.station-check-card{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--panel);border:2px solid var(--border2);border-radius:14px;padding:16px 10px 12px;
+  cursor:pointer;user-select:none;transition:border-color .15s ease,background .15s ease,transform .12s ease;
+}
+.station-check-card:hover{border-color:var(--gold);transform:translateY(-1px);}
+.station-check-card.checked{border-color:var(--gold);background:var(--gold-bg);}
+.station-check-card .sc-icon{font-size:26px;line-height:1;transition:transform .15s ease;}
+.station-check-card.checked .sc-icon{transform:scale(1.15);}
+.station-check-card .sc-label{font-size:12.5px;font-weight:600;text-align:center;line-height:1.25;}
+.station-check-card .sc-box{
+  position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:6px;border:2px solid var(--border2);
+  background:var(--card);display:flex;align-items:center;justify-content:center;font-size:12px;color:transparent;
+  transition:all .15s ease;
+}
+.station-check-card.checked .sc-box{background:var(--gold);border-color:var(--gold);color:#1a1405;}
+.station-check-card input{position:absolute;opacity:0;width:0;height:0;pointer-events:none;}
+@media (max-width:520px){
+  .station-check-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
+  .station-check-card{padding:12px 8px 10px;}
+  .station-check-card .sc-icon{font-size:22px;}
+}
 
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
@@ -745,6 +772,23 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
         <div id="rp-editor-body" style="display:none;">
 
+          <div class="settings-card-title" style="margin-top:4px;">📷 Foto de capa</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Aparece no topo da página, em tela cheia. Envie do dispositivo ou cole um link — a prévia abaixo mostra a foto no formato original (sem cortar), do jeito que ela é enviada.</div>
+          <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px;">
+            <img id="rp-hero-preview" src="" alt="" style="width:160px;max-height:120px;object-fit:contain;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:none;"/>
+            <div style="flex:1;min-width:200px;">
+              <input id="rp-herophoto" placeholder="https://.../capa.jpg (ou envie do dispositivo →)" oninput="rpDraft.heroPhoto=this.value;rpUpdateHeroPreview();" style="width:100%;margin-bottom:6px;"/>
+              <input type="file" accept="image/*" id="rp-hero-file" style="display:none;" onchange="uploadRpHeroPhoto(this)"/>
+              <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-hero-file').click()">📤 Enviar foto de capa</button>
+              <span id="rp-hero-status" style="font-size:10px;color:var(--muted);margin-left:6px;"></span>
+            </div>
+          </div>
+
+          <div class="settings-card-title" style="margin-top:20px;">🖼️ Galeria de fotos</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Fotos do rodízio/ambiente mostradas na galeria da página. Envie do dispositivo ou cole um link.</div>
+          <div id="rp-gallery-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+          <button type="button" class="btn secondary sm" onclick="rpAddGalleryPhoto()">+ Foto na galeria</button>
+
           <div class="settings-card-title" style="margin-top:4px;">💰 Preços por grupo de dias</div>
           <div id="rp-pricegroups-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
           <button type="button" class="btn secondary sm" onclick="rpAddPriceGroup()">+ Grupo de dias</button>
@@ -1144,8 +1188,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             </div>
           </div>
           <div class="field" style="margin-top:6px;">
-            <label>Fotos (uma por linha)</label>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Cole o link de cada foto — pode usar as mesmas fotos já enviadas no cardápio/galeria. Ordem aqui é a ordem de exibição.</div>
+            <label>Fotos</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Envie fotos do seu dispositivo (📤) ou cole o link de uma foto já publicada. Ordem aqui é a ordem de exibição.</div>
             <div id="splash-photos-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
             <button type="button" class="btn secondary sm" onclick="splashAddPhoto()">+ Foto</button>
           </div>
@@ -1460,6 +1504,38 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
   </div>
 </div>
 
+<!-- MODAL 📠 ESTAÇÕES DE IMPRESSÃO (por item do cardápio) -->
+<div class="modal-overlay" id="item-stations-modal">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title">📠 Estações de Impressão</span>
+      <button class="modal-close" onclick="closeModal('item-stations-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ism-si"/>
+      <input type="hidden" id="ism-ii"/>
+      <div id="ism-item-name" style="font-size:13px;color:var(--muted);margin-bottom:4px;"></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+        Selecione em quais estações este item deverá ser impresso automaticamente quando o pedido
+        for para a cozinha/produção. Um item pode pertencer a mais de uma estação.
+      </p>
+      <div id="ism-grid" class="station-check-grid"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+        <button type="button" class="btn secondary sm" onclick="ismToggleAll(true)">✔ Selecionar Todas</button>
+        <button type="button" class="btn secondary sm" onclick="ismToggleAll(false)">✖ Limpar Seleção</button>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:12px;">
+        Se nenhuma estação ficar marcada, o item usa a estação padrão do sistema
+        (<b><span id="ism-default-station"></span></b> — configurável em Configurações → 📠 Impressoras por Estação).
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn secondary" onclick="closeModal('item-stations-modal')">❌ Cancelar</button>
+      <button type="button" class="btn primary" onclick="saveItemStations()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CATEGORIA -->
 <div class="modal-overlay" id="cat-modal">
   <div class="modal">
@@ -1476,12 +1552,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       <div class="field"><label>Observação (opcional)</label><input id="cat-note" placeholder="ex: Acompanha arroz japonês"/></div>
       <div class="field" style="margin-top:6px;">
         <label>Imprime na(s) via(s) de:</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;">
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-cozinha" checked/> 🍳 Cozinha</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-sushibar"/> 🍣 Sushibar</label>
-          <label style="font-size:12px;display:flex;align-items:center;gap:5px;"><input type="checkbox" id="cat-st-bar"/> 🍹 Bar</label>
-        </div>
-        <div style="font-size:10px;color:var(--muted);">Todos os itens dessa categoria saem nessa(s) via(s) na hora de imprimir. Marque mais de uma se a categoria inteira precisa sair em duas vias (ex: uma categoria de combos com bebida).</div>
+        <div id="cat-stations-checks" style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;"></div>
+        <div style="font-size:10px;color:var(--muted);">Todos os itens dessa categoria saem nessa(s) via(s) na hora de imprimir (a menos que o item tenha suas próprias estações definidas em 📠 Estações). Marque mais de uma se a categoria inteira precisa sair em duas vias.</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2408,6 +2480,9 @@ function rpDefaults(){
 function renderRpEditor(){
   if(!document.getElementById('rp-editor-body')) return;
   rpDraft = JSON.parse(JSON.stringify({ ...rpDefaults(), ...(cfg.rodizioPopular||{}) }));
+  document.getElementById('rp-herophoto').value = rpDraft.heroPhoto||'';
+  rpUpdateHeroPreview();
+  rpRenderGallery();
   document.getElementById('rp-pricenote').value = rpDraft.priceNote||'';
   document.getElementById('rp-phrases').value = (rpDraft.phrases||[]).join('\n');
   document.getElementById('rp-address').value = rpDraft.address||'';
@@ -2416,6 +2491,80 @@ function renderRpEditor(){
   document.getElementById('rp-deliveryurl').value = rpDraft.deliveryUrl||'/';
   document.getElementById('rp-wastenote').value = rpDraft.wasteNote||'';
   rpRenderPriceGroups(); rpRenderHighlights(); rpRenderCategories();
+}
+// v49: pré-visualização da foto de capa no FORMATO ORIGINAL (object-fit:contain, sem cortar)
+// — antes só existia o campo de link, sem nenhuma prévia, então não dava pra saber como a foto
+// realmente ficava até publicar. Na página pública ela ainda é exibida em tela cheia (cover),
+// mas aqui no painel o admin vê a imagem inteira, sem corte, pra conferir enquadramento/qualidade.
+function rpUpdateHeroPreview(){
+  const img = document.getElementById('rp-hero-preview');
+  const url = (rpDraft.heroPhoto||'').trim();
+  if(url){ img.src = url; img.style.display='block'; } else { img.style.display='none'; img.removeAttribute('src'); }
+}
+async function uploadRpHeroPhoto(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('rp-hero-status');
+  statusEl.textContent = 'Enviando...';
+  try{
+    let dataUrl;
+    try{ dataUrl = await compressImageFile(file, 1920); }
+    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
+    rpDraft.heroPhoto = res.data.url;
+    document.getElementById('rp-herophoto').value = res.data.url;
+    rpUpdateHeroPreview();
+    statusEl.textContent = '✅ Foto enviada';
+  }catch(e){
+    statusEl.textContent = '';
+    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
+  }finally{
+    input.value='';
+  }
+}
+// v49: galeria de fotos do Rodízio Popular — o campo já existia em cfg.rodizioPopular.gallery
+// e a página pública já sabia exibi-lo, mas não havia NENHUMA forma de editar isso pelo painel.
+function rpRenderGallery(){
+  const el = document.getElementById('rp-gallery-list');
+  el.innerHTML = (rpDraft.gallery||[]).map((p,i)=>{
+    const url = typeof p === 'string' ? p : (p.photo||'');
+    return `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      ${url ? `<img src="${url.replace(/"/g,'&quot;')}" style="width:52px;height:52px;object-fit:contain;background:var(--bg);border:1px solid var(--border);border-radius:6px;flex-shrink:0;" onerror="this.style.display='none';"/>` : `<div style="width:52px;height:52px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}
+      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg (ou envie do dispositivo →)" style="flex:1;min-width:140px;" oninput="rpDraft.gallery[${i}]={photo:this.value};"/>
+      <input type="file" accept="image/*" id="rp-gallery-file-${i}" style="display:none;" onchange="uploadRpGalleryPhoto(${i},this)"/>
+      <button type="button" class="btn secondary sm" onclick="document.getElementById('rp-gallery-file-${i}').click()">📤 Upload</button>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.gallery,${i},-1,rpRenderGallery)" ${i===0?'disabled':''} title="Mover pra cima">↑</button>
+      <button type="button" class="btn secondary sm" onclick="rpMove(rpDraft.gallery,${i},1,rpRenderGallery)" ${i===((rpDraft.gallery||[]).length-1)?'disabled':''} title="Mover pra baixo">↓</button>
+      <button type="button" class="btn secondary sm" onclick="rpRemoveGalleryPhoto(${i})" title="Remover">🗑</button>
+      <span id="rp-gallery-status-${i}" style="font-size:10px;color:var(--muted);width:100%;"></span>
+    </div>`;
+  }).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhuma foto na galeria ainda.</div>';
+}
+function rpAddGalleryPhoto(){ if(!rpDraft.gallery) rpDraft.gallery=[]; rpDraft.gallery.push({photo:''}); rpRenderGallery(); }
+function rpRemoveGalleryPhoto(i){ rpDraft.gallery.splice(i,1); rpRenderGallery(); }
+async function uploadRpGalleryPhoto(i, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('rp-gallery-status-'+i);
+  if(statusEl) statusEl.textContent = 'Enviando...';
+  try{
+    let dataUrl;
+    try{ dataUrl = await compressImageFile(file); }
+    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
+    rpDraft.gallery[i] = { photo: res.data.url };
+    rpRenderGallery();
+    const newStatus = document.getElementById('rp-gallery-status-'+i);
+    if(newStatus) newStatus.textContent = '✅ Foto enviada';
+  }catch(e){
+    if(statusEl) statusEl.textContent = '';
+    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
+  }finally{
+    input.value='';
+  }
 }
 // v45.1: reordenar arrastando é complexo de fazer direito em pouco código e sem biblioteca —
 // botões ↑/↓ resolvem o mesmo problema (mover categoria/grupo de preço pra cima ou baixo) de
@@ -2569,14 +2718,42 @@ function renderSplashPhotosList(){
   el.innerHTML = splashDraftPhotos.map((p,i)=>{
     const url = typeof p === 'string' ? p : (p.url||'');
     return `
-    <div style="display:flex;align-items:center;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       ${url ? `<img src="${url.replace(/"/g,'&quot;')}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none';"/>` : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}
-      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg" style="flex:1;" oninput="splashDraftPhotos[${i}]={url:this.value};"/>
+      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg (ou envie do dispositivo →)" style="flex:1;min-width:140px;" oninput="splashDraftPhotos[${i}]={url:this.value};"/>
+      <input type="file" accept="image/*" id="splash-file-${i}" style="display:none;" onchange="uploadSplashPhoto(${i},this)"/>
+      <button type="button" class="btn secondary sm" onclick="document.getElementById('splash-file-${i}').click()" title="Enviar foto do dispositivo">📤 Upload</button>
       <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},-1,renderSplashPhotosList)" ${i===0?'disabled':''} title="Mover pra cima">↑</button>
       <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},1,renderSplashPhotosList)" ${i===(splashDraftPhotos.length-1)?'disabled':''} title="Mover pra baixo">↓</button>
       <button type="button" class="btn secondary sm" onclick="splashRemovePhoto(${i})" title="Remover">🗑</button>
+      <span id="splash-status-${i}" style="font-size:10px;color:var(--muted);width:100%;"></span>
     </div>`;
   }).join('') || '<div style="font-size:11px;color:var(--muted);">Nenhuma foto ainda — adicione pelo menos uma pra ativar a splash screen.</div>';
+}
+// v49: upload de foto direto do celular/computador pra Splash Screen — antes só dava pra
+// colar um link (https://...), agora tem um botão de upload de verdade igual ao das fotos
+// de item do cardápio (mesma compressão automática, pra não pesar no carregamento do app).
+async function uploadSplashPhoto(i, input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('splash-status-'+i);
+  if(statusEl) statusEl.textContent = 'Enviando...';
+  try{
+    let dataUrl;
+    try{ dataUrl = await compressImageFile(file); }
+    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
+    splashDraftPhotos[i] = { url: res.data.url };
+    renderSplashPhotosList();
+    const newStatus = document.getElementById('splash-status-'+i);
+    if(newStatus) newStatus.textContent = '✅ Foto enviada';
+  }catch(e){
+    if(statusEl) statusEl.textContent = '';
+    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
+  }finally{
+    input.value='';
+  }
 }
 function splashAddPhoto(){ splashDraftPhotos.push({url:''}); renderSplashPhotosList(); }
 function splashRemovePhoto(i){ splashDraftPhotos.splice(i,1); renderSplashPhotosList(); }
@@ -2810,15 +2987,35 @@ async function confirmCancelOrder(){
 }
 
 // ═══════════════════════════════════════════
-// IMPRESSÃO — até 4 vias por pedido (Caixa, Cozinha, Sushibar, Bar)
+// IMPRESSÃO — uma via por estação configurada (Caixa, Cozinha, Sushibar, Bar, Delivery,
+// Expedição, e qualquer via customizada criada em Estações de Impressão).
 // Caixa = comprovante completo (dados do cliente + horário de entrega).
 // As outras = via de produção enxuta (só pedido, itens da estação e observações).
+// v49: as vias deixaram de ser uma lista fixa de 4 — agora vêm de cfg.stations, então uma
+// via nova (Delivery/Expedição/customizada) já funciona em tudo que usa essa lista, sem
+// precisar editar código nenhum.
 // ═══════════════════════════════════════════
-const PRINT_STATIONS = ['caixa','cozinha','sushibar','bar'];
+const DEFAULT_STATION_META = {
+  caixa: { label:'Caixa', icon:'🧾' }, cozinha: { label:'Cozinha', icon:'🍳' },
+  sushibar: { label:'Sushibar', icon:'🍣' }, bar: { label:'Bar', icon:'🍹' },
+  delivery: { label:'Delivery', icon:'🛵' }, expedicao: { label:'Expedição', icon:'📦' }
+};
+function getPrintStations(){
+  const keys = Object.keys((cfg && cfg.stations) || {});
+  if(!keys.length) return ['caixa','cozinha','sushibar','bar','delivery','expedicao'];
+  // caixa sempre primeiro (comprovante completo); resto na ordem salva.
+  return keys.sort((a,b)=> (a==='caixa'?-1:b==='caixa'?1:0));
+}
+function stationLabel(key){
+  return (cfg && cfg.stations && cfg.stations[key] && cfg.stations[key].label) || (DEFAULT_STATION_META[key]&&DEFAULT_STATION_META[key].label) || key;
+}
+function stationIcon(key){
+  return (cfg && cfg.stations && cfg.stations[key] && cfg.stations[key].icon) || (DEFAULT_STATION_META[key]&&DEFAULT_STATION_META[key].icon) || '📠';
+}
 const payLabelsPrint = { pix:'PIX', credito:'Cartão de Crédito', debito:'Cartão de Débito', dinheiro:'Dinheiro' };
 
 async function printOrder(id, ev, stations){
-  const targetStations = (Array.isArray(stations) && stations.length) ? stations : PRINT_STATIONS;
+  const targetStations = (Array.isArray(stations) && stations.length) ? stations : getPrintStations();
   const btn = (ev||window.event)?.currentTarget;
   if(btn) btn.classList.add('printing');
   // BUG CORRIGIDO (nem toda via imprimia): a janela de cada estação só era pré-aberta
@@ -2878,17 +3075,16 @@ async function printOrder(id, ev, stations){
 
 // v39: botão "🖨▾" — deixa o operador escolher em quais vias/impressoras imprimir esse
 // pedido específico, em vez de sempre mandar pra todas as vias configuradas automaticamente.
-const STATION_LABELS_PC = { caixa:'Caixa (impressora do caixa)', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
 function openPrintChooser(id, ev){
   if(ev) ev.stopPropagation();
   document.getElementById('pc-order-id').value = id;
   const methodOf = st => (cfg.stations && cfg.stations[st] && cfg.stations[st].method) || 'navegador';
-  const methodLabel = { navegador:'via navegador (USB térmica comum)', rede:'impressora de rede', usb:'dispositivo USB direto' };
-  document.getElementById('pc-stations-list').innerHTML = PRINT_STATIONS.map(st=>`
+  const methodLabel = { navegador:'via navegador (USB térmica comum)', rede:'impressora de rede', usb:'dispositivo USB direto', automatica:'automática (sem clique)' };
+  document.getElementById('pc-stations-list').innerHTML = getPrintStations().map(st=>`
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;">
       <input type="checkbox" id="pc-st-${st}" checked style="width:16px;height:16px;"/>
       <span style="flex:1;">
-        <div style="font-size:13px;">${STATION_LABELS_PC[st]}</div>
+        <div style="font-size:13px;">${stationIcon(st)} ${esc(stationLabel(st))}${st==='caixa'?' (comprovante completo)':''}</div>
         <div style="font-size:10px;color:var(--muted);">${methodLabel[methodOf(st)]||methodOf(st)}</div>
       </span>
     </label>
@@ -2896,11 +3092,11 @@ function openPrintChooser(id, ev){
   document.getElementById('print-choice-modal').classList.add('open');
 }
 function pcToggleAll(checked){
-  PRINT_STATIONS.forEach(st=>{ const el=document.getElementById('pc-st-'+st); if(el) el.checked = checked; });
+  getPrintStations().forEach(st=>{ const el=document.getElementById('pc-st-'+st); if(el) el.checked = checked; });
 }
 function confirmPrintChoice(){
   const id = document.getElementById('pc-order-id').value;
-  const selected = PRINT_STATIONS.filter(st=>{ const el=document.getElementById('pc-st-'+st); return el && el.checked; });
+  const selected = getPrintStations().filter(st=>{ const el=document.getElementById('pc-st-'+st); return el && el.checked; });
   closeModal('print-choice-modal');
   if(!selected.length){ showToast('Nenhuma via selecionada', 'Marque pelo menos uma via pra imprimir.'); return; }
   printOrder(id, null, selected);
@@ -2910,12 +3106,13 @@ function confirmPrintChoice(){
 // térmica USB comum em caixa de restaurante, sem precisar configurar IP/porta).
 // Se `existingWin` for passado (pré-aberta antes do await), reaproveita a janela
 // em vez de abrir uma nova — evita o bloqueio de pop-up em pedidos multi-via.
-// v44: layout das 3 vias (Caixa/Comprovante, Cozinha, Sushibar, Bar) redesenhado e UNIFICADO —
-// cabeçalho centralizado, blocos separados por linha tracejada com título (CLIENTE/ITENS/RESUMO
-// no comprovante; HORÁRIOS/ITENS no setor de produção), valores alinhados à direita, TOTAL em
-// destaque, ícones só onde ajudam a ler rápido (🛵 entrega, 📞 telefone, 📍 endereço, ⏰ previsão),
-// e compatível com impressoras térmicas de 58mm e 80mm (largura em % da página + fonte configurável).
-const STATION_ICONS_PC = { cozinha:'🍳', sushibar:'🍣', bar:'🍹', caixa:'🧾' };
+// v44: layout das vias (Caixa/Comprovante, Cozinha, Sushibar, Bar, Delivery, Expedição...)
+// redesenhado e UNIFICADO — cabeçalho centralizado, blocos separados por linha tracejada com
+// título (CLIENTE/ITENS/RESUMO no comprovante; HORÁRIOS/ITENS no setor de produção), valores
+// alinhados à direita, TOTAL em destaque, ícones só onde ajudam a ler rápido (🛵 entrega, 📞
+// telefone, 📍 endereço, ⏰ previsão), e compatível com impressoras térmicas de 58mm e 80mm
+// (largura em % da página + fonte configurável).
+// (ícones/labels agora vêm de stationIcon()/stationLabel(), acima — dinâmico por cfg.stations)
 // ═══════════════════════════════════════════
 // v47: IMPRESSÃO VIA EXTENSÃO DO NAVEGADOR (chrome-extension/) — outra forma de imprimir
 // sozinho, sem diálogo, além do Agente Local. Ver chrome-extension/README.md pra instalar.
@@ -2935,7 +3132,6 @@ window.postMessage({ source: 'shogatsu-page', type: 'shogatsu-ext-ping' }, '*');
 function buildPlainTicketLines(order, station, deliveryWindow){
   const isCaixa = station==='caixa';
   const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
-  const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
   const money = v => 'R$ '+Number(v||0).toFixed(2).replace('.',',');
   const HR = '--------------------------------', HR2='================================';
   const L = [];
@@ -2963,12 +3159,12 @@ function buildPlainTicketLines(order, station, deliveryWindow){
     L.push(HR2);
     L.push('Pagamento: '+(order.payMethod||'-'));
   } else {
-    L.push({text:(stationLabels[station]||station).toUpperCase(), bold:true, center:true});
+    L.push({text:stationLabel(station).toUpperCase(), bold:true, center:true});
     L.push('VIA DE PRODUCAO');
     L.push(HR);
     L.push((order.ticketNumber?`Pedido Nº ${order.ticketNumber}`:`Pedido #${order.id}`));
     L.push(order.mode==='delivery'?'DELIVERY':'RETIRADA');
-    L.push(HR); L.push({text:'ITENS DA '+(stationLabels[station]||station).toUpperCase(), bold:true}); L.push(HR);
+    L.push(HR); L.push({text:'ITENS DA '+stationLabel(station).toUpperCase(), bold:true}); L.push(HR);
     items.forEach(i=>L.push('* '+i.qty+'x '+i.name));
     L.push(HR);
     L.push('Observacoes:');
@@ -2997,7 +3193,6 @@ function printViaExtension(order, station, deliveryWindow){
 function openBrowserTicket(order, station, deliveryWindow, existingWin){
   const isCaixa = station==='caixa';
   const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
-  const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
   const money = v => 'R$ '+Number(v||0).toFixed(2).replace('.',',');
   const time = new Date(order.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const dateStr = new Date(order.createdAt).toLocaleDateString('pt-BR');
@@ -3023,7 +3218,7 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-item t-total"><span>TOTAL</span><span>${money(order.total)}</span></div>
     <div class="t-row" style="margin-top:8px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${esc(order.troco)})`:''}</div>
   ` : `
-    <div class="t-block-title">ITENS DA ${(stationLabels[station]||station).toUpperCase()}</div>
+    <div class="t-block-title">ITENS DA ${stationLabel(station).toUpperCase()}</div>
     ${items.map(i=>`<div class="t-bullet-item">• ${i.qty}x ${esc(i.name)}</div>`).join('')}
     <div class="t-hr"></div>
     <div class="t-row"><b>Observações:</b></div>
@@ -3069,7 +3264,7 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-row">Ref.: #${refShort}</div>
     <div class="t-row">${modeTag}</div>
     `:`
-    <div class="t-sector">${STATION_ICONS_PC[station]||''} ${(stationLabels[station]||station).toUpperCase()}</div>
+    <div class="t-sector">${stationIcon(station)} ${stationLabel(station).toUpperCase()}</div>
     <div class="t-doctype">VIA DE PRODUÇÃO</div>
     <div class="t-row t-center">Pedido${order.ticketNumber?' Nº '+order.ticketNumber:' #'+order.id} · Ref.: #${refShort}</div>
     <div class="t-row t-center">${modeTag}</div>
@@ -3897,8 +4092,7 @@ function renderMenuItems(){
     :sec.items.map((item,ii)=>menuItemRowHTML(sec,activeCatIdx,item,ii,true)).join('');
 }
 function stIcons(stations){
-  const icons={cozinha:'🍳',sushibar:'🍣',bar:'🍹'};
-  return (stations&&stations.length?stations:['cozinha']).map(s=>icons[s]||s).join(' ');
+  return (stations&&stations.length?stations:[cfg.defaultStation||'cozinha']).map(s=>stationIcon(s)).join(' ');
 }
 function menuItemRowHTML(sec,si,item,ii,allowReorder){
   const vCount=(item.variants||[]).length;
@@ -3921,6 +4115,7 @@ function menuItemRowHTML(sec,si,item,ii,allowReorder){
         <div style="font-size:11px;color:var(--muted)">${item.qty||'—'}</div>
         <button class="mi-btn" onclick="toggleItemAvailability(${si},${ii})" style="${item.available===false?'background:var(--red-bg);color:var(--red-lt);':'background:rgba(80,200,120,.12);color:#50c878;'}">${item.available===false?'🚫 Esgotado':'✅ Disponível'}</button>
         <button class="mi-btn edit" onclick="openEditItem(${si},${ii})"><span style="font-size:17px;">✏️</span> Editar</button>
+        <button class="mi-btn stations" onclick="openItemStationsModal(${si},${ii})" title="Estações de Impressão"><span style="font-size:17px;">📠</span> Estações</button>
         <button class="mi-btn del"  onclick="deleteItem(${si},${ii})">🗑</button>
       </div>`;
 }
@@ -4054,6 +4249,56 @@ function openEditItem(si,ii){
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
   document.getElementById('item-modal').classList.add('open');
+}
+// ═══════════════════════════════════════════
+// 📠 ESTAÇÕES DE IMPRESSÃO — por item do cardápio (v49)
+// Define pra quais estações (Caixa, Cozinha, Sushibar, Bar, Delivery, Expedição e qualquer
+// via customizada criada em Configurações → 📠 Impressoras por Estação) esse item é enviado
+// automaticamente na hora de imprimir os pedidos. Um item pode pertencer a várias estações.
+// ═══════════════════════════════════════════
+let ismSelected = [];
+function openItemStationsModal(si,ii){
+  const item = menu[si].items[ii];
+  document.getElementById('ism-si').value = si;
+  document.getElementById('ism-ii').value = ii;
+  document.getElementById('ism-item-name').textContent = '🍽️ '+item.name;
+  ismSelected = (item.stations && item.stations.length) ? [...item.stations] : [];
+  const defKey = cfg.defaultStation || 'cozinha';
+  document.getElementById('ism-default-station').textContent = stationIcon(defKey)+' '+stationLabel(defKey);
+  renderIsmGrid();
+  document.getElementById('item-stations-modal').classList.add('open');
+}
+function renderIsmGrid(){
+  const el = document.getElementById('ism-grid');
+  el.innerHTML = getStationKeys().map(key=>{
+    const checked = ismSelected.includes(key);
+    return `
+    <label class="station-check-card ${checked?'checked':''}" onclick="event.preventDefault();ismToggle('${key}');">
+      <input type="checkbox" ${checked?'checked':''} readonly/>
+      <span class="sc-box">✓</span>
+      <span class="sc-icon">${stationIcon(key)}</span>
+      <span class="sc-label">${esc(stationLabel(key))}</span>
+    </label>`;
+  }).join('');
+}
+function ismToggle(key){
+  if(ismSelected.includes(key)) ismSelected = ismSelected.filter(s=>s!==key);
+  else ismSelected = [...ismSelected, key];
+  renderIsmGrid();
+}
+function ismToggleAll(all){
+  ismSelected = all ? getStationKeys() : [];
+  renderIsmGrid();
+}
+async function saveItemStations(){
+  const si = parseInt(document.getElementById('ism-si').value);
+  const ii = parseInt(document.getElementById('ism-ii').value);
+  menu[si].items[ii].stations = [...new Set(ismSelected)];
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar as estações desse item.'); return; }
+  closeModal('item-stations-modal');
+  renderMenuItems();
+  showToast('📠 Estações salvas', `${menu[si].items[ii].name}: ${stIcons(menu[si].items[ii].stations)||'estação padrão'}`);
 }
 // ── Variações (grupos de opções, ex: Tamanho / Adicionais) ──
 function addVariantGroup(){
@@ -4225,14 +4470,19 @@ async function confirmImportMenu(){
   showToast('📥 Cardápio importado!', `${parsed.length} categorias, atualizado com sucesso.`);
 }
 
+function renderCatStationChecks(selected){
+  const el = document.getElementById('cat-stations-checks');
+  el.innerHTML = getStationKeys().map(s=>`
+    <label style="font-size:12px;display:flex;align-items:center;gap:5px;">
+      <input type="checkbox" id="cat-st-${s}" ${(selected||[]).includes(s)?'checked':''}/> ${stationIcon(s)} ${esc(stationLabel(s))}
+    </label>`).join('');
+}
 function setCatStationCheckboxes(stations){
-  ['cozinha','sushibar','bar'].forEach(s=>{
-    document.getElementById('cat-st-'+s).checked = (stations||[]).includes(s);
-  });
+  renderCatStationChecks(stations && stations.length ? stations : [cfg.defaultStation||'cozinha']);
 }
 function getCatStationCheckboxes(){
-  const chosen = ['cozinha','sushibar','bar'].filter(s=>document.getElementById('cat-st-'+s).checked);
-  return chosen.length ? chosen : ['cozinha']; // sempre pelo menos uma via, senão os itens nunca imprimem
+  const chosen = getStationKeys().filter(s=>{ const el=document.getElementById('cat-st-'+s); return el && el.checked; });
+  return chosen.length ? chosen : [cfg.defaultStation||'cozinha']; // sempre pelo menos uma via, senão os itens nunca imprimem
 }
 function openAddCategory(){
   document.getElementById('cat-modal-title').textContent='Nova Categoria';
@@ -4793,7 +5043,12 @@ function loadLabels(){
   document.getElementById('lb-btnCancel').value=l.btnCancel||'Cancelar';
   document.getElementById('lb-btnPrint').value=l.btnPrint||'Imprimir';
 }
-const STATION_KEYS=['cozinha','sushibar','bar','caixa'];
+// v49: a lista de estações deixou de ser fixa — agora vem de cfg.stations (qualquer via
+// criada pelo admin aparece aqui e em todo o resto do sistema automaticamente).
+function getStationKeys(){
+  if(!cfg.stations) cfg.stations={};
+  return Object.keys(cfg.stations).sort((a,b)=> (a==='caixa'?-1:b==='caixa'?1:0));
+}
 async function detectUSBPrinter(key){
   showToast('🔍 Procurando...', 'Buscando impressoras USB conectadas neste servidor.');
   const res = await apiGet('/api/admin/detect-usb-printers');
@@ -4819,11 +5074,14 @@ async function detectNetworkPrinter(key){
 function renderStationsSettings(){
   const el=document.getElementById('stations-list');
   if(!el)return;
-  el.innerHTML=STATION_KEYS.map(key=>{
-    const s=(cfg.stations&&cfg.stations[key])||{label:key,method:'navegador',ip:'',port:9100,device:'',prepTime:15};
+  const keys = getStationKeys();
+  el.innerHTML=keys.map(key=>{
+    const s=cfg.stations[key]||{label:key,icon:'📠',method:'navegador',ip:'',port:9100,device:'',prepTime:15};
     return `
     <div class="vgroup" data-station="${key}">
       <div class="vgroup-head" style="flex-wrap:wrap;">
+        <input type="text" value="${(s.icon||'📠').replace(/"/g,'&quot;')}" maxlength="2" placeholder="📠"
+          oninput="updateStationField('${key}','icon',this.value)" style="max-width:44px;text-align:center;flex:0 0 auto;" title="Ícone dessa via"/>
         <input type="text" value="${(s.label||key).replace(/"/g,'&quot;')}" placeholder="Nome dessa via"
           oninput="updateStationField('${key}','label',this.value)" style="flex:1;min-width:140px;"/>
         <select onchange="updateStationField('${key}','method',this.value);renderStationsSettings();">
@@ -4833,6 +5091,7 @@ function renderStationsSettings(){
           <option value="usb" ${s.method==='usb'?'selected':''}>🔌 Impressora USB</option>
         </select>
         <button type="button" class="btn secondary sm" onclick="testStationPrint('${key}')">🖨 Testar</button>
+        ${key!=='caixa'?`<button type="button" class="btn secondary sm" style="color:var(--red-lt);" onclick="removeStation('${key}')" title="Excluir esta via">🗑 Excluir</button>`:''}
       </div>
       ${key!=='caixa'?`
       <div class="field" style="margin-top:6px;max-width:220px;">
@@ -4870,14 +5129,52 @@ function renderStationsSettings(){
         <button type="button" class="btn secondary sm" onclick="detectUSBPrinter('${key}')">🔍 Detectar USB conectada</button>
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">Só encontra algo se a impressora estiver ligada por USB no mesmo computador que roda o servidor (não funciona hospedado na nuvem).</div>`:''}
     </div>`;
-  }).join('');
+  }).join('') + `
+    <button type="button" class="btn secondary sm" style="align-self:flex-start;" onclick="addNewStation()">➕ Nova Estação</button>
+    <div class="field" style="margin-top:14px;max-width:280px;">
+      <label style="font-size:10px;">🎯 Estação padrão (quando um item não tem nenhuma marcada)</label>
+      <select onchange="cfg.defaultStation=this.value;">
+        ${keys.map(k=>`<option value="${k}" ${cfg.defaultStation===k?'selected':''}>${(cfg.stations[k]&&cfg.stations[k].icon)||'📠'} ${esc((cfg.stations[k]&&cfg.stations[k].label)||k)}</option>`).join('')}
+      </select>
+    </div>`;
 }
 function updateStationField(key,field,value){
   if(!cfg.stations) cfg.stations={};
-  if(!cfg.stations[key]) cfg.stations[key]={label:key,method:'navegador',ip:'',port:9100,device:'',prepTime:15};
+  if(!cfg.stations[key]) cfg.stations[key]={label:key,icon:'📠',method:'navegador',ip:'',port:9100,device:'',prepTime:15};
   if(field==='port') cfg.stations[key][field] = parseInt(value)||9100;
   else if(field==='prepTime') cfg.stations[key][field] = Math.max(0, parseInt(value)||0);
   else cfg.stations[key][field] = value;
+}
+// v49: cria uma via nova (ex: "Forno", "Grelha", "Adega") — a chave é gerada a partir do
+// nome digitado (sem acento/espaço), e a via já aparece em Estações de Impressão e no modal
+// "📠 Estações" de cada item do cardápio na hora, sem precisar salvar antes.
+function addNewStation(){
+  const name = prompt('Nome da nova estação (ex: Forno, Grelha, Adega):');
+  if(!name || !name.trim()) return;
+  let key = name.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || ('estacao_'+Date.now());
+  if(!cfg.stations) cfg.stations={};
+  if(cfg.stations[key]){ key = key+'_'+Date.now().toString(36).slice(-4); }
+  cfg.stations[key] = { label:name.trim(), icon:'📠', method:'navegador', ip:'', port:9100, device:'', prepTime:15 };
+  renderStationsSettings();
+  showToast('✅ Estação criada', `"${name.trim()}" já pode ser usada em Editar Cardápio → 📠 Estações. Não esqueça de clicar em Salvar.`, 6000);
+}
+// v49: exclui uma via — pede confirmação (some de qualquer item que a usava, ver
+// normalizeMenu no servidor) e remove também dos itens já carregados aqui na tela, pra não
+// mostrar um ícone "fantasma" até a próxima recarga.
+function removeStation(key){
+  const label = (cfg.stations[key]&&cfg.stations[key].label)||key;
+  if(!confirm(`Excluir a via "${label}"? Ela vai deixar de aparecer em todos os itens do cardápio que a usavam. Essa ação não pode ser desfeita.`)) return;
+  delete cfg.stations[key];
+  if(cfg.defaultStation===key) cfg.defaultStation = 'cozinha' in cfg.stations ? 'cozinha' : Object.keys(cfg.stations)[0];
+  (menu||[]).forEach(sec=>{
+    sec.stations = (sec.stations||[]).filter(s=>s!==key);
+    (sec.items||[]).forEach(it=>{ if(it.stations) it.stations = it.stations.filter(s=>s!==key); });
+  });
+  renderStationsSettings();
+  renderMenuItems();
+  showToast('🗑 Estação excluída', `"${label}" foi removida. Clique em Salvar pra confirmar.`, 5000);
 }
 
 // v40: Entrada + tempo de preparo da estação = Previsão de saída, mostrado na comanda
