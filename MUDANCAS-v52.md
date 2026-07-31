@@ -21,6 +21,22 @@ O que mudou:
 falhava com o erro cru; agora deve abrir a janela de impressão do navegador automaticamente
 pra essa via, com um aviso explicando o motivo.
 
+## 1.1 🐛 Corrigido — tela de opções da extensão travava (crash) em PC comum
+Além do erro acima na hora de imprimir, a **tela de opções** da extensão (onde se escolhe qual
+impressora usar por via) quebrava assim que abria em qualquer PC que não fosse Chromebook, com
+o erro `Cannot read properties of undefined (reading 'getPrinters')` — porque `chrome.printing`
+nem existe fora do ChromeOS (não é que a chamada falha, o objeto inteiro é `undefined`), e o
+código chamava `chrome.printing.getPrinters(...)` sem checar isso antes.
+
+Corrigido em `chrome-extension/options.js` e `chrome-extension/background.js`: agora, antes de
+qualquer chamada à API, checamos se `chrome.printing` existe. Se não existir, a tela de opções
+mostra um aviso claro (em vez de travar em branco) explicando que esse recurso só existe em
+Chromebook, e a extensão já devolve a mesma mensagem amigável na hora de imprimir — sem depender
+de capturar um erro genérico depois que o crash já aconteceu.
+
+**Testar:** recarregar a extensão, abrir as opções dela num PC Windows/Mac — antes travava com
+o erro no console; agora deve mostrar a mensagem explicando a limitação, sem travar a tela.
+
 ## 2. 🐛 Causa raiz encontrada — cardápio "cortado" e botões com bug no mobile
 O site já tinha barras fixas no topo (cabeçalho, Delivery/Retirada/Reservar Mesa, categorias)
 e destaque automático de categoria ao rolar — mas os espaços reservados pra essas barras eram

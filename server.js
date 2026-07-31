@@ -919,7 +919,12 @@ function getToken(req, query) {
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon'
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+  // v53: faltavam jpg/webp (fotos de prato/splash ficavam sem Content-Type correto) e os
+  // formatos de vídeo usados pelas novas "Live Photo" da Splash Screen — sem isso o
+  // navegador (principalmente Safari/iOS) recusa tocar o vídeo inline.
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime'
 };
 
 function serveStatic(req, res, pathname) {
@@ -1212,12 +1217,20 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/upload' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { dataUrl } = await readBody(req);
-      const m = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
-      if (!m) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG ou WEBP.' });
-      const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+      const { dataUrl } = await readBody(req, 21e6);
+      // v53: além de imagem, agora também aceita vídeo curto — usado nas "Live Photo" da
+      // Splash Screen (foto "viva" tocando em loop, mudo). Vídeo tem um limite maior (15MB)
+      // porque pesa naturalmente mais que uma foto comprimida.
+      const mImg = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+      const mVideo = /^data:video\/(mp4|webm|quicktime);base64,(.+)$/i.exec(dataUrl || '');
+      if (!mImg && !mVideo) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG, WEBP (foto) ou MP4/WEBM/MOV (Live Photo).' });
+      const m = mImg || mVideo;
+      let ext = m[1].toLowerCase();
+      if (ext === 'jpeg') ext = 'jpg';
+      else if (ext === 'quicktime') ext = 'mov';
       const buffer = Buffer.from(m[2], 'base64');
-      if (buffer.length > 4 * 1024 * 1024) return sendJSON(res, 400, { error: 'Imagem muito grande (máx. 4MB).' });
+      const maxBytes = mVideo ? 15 * 1024 * 1024 : 4 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mVideo ? 'Vídeo muito grande (máx. 15MB).' : 'Imagem muito grande (máx. 4MB).' });
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       return sendJSON(res, 200, { url: '/uploads/' + filename });
