@@ -22,6 +22,14 @@
   --red:#c0392b;--red-lt:#e05a4a;--red-dk:#8a1f15;
   --gold:#c9a84c;--cream:#f5ede0;--muted:#7a6a60;--white:#f0e8e0;
   --green:#27ae60;--green-lt:#2ecc71;
+  /* v52 — offsets das barras fixas (header/mode-bar/cat-nav) medidos de verdade em JS
+     (ver updateStickyOffsets() perto do fim do arquivo), em vez de valores fixos (60px/108px)
+     que só valiam pro desktop. No celular o cabeçalho pode ocupar mais de uma linha (nome da
+     loja grande, botões extras, banner de fechado etc.) — com valor fixo, as barras "sticky"
+     ficavam desalinhadas e o topo do cardápio ficava escondido atrás delas. Os valores abaixo
+     são só o ponto de partida antes do primeiro cálculo (evita "pulo" no primeiro frame).
+  */
+  --header-h:60px;--modebar-h:48px;--sticky-total-h:108px;
 }
 body[data-theme="light"]{
   --black:#faf7f2;--panel:#ffffff;--card:#ffffff;--border:#e9e2d6;
@@ -37,7 +45,7 @@ a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:200;}
-.header-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px;}
+.header-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;min-height:60px;flex-wrap:wrap;gap:8px 0;padding:8px 0;}
 .header-brand{display:flex;align-items:center;gap:10px;}
 .header-logo{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;color:var(--white);}
 .header-logo span{color:var(--red-lt);}
@@ -57,6 +65,25 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .cover-slider-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);cursor:pointer;transition:background .2s;}
 .cover-slider-dots span.active{background:var(--gold);width:20px;border-radius:4px;}
 @media (max-width:600px){.cover-slider{height:62vh;min-height:320px;max-height:520px;}}
+/* v52 — AJUSTE MOBILE: reduz o espaço que os botões do cabeçalho ocupam em telas estreitas,
+   pra diminuir a chance do cabeçalho quebrar em 2 linhas (e, quando quebrar mesmo assim, os
+   offsets agora são recalculados de verdade — ver updateStickyOffsets() — então nada fica
+   cortado atrás das barras fixas). Também deixa os botões Delivery/Retirada/Reservar Mesa
+   (.mode-btn) com padding/fonte menores nesse tamanho, evitando texto cortado/espremido. */
+@media (max-width:480px){
+  .header-inner{gap:6px 0;}
+  .header-status{display:none;} /* já existe o "🌙/☀️" e o badge de status some daqui pra caber; o essencial (aberto/fechado) já aparece no banner e no hero-strip */
+  .cart-btn{padding:7px 10px;font-size:11px;gap:5px;}
+  #header-track-btn span,#account-btn span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mode-bar{padding:8px 10px;}
+  .mode-bar-inner{gap:6px;}
+  .mode-btn{padding:8px 4px;font-size:10px;letter-spacing:0;}
+  .mode-btn .mode-btn-icon{font-size:17px;width:28px;height:28px;}
+}
+@media (max-width:360px){
+  .cart-btn span{display:none;} /* telas muito estreitas: mantém só ícone + contador no carrinho e nos outros botões do cabeçalho */
+  #header-track-btn span,#account-btn span{display:none;}
+}
 .hero-strip{background:linear-gradient(135deg,#1a0e0a 0%,#2a1008 100%);border-bottom:1px solid var(--border);padding:20px 16px;}
 .hero-strip-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
 .hero-info h2{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,5vw,28px);font-weight:400;color:var(--cream);margin-bottom:4px;}
@@ -65,7 +92,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .chip{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
 .chip span{color:var(--white);}
 
-.mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:sticky;top:60px;z-index:190;}
+.mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:sticky;top:var(--header-h,60px);z-index:190;}
 .mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:10px;align-items:center;}
 .mode-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .2s;max-width:180px;display:flex;flex-direction:column;align-items:center;gap:4px;}
 .mode-btn .mode-btn-icon{font-size:20px;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--panel);transition:all .2s;}
@@ -92,7 +119,15 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
   60%{transform:scale(1);}
 }
 
-.sticky-menu-bar{position:sticky;top:108px;z-index:180;background:color-mix(in srgb, var(--black) 85%, transparent);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 6px 20px rgba(0,0,0,.28);border-bottom:1px solid var(--border);}
+.sticky-menu-bar{position:sticky;top:var(--sticky-total-h,108px);z-index:180;background:color-mix(in srgb, var(--black) 85%, transparent);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 6px 20px rgba(0,0,0,.28);border-bottom:1px solid var(--border);}
+/* v52 — BUG CORRIGIDO ("cardápio cortado" no mobile): ao clicar numa categoria, scrollIntoView()
+   rolava a seção até o TOPO ABSOLUTO da tela — escondendo o título dela atrás do
+   header+mode-bar+barra de categorias (todos "sticky", sobrepostos). scroll-margin-top avisa o
+   navegador pra parar de rolar um pouco antes, deixando espaço pras barras fixas. O valor vem
+   de --sticky-total-h, atualizado dinamicamente por updateStickyOffsets() (index.html) sempre
+   que a altura real do cabeçalho mudar — inclusive no celular, onde o cabeçalho pode quebrar
+   em duas linhas. */
+.menu-section{scroll-margin-top:calc(var(--sticky-total-h,108px) + 12px);}
 .cat-nav{padding:0 16px;}
 .cat-nav-inner{max-width:800px;margin:0 auto;display:flex;gap:0;overflow-x:auto;scrollbar-width:none;cursor:grab;user-select:none;scroll-behavior:smooth;position:relative;-webkit-overflow-scrolling:touch;}
 .cat-nav-inner.dragging{cursor:grabbing;scroll-behavior:auto;}
@@ -923,6 +958,52 @@ function saveCustomerSession() {
   if (customer) localStorage.setItem('shogatsu_customer', JSON.stringify(customer));
   else localStorage.removeItem('shogatsu_customer');
 }
+// v52 — GRAVAÇÃO AUTOMÁTICA E PERSISTENTE DO FORMULÁRIO DE ENTREGA: separado do sistema de
+// "conta" (login por PIN) acima — funciona mesmo pra quem não criou conta. Qualquer coisa
+// digitada em Nome, WhatsApp, CEP, Rua, Número, Complemento, Bairro, Ponto de Referência ou
+// Cupom é salva no localStorage (rascunho) a cada alteração, com um pequeno atraso (debounce)
+// pra não gravar a cada tecla. Ao reabrir o checkout — mesmo depois de fechar o navegador e
+// voltar outro dia — os campos vazios são preenchidos de novo automaticamente com o último
+// valor salvo. Campos já preenchidos (ex: pelo login da conta) nunca são sobrescritos por um
+// rascunho antigo.
+const CHECKOUT_DRAFT_KEY = 'shogatsu_checkout_draft';
+const CHECKOUT_DRAFT_FIELDS = ['f-name','f-phone','f-cep','f-street','f-number','f-comp','f-hood','f-ref','f-coupon','f-name-r','f-phone-r'];
+let checkoutDraftSaveTimer = null;
+function saveCheckoutDraft() {
+  clearTimeout(checkoutDraftSaveTimer);
+  checkoutDraftSaveTimer = setTimeout(() => {
+    let draft = {};
+    try { draft = JSON.parse(localStorage.getItem(CHECKOUT_DRAFT_KEY) || '{}') || {}; } catch (e) { draft = {}; }
+    CHECKOUT_DRAFT_FIELDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) draft[id] = el.value;
+    });
+    try { localStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft)); } catch (e) {}
+  }, 400);
+}
+function loadCheckoutDraft() {
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(CHECKOUT_DRAFT_KEY) || 'null'); } catch (e) { draft = null; }
+  if (!draft) return;
+  CHECKOUT_DRAFT_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.value && draft[id]) el.value = draft[id];
+  });
+}
+function clearCheckoutDraftField(id) {
+  try {
+    const draft = JSON.parse(localStorage.getItem(CHECKOUT_DRAFT_KEY) || '{}') || {};
+    delete draft[id];
+    localStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft));
+  } catch (e) {}
+}
+function attachCheckoutDraftListeners() {
+  CHECKOUT_DRAFT_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', saveCheckoutDraft);
+  });
+}
+
 function updateAccountUI() {
   const label = document.getElementById('account-btn-label');
   if (label) label.textContent = customer ? customer.name.split(' ')[0] : 'Entrar';
@@ -2000,6 +2081,7 @@ function renderMenu() {
       }).join('')}
     </div>
   `).join('');
+  if (typeof updateStickyOffsets === 'function') updateStickyOffsets(); // v52: recalcula antes do observer usar o offset, pra cobrir mudanças no banner "fechado"/cabeçalho
   setupCategoryObserver();
 }
 
@@ -2295,6 +2377,7 @@ function openCheckout(silent) {
   }
   if (!silent) {
     openFullScreen('checkout-screen');
+    loadCheckoutDraft(); // v52: preenche com o rascunho salvo (só campos ainda vazios)
     if (mode === 'delivery') calcDeliveryFee(); // recalcula caso o cliente volte pra editar
     if (!autoCouponChecked) tryAutoApplyCoupon();
     const saveBox = document.getElementById('checkout-save-account-box');
@@ -3092,7 +3175,13 @@ function setupCategoryObserver(){
   if (!menu.length) return;
   const stickyBar = document.getElementById('sticky-menu-bar');
   const barHeight = stickyBar ? stickyBar.offsetHeight : 90;
-  const topOffset = 108 + barHeight; // 108 = header (60) + mode-bar (48), sempre sticky acima
+  // v52 — BUG CORRIGIDO: era `108 + barHeight`, com 108 fixo assumindo header(60)+mode-bar(48)
+  // sempre nesse tamanho exato — no celular (nome de loja grande, banner de fechado, cabeçalho
+  // quebrando em 2 linhas) a altura real quase nunca batia com isso, e a categoria destacada na
+  // barra ficava errada/atrasada em relação ao que o cliente via na tela. Agora lê a altura real
+  // de --sticky-total-h (calculada em updateStickyOffsets(), sempre atualizada).
+  const stickyTotalH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-total-h')) || 108;
+  const topOffset = stickyTotalH + barHeight;
   categoryObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) setActiveCategory(entry.target.id.replace('sec-', ''));
@@ -3104,10 +3193,45 @@ function setupCategoryObserver(){
   });
 }
 
+// v52 — mede a altura REAL do header e da mode-bar (podem crescer no celular: nome de loja
+// grande, cabeçalho quebrando em 2 linhas, banner "fechado" aparecendo etc.) e guarda em
+// variáveis CSS usadas por .mode-bar, .sticky-menu-bar e .menu-section (scroll-margin-top) —
+// ver comentários dessas regras no <style>. Sem isso, os valores eram fixos (60px/108px) e só
+// funcionavam por acaso, quando o cabeçalho tinha exatamente esse tamanho (normalmente só no
+// desktop). Roda no carregamento, ao redimensionar/girar a tela, e sempre que o conteúdo do
+// cabeçalho muda de tamanho (ResizeObserver cobre isso automaticamente).
+function updateStickyOffsets(){
+  const header = document.querySelector('.header');
+  const modeBar = document.querySelector('.mode-bar');
+  if (!header) return;
+  const headerH = Math.round(header.getBoundingClientRect().height) || 60;
+  const modeBarH = modeBar ? Math.round(modeBar.getBoundingClientRect().height) : 0;
+  const root = document.documentElement.style;
+  root.setProperty('--header-h', headerH + 'px');
+  root.setProperty('--modebar-h', modeBarH + 'px');
+  root.setProperty('--sticky-total-h', (headerH + modeBarH) + 'px');
+}
+window.addEventListener('resize', updateStickyOffsets);
+window.addEventListener('orientationchange', () => setTimeout(updateStickyOffsets, 300));
+window.addEventListener('load', updateStickyOffsets);
+if (typeof ResizeObserver !== 'undefined') {
+  const stickyResizeObserver = new ResizeObserver(() => updateStickyOffsets());
+  document.addEventListener('DOMContentLoaded', () => {
+    const h = document.querySelector('.header'), m = document.querySelector('.mode-bar');
+    if (h) stickyResizeObserver.observe(h);
+    if (m) stickyResizeObserver.observe(m);
+    updateStickyOffsets();
+  });
+} else {
+  document.addEventListener('DOMContentLoaded', updateStickyOffsets);
+}
+
 
 loadCustomerSession();
 loadConfig();
 connectPublicSSE();
+attachCheckoutDraftListeners(); // v52: liga a gravação automática do rascunho do formulário de entrega
+loadCheckoutDraft(); // v52: já preenche os campos com o último rascunho salvo, mesmo antes de abrir o checkout
 loadReviews();
 refreshPendingReviewBadge();
 

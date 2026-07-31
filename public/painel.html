@@ -3099,6 +3099,20 @@ async function printOrder(id, ev, stations){
         if(shogatsuExtDetected){
           const r = await printViaExtension(d.order, d.station, d.deliveryWindow);
           if(r.ok){ printedAny=true; }
+          else if(r.platformUnsupported){
+            // v52 — a API chrome.printing usada pela extensão só funciona em ChromeOS; em
+            // Windows/Mac/Linux ela SEMPRE falha com "not allowed for specified platform",
+            // não importa a impressora. Em vez de deixar o pedido sem sair, cai automaticamente
+            // pro método "Navegador" (abre a caixa de impressão normal) só nessa via.
+            if(win){
+              usedWin = true;
+              await openBrowserTicket(d.order, d.station, d.deliveryWindow, win);
+              printedAny = true;
+              showToast('ℹ️ Impressão silenciosa indisponível', 'A extensão só imprime sozinha em ChromeOS. Abrimos a caixa de impressão do navegador pra essa via — confirme a impressão na janela que abriu.', 7000);
+            } else {
+              blockedAny = true;
+            }
+          }
           else { showToast('⚠️ Extensão não conseguiu imprimir', r.error||'Erro desconhecido — o Agente Local (se estiver rodando) ainda pode imprimir essa via.', 6000); delegatedAny=true; }
         } else {
           delegatedAny=true;
@@ -5501,6 +5515,7 @@ async function testStationPrint(key){
     if(shogatsuExtDetected){
       const r = await printViaExtension({ id:'teste', ticketNumber:null, items:[{name:'Item de teste',qty:1,price:0}], createdAt:new Date().toISOString(), mode:'retirada', name:'Teste', total:0, subtotal:0, fee:0 }, key, null);
       if(r.ok){ showToast('✅ Teste enviado pela Extensão', 'Se a impressora estiver ligada, deve sair agora.'); return; }
+      if(r.platformUnsupported){ showToast('ℹ️ Impressão silenciosa indisponível nesse PC', r.error, 8000); return; }
       showToast('⚠️ Extensão instalada mas falhou', r.error||'Confira a impressora escolhida nas opções da extensão.', 7000); return;
     }
     showToast('🤖 Teste enviado pro Agente Local', 'Se o Agente Local estiver rodando e conectado, ele imprime sozinho agora. Se nada sair, confira se ele está aberto/logado (veja o print-agent.log) — ou instale a Extensão (chrome-extension/) pra uma opção mais fácil.', 8000); return;
