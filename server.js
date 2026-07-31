@@ -1766,6 +1766,18 @@ function estimateDeliveryWindow(order, cfg) {
       // faz: delega pro Agente Local de Impressão (print-agent/), que já está escutando os
       // pedidos novos em tempo real e imprime sozinho, sem qualquer participação do navegador.
       if (printerCfg.method === 'automatica') {
+        // v54 — BUG CORRIGIDO ("imprimir via celular não chega na impressora do PC"): até
+        // aqui, clicar em "🖨 Imprimir" (seja de novo, seja reimprimindo) numa via
+        // Automática só devolvia `delegated:true` pro navegador SEM avisar o Agente Local
+        // de verdade — o agente só imprimia pedido novo automaticamente na hora da criação
+        // (evento "new-order"); qualquer clique manual depois disso (do celular, do PC, de
+        // qualquer painel logado) não tinha efeito nenhum na impressora, mesmo mostrando um
+        // aviso de "enviado". Agora todo clique manual manda um evento "print-order" por SSE
+        // pra TODOS os clientes conectados (painel no PC, painel no celular, Agente Local) —
+        // é assim que "celular manda, impressora do PC obedece" funciona de verdade: o
+        // servidor é o intermediário, o Agente Local (rodando no PC ligado na impressora)
+        // escuta esse evento e imprime na hora, não importa de qual aparelho o pedido partiu.
+        broadcast('print-order', { order, station: st });
         return sendJSON(res, 200, { ok: true, printed: false, delegated: true, order, station: st, method: 'automatica' });
       }
 
