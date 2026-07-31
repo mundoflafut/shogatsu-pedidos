@@ -343,6 +343,27 @@ async function loadRodizioPopularData(){
 (async function renderPage(){
   const DATA = await loadRodizioPopularData();
 
+// v51: aplica fontes/cor/tamanho escolhidos em Editar Cardápio Popular → 🎨 Aparência, sem
+// precisar mexer em CSS nenhum — troca só as variáveis, o resto do layout continua igual.
+(function applyTheme(){
+  const theme = DATA.theme || {};
+  const FONT_STACKS = {
+    serif: "'Playfair Display', serif",
+    'sans-serif': "'Poppins', sans-serif",
+    rounded: "'Poppins', system-ui, sans-serif"
+  };
+  const root = document.documentElement.style;
+  if (theme.accentColor) {
+    root.setProperty('--gold', theme.accentColor);
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+    h1,h2,h3{ font-family:${FONT_STACKS[theme.headingFont] || FONT_STACKS.serif}; }
+    body{ font-family:${FONT_STACKS[theme.bodyFont] || FONT_STACKS['sans-serif']}; font-size:${(theme.fontScale||1)}em; }
+  `;
+  document.head.appendChild(style);
+})();
+
 document.getElementById('hero-photo').innerHTML = photoBox(DATA.heroPhoto, 'hero');
 
 // Frases chamativas girando embaixo do título, com fade suave.

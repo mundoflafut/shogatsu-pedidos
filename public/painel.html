@@ -772,6 +772,34 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
         <div id="rp-editor-body" style="display:none;">
 
+          <div class="settings-card-title" style="margin-top:4px;">🎨 Aparência — fontes e cores</div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Ajusta a tipografia e a cor de destaque da página pública, sem precisar mexer em código.</div>
+          <div class="field-row" style="margin-bottom:14px;">
+            <div class="field">
+              <label style="font-size:10px;">Fonte dos títulos</label>
+              <select id="rp-theme-headingfont" onchange="rpDraft.theme.headingFont=this.value">
+                <option value="serif">Serifada (elegante — padrão)</option>
+                <option value="sans-serif">Sem serifa (moderna/limpa)</option>
+                <option value="rounded">Arredondada (amigável)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label style="font-size:10px;">Fonte do texto</label>
+              <select id="rp-theme-bodyfont" onchange="rpDraft.theme.bodyFont=this.value">
+                <option value="sans-serif">Sem serifa (padrão)</option>
+                <option value="serif">Serifada</option>
+              </select>
+            </div>
+            <div class="field" style="max-width:110px;">
+              <label style="font-size:10px;">Cor de destaque</label>
+              <input type="color" id="rp-theme-color" oninput="rpDraft.theme.accentColor=this.value" style="width:100%;height:36px;padding:2px;"/>
+            </div>
+            <div class="field">
+              <label style="font-size:10px;">Tamanho do texto (<span id="rp-theme-scale-label">100%</span>)</label>
+              <input type="range" id="rp-theme-scale" min="0.85" max="1.25" step="0.05" oninput="rpDraft.theme.fontScale=Number(this.value);document.getElementById('rp-theme-scale-label').textContent=Math.round(this.value*100)+'%';"/>
+            </div>
+          </div>
+
           <div class="settings-card-title" style="margin-top:4px;">📷 Foto de capa</div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Aparece no topo da página, em tela cheia. Envie do dispositivo ou cole um link — a prévia abaixo mostra a foto no formato original (sem cortar), do jeito que ela é enviada.</div>
           <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px;">
@@ -823,6 +851,17 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div class="field">
             <label>Aviso de taxa de desperdício</label>
             <input id="rp-wastenote" placeholder="Taxa de desperdício: valor da peça do cardápio..."/>
+          </div>
+
+          <button type="button" class="btn secondary sm" style="margin-top:14px;" onclick="rpToggleManualEditor()">🛠️ Editar manualmente (avançado)</button>
+          <div id="rp-manual-editor" style="display:none;margin-top:10px;">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">
+              Edita tudo de uma vez em formato JSON — útil pra copiar/colar entre lojas ou fazer
+              ajustes finos. Clique em "Aplicar" pra recarregar os campos acima a partir daqui
+              (ainda precisa clicar em Salvar depois pra confirmar de vez).
+            </div>
+            <textarea id="rp-manual-json" rows="12" style="width:100%;font-family:monospace;font-size:11px;padding:8px;background:var(--bg);color:var(--white);border:1px solid var(--border);border-radius:6px;"></textarea>
+            <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="rpApplyManualJson()">↻ Aplicar JSON aos campos</button>
           </div>
 
           <div style="margin-top:18px;display:flex;gap:10px;">
@@ -1421,32 +1460,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 <!-- TOAST -->
 <div id="toast"><div class="t-icon">🔔</div><div class="t-body"><strong id="toast-title"></strong><span id="toast-msg"></span></div></div>
 
-<!-- MODAL ESCOLHA DE IMPRESSORA (v39) -->
-<div class="modal-overlay" id="print-choice-modal">
-  <div class="modal" style="max-width:380px;">
-    <div class="modal-header">
-      <span class="modal-title">🖨 Escolher Impressora</span>
-      <button class="modal-close" onclick="closeModal('print-choice-modal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="pc-order-id"/>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-        Escolha em quais vias imprimir esse pedido. A via "Caixa" sempre sai na impressora
-        (USB/rede/navegador) configurada em Configurações → 🖨 Impressoras — as demais vias
-        seguem a impressora que cada uma tiver configurada.
-      </div>
-      <div id="pc-stations-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
-      <div style="display:flex;gap:8px;">
-        <button type="button" class="btn secondary sm" onclick="pcToggleAll(true)">Marcar todas</button>
-        <button type="button" class="btn secondary sm" onclick="pcToggleAll(false)">Desmarcar todas</button>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn secondary" onclick="closeModal('print-choice-modal')">Cancelar</button>
-      <button class="btn primary" onclick="confirmPrintChoice()">🖨 Imprimir Selecionadas</button>
-    </div>
-  </div>
-</div>
+<!-- v51: modal "Escolher Impressora" foi removido — o botão 🖨 agora sempre imprime direto em
+     todas as vias configuradas (que tiverem itens desse pedido), sem esse passo extra. -->
 
 <!-- MODAL ITEM -->
 <div class="modal-overlay" id="item-modal">
@@ -2481,11 +2496,17 @@ function toggleRpEditor(){
   if(!open) renderRpEditor();
 }
 function rpDefaults(){
-  return { phrases:[], heroPhoto:'', priceGroups:[], priceNote:'', highlights:[], gallery:[], categories:[], address:'', whatsapp:'', instagram:'', deliveryUrl:'/', wasteNote:'' };
+  return { phrases:[], heroPhoto:'', priceGroups:[], priceNote:'', highlights:[], gallery:[], categories:[], address:'', whatsapp:'', instagram:'', deliveryUrl:'/', wasteNote:'', theme:{headingFont:'serif',bodyFont:'sans-serif',accentColor:'#c9a24a',fontScale:1} };
 }
 function renderRpEditor(){
   if(!document.getElementById('rp-editor-body')) return;
   rpDraft = JSON.parse(JSON.stringify({ ...rpDefaults(), ...(cfg.rodizioPopular||{}) }));
+  if(!rpDraft.theme) rpDraft.theme = rpDefaults().theme;
+  document.getElementById('rp-theme-headingfont').value = rpDraft.theme.headingFont||'serif';
+  document.getElementById('rp-theme-bodyfont').value = rpDraft.theme.bodyFont||'sans-serif';
+  document.getElementById('rp-theme-color').value = rpDraft.theme.accentColor||'#c9a24a';
+  document.getElementById('rp-theme-scale').value = rpDraft.theme.fontScale||1;
+  document.getElementById('rp-theme-scale-label').textContent = Math.round((rpDraft.theme.fontScale||1)*100)+'%';
   document.getElementById('rp-herophoto').value = rpDraft.heroPhoto||'';
   rpUpdateHeroPreview();
   rpRenderGallery();
@@ -2497,6 +2518,26 @@ function renderRpEditor(){
   document.getElementById('rp-deliveryurl').value = rpDraft.deliveryUrl||'/';
   document.getElementById('rp-wastenote').value = rpDraft.wasteNote||'';
   rpRenderPriceGroups(); rpRenderHighlights(); rpRenderCategories();
+  const jsonBox = document.getElementById('rp-manual-json');
+  if(jsonBox) jsonBox.value = JSON.stringify(rpDraft, null, 2);
+}
+// v51: "Editar manualmente" — pra quem prefere mexer direto no JSON (ou quer copiar/colar
+// entre lojas) em vez de usar os campos um por um. Fica escondido por padrão pra não confundir
+// quem não precisa; aplicar recarrega TODOS os campos de cima a partir do JSON colado aqui.
+function rpToggleManualEditor(){
+  const box = document.getElementById('rp-manual-editor');
+  const opening = box.style.display === 'none';
+  box.style.display = opening ? 'block' : 'none';
+  if(opening) document.getElementById('rp-manual-json').value = JSON.stringify(rpDraft, null, 2);
+}
+function rpApplyManualJson(){
+  const raw = document.getElementById('rp-manual-json').value;
+  let parsed;
+  try{ parsed = JSON.parse(raw); }
+  catch(e){ alert('JSON inválido: '+e.message); return; }
+  cfg.rodizioPopular = { ...rpDefaults(), ...parsed };
+  renderRpEditor();
+  showToast('✅ Aplicado', 'Campos recarregados a partir do JSON — clique em Salvar pra confirmar de vez.');
 }
 // v49: pré-visualização da foto de capa no FORMATO ORIGINAL (object-fit:contain, sem cortar)
 // — antes só existia o campo de link, sem nenhuma prévia, então não dava pra saber como a foto
@@ -3024,51 +3065,53 @@ async function printOrder(id, ev, stations){
   const targetStations = (Array.isArray(stations) && stations.length) ? stations : getPrintStations();
   const btn = (ev||window.event)?.currentTarget;
   if(btn) btn.classList.add('printing');
-  // BUG CORRIGIDO (nem toda via imprimia): a janela de cada estação só era pré-aberta
-  // quando o pedido já estava carregado na lista local (`orders`) — se o pedido vinha de
-  // outro lugar (card do dashboard, lista filtrada, etc.) essa checagem falhava e NENHUMA
-  // janela era pré-aberta. Como cada via só é confirmada depois de um `await`, a partir da
-  // segunda o navegador bloqueava como pop-up — então só a primeira via de fato imprimia.
-  // Agora as janelas necessárias são sempre pré-abertas de forma síncrona, ainda dentro do
-  // clique do usuário, independente de sabermos de antemão quais estações têm itens — as
-  // que acabam sem uso (via "pulada" ou impressora de rede/USB) são simplesmente fechadas.
-  const preOpened={};
-  targetStations.forEach(st=>{
-    // v46: método "automática" nunca deve abrir NENHUMA janela, nem um popup em branco por um
-    // instante — quem imprime é o Agente Local, o navegador fica fora dessa via por completo.
-    if((cfg.stations && cfg.stations[st] && cfg.stations[st].method) === 'automatica') return;
-    const w=window.open('', '_blank', 'width=380,height=600');
-    if(w){ w.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>'); preOpened[st]=w; }
-  });
-  let printedAny=false, blockedAny=false, fellBackAny=false, delegatedAny=false;
-  for(const st of targetStations){
-    const res = await apiPost('/api/print', { orderId:id, station: st });
-    if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); if(preOpened[st]) preOpened[st].close(); continue; }
-    const d = res.data;
-    if(d.skipped) { if(preOpened[st]) preOpened[st].close(); continue; } // essa via não tem itens desse pedido, pula sem incomodar
-    if(d.method==='navegador'){
-      if(!preOpened[st]) blockedAny=true; // não foi possível pré-abrir (navegador bloqueou mesmo o pré-open) — avisa o usuário
-      // v45: espera essa via terminar de imprimir (ver openBrowserTicket) antes de seguir pra
-      // próxima — chamar window.print() em várias janelas quase ao mesmo tempo é o que travava
-      // o navegador/sistema.
-      else await openBrowserTicket(d.order, d.station, d.deliveryWindow, preOpened[st]);
-      printedAny=true;
-    }
-    else if(d.method==='automatica'){
-      // v46/v47: NADA de janela, NADA de diálogo. Primeiro tenta a Extensão (mais fácil de
-      // instalar — ver chrome-extension/); se ela não estiver instalada ou falhar, deixa por
-      // conta do Agente Local, que já está escutando os pedidos novos em tempo real por conta
-      // própria (print-agent.js) — as duas formas convivem, sem exigir escolher uma só.
-      if(preOpened[st]) preOpened[st].close();
-      if(shogatsuExtDetected){
-        const r = await printViaExtension(d.order, d.station, d.deliveryWindow);
-        if(r.ok){ printedAny=true; }
-        else { showToast('⚠️ Extensão não conseguiu imprimir', r.error||'Erro desconhecido — o Agente Local (se estiver rodando) ainda pode imprimir essa via.', 6000); delegatedAny=true; }
-      } else {
-        delegatedAny=true;
+  // v51 — BUG CORRIGIDO (janela "fantasma" travada em "Carregando pedido..."): a versão
+  // anterior pré-abria UMA JANELA POR VIA antes de saber se ia usar todas — se qualquer coisa
+  // desse errado no meio do processo (a extensão travar esperando resposta, um erro de rede
+  // numa via, etc.) as janelas de vias que ainda não tinham tido a vez ficavam pra sempre
+  // abertas com o texto de carregamento, sem nunca fechar. Agora é usada UMA ÚNICA janela,
+  // reaproveitada pra cada via impressa pelo navegador em sequência, e um bloco try/finally
+  // garante que ela SEMPRE fecha no final — não importa o que aconteça no meio do caminho,
+  // nunca mais fica janela fantasma pra trás.
+  let win = window.open('', '_blank', 'width=380,height=600');
+  if(win) win.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>');
+  let printedAny=false, blockedAny=false, fellBackAny=false, delegatedAny=false, usedWin=false;
+  try{
+    for(const st of targetStations){
+      const res = await apiPost('/api/print', { orderId:id, station: st });
+      if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
+      const d = res.data;
+      if(d.skipped) continue; // essa via não tem itens desse pedido (ou está desativada) — pula sem incomodar
+      if(d.method==='navegador'){
+        if(!win){ blockedAny=true; continue; } // pop-up bloqueado logo de cara — avisa o usuário, mas não trava o resto
+        usedWin=true;
+        // v45: espera essa via terminar de imprimir (ver openBrowserTicket) antes de seguir pra
+        // próxima — chamar window.print() em várias janelas quase ao mesmo tempo é o que travava
+        // o navegador/sistema. v51: agora reaproveita a MESMA janela pra próxima via também.
+        await openBrowserTicket(d.order, d.station, d.deliveryWindow, win);
+        printedAny=true;
       }
+      else if(d.method==='automatica'){
+        // v46/v47: NADA de janela, NADA de diálogo. Primeiro tenta a Extensão (mais fácil de
+        // instalar — ver chrome-extension/); se ela não estiver instalada ou falhar, deixa por
+        // conta do Agente Local, que já está escutando os pedidos novos em tempo real por conta
+        // própria (print-agent.js) — as duas formas convivem, sem exigir escolher uma só.
+        if(shogatsuExtDetected){
+          const r = await printViaExtension(d.order, d.station, d.deliveryWindow);
+          if(r.ok){ printedAny=true; }
+          else { showToast('⚠️ Extensão não conseguiu imprimir', r.error||'Erro desconhecido — o Agente Local (se estiver rodando) ainda pode imprimir essa via.', 6000); delegatedAny=true; }
+        } else {
+          delegatedAny=true;
+        }
+      }
+      else { if(d.printed) printedAny=true; if(d.usedCaixaFallback) fellBackAny=true; }
     }
-    else { if(preOpened[st]) preOpened[st].close(); if(d.printed) printedAny=true; if(d.usedCaixaFallback) fellBackAny=true; }
+  } catch(err) {
+    showToast('⚠️ Erro ao imprimir', 'Algo deu errado no meio da impressão — as vias que já tinham saído continuam impressas normalmente.', 6000);
+  } finally {
+    // v51: garante o fechamento da janela SEMPRE, mesmo se algo no meio do caminho lançar um
+    // erro — é essa parte que elimina de vez a janela fantasma travada em "Carregando pedido...".
+    if(win && !win.closed) win.close();
   }
   if(delegatedAny) showToast('🤖 Impressão automática', 'Enviado pro Agente Local — imprime sozinho, sem precisar confirmar nada aqui.', 4000);
   if(blockedAny) showToast('⚠️ Pop-up pode ter sido bloqueado', 'Permita pop-ups pra esse site nas configurações do navegador — sem isso nem todas as vias conseguem imprimir.', 6000);
@@ -3079,34 +3122,9 @@ async function printOrder(id, ev, stations){
   if(btn) btn.classList.remove('printing');
 }
 
-// v39: botão "🖨▾" — deixa o operador escolher em quais vias/impressoras imprimir esse
-// pedido específico, em vez de sempre mandar pra todas as vias configuradas automaticamente.
-function openPrintChooser(id, ev){
-  if(ev) ev.stopPropagation();
-  document.getElementById('pc-order-id').value = id;
-  const methodOf = st => (cfg.stations && cfg.stations[st] && cfg.stations[st].method) || 'navegador';
-  const methodLabel = { navegador:'via navegador (USB térmica comum)', rede:'impressora de rede', usb:'dispositivo USB direto', automatica:'automática (sem clique)' };
-  document.getElementById('pc-stations-list').innerHTML = getPrintStations().map(st=>`
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;">
-      <input type="checkbox" id="pc-st-${st}" checked style="width:16px;height:16px;"/>
-      <span style="flex:1;">
-        <div style="font-size:13px;">${stationIcon(st)} ${esc(stationLabel(st))}${st==='caixa'?' (comprovante completo)':''}</div>
-        <div style="font-size:10px;color:var(--muted);">${methodLabel[methodOf(st)]||methodOf(st)}</div>
-      </span>
-    </label>
-  `).join('');
-  document.getElementById('print-choice-modal').classList.add('open');
-}
-function pcToggleAll(checked){
-  getPrintStations().forEach(st=>{ const el=document.getElementById('pc-st-'+st); if(el) el.checked = checked; });
-}
-function confirmPrintChoice(){
-  const id = document.getElementById('pc-order-id').value;
-  const selected = getPrintStations().filter(st=>{ const el=document.getElementById('pc-st-'+st); return el && el.checked; });
-  closeModal('print-choice-modal');
-  if(!selected.length){ showToast('Nenhuma via selecionada', 'Marque pelo menos uma via pra imprimir.'); return; }
-  printOrder(id, null, selected);
-}
+// v51: o modal "Escolher Impressora" (🖨▾) foi removido a pedido — imprimir agora sempre manda
+// pra todas as vias configuradas direto, sem esse passo extra. Isso também elimina uma fonte
+// do bug das janelas "fantasma" (ver comentário grande dentro de printOrder() logo abaixo).
 
 // Monta o HTML de uma via e abre a janela de impressão do navegador (impressora
 // térmica USB comum em caixa de restaurante, sem precisar configurar IP/porta).
@@ -3293,14 +3311,18 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
       // painel (window opener) quando o print() terminou, via postMessage, e o painel só
       // manda a via seguinte DEPOIS que a anterior terminou (ver printOrder/openBrowserTicket
       // no painel.html) — nunca duas caixas de diálogo de impressão abertas ao mesmo tempo.
+      // v51: essa janela agora é REAPROVEITADA pra imprimir a via seguinte também (em vez de
+      // fechar e abrir uma nova a cada via) — por isso NÃO fecha sozinha mais aqui; quem fecha
+      // é o painel (printOrder), de propósito só uma vez no final — é essa mudança que evita a
+      // janela "fantasma" travada em "Carregando pedido..." se algo no meio do caminho falhar.
       function notifyOpenerDone(){
         try { if (window.opener && !window.opener.closed) window.opener.postMessage({ type: 'shogatsu-print-done' }, '*'); } catch(e) {}
       }
       window.onload = function(){ setTimeout(function(){ window.print(); }, 60); };
-      window.onafterprint = function(){ notifyOpenerDone(); try{ window.close(); }catch(e){} };
+      window.onafterprint = function(){ notifyOpenerDone(); };
       // Rede de segurança: se o navegador não disparar "afterprint" (acontece em alguns
       // navegadores/SOs), garante que o painel não fica esperando pra sempre a via seguinte.
-      setTimeout(function(){ notifyOpenerDone(); try{ window.close(); }catch(e){} }, 20000);
+      setTimeout(notifyOpenerDone, 20000);
     <\/script>
   </body></html>`);
   win.document.close();
@@ -3577,10 +3599,7 @@ function miniOrderCard(o){
     <div class="order-actions">
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
-      <span class="oa-print-group">
-        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
-        <button class="oa-btn print print-more" onclick="openPrintChooser('${o.id}', event)" title="Escolher em quais vias imprimir">▾</button>
-      </span>
+      <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
       ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
       ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
@@ -3662,10 +3681,7 @@ function renderOrdersList(){
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
-        <span class="oa-print-group">
-          <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
-          <button class="oa-btn print print-more" onclick="openPrintChooser('${o.id}', event)" title="Escolher em quais vias imprimir">▾</button>
-        </span>
+        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
         ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
         ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
         ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
