@@ -243,7 +243,12 @@ const DEFAULT_CFG = {
     whatsapp: '552227641333',
     instagram: 'shogatsurestaurante',
     deliveryUrl: '/',
-    wasteNote: 'Taxa de desperdício: valor da peça do cardápio. Evite desperdício pra podermos manter nossa promoção e sempre atender melhor!'
+    wasteNote: 'Taxa de desperdício: valor da peça do cardápio. Evite desperdício pra podermos manter nossa promoção e sempre atender melhor!',
+    // v51: fontes/tamanhos ajustáveis pela aba de edição — sem isso, mudar a "cara" da página
+    // exigia mexer direto no CSS do arquivo. accentColor troca a cor de destaque (preços,
+    // ícones, bordas); headingFont/bodyFont trocam a família tipográfica; fontScale ajusta o
+    // tamanho geral do texto (1 = padrão, 0.9 = menor, 1.15 = maior).
+    theme: { headingFont: 'serif', bodyFont: 'sans-serif', accentColor: '#c9a24a', fontScale: 1 }
   }
 };
 const DEFAULT_MENU = require('./default-menu.json');
