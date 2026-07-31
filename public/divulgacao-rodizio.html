@@ -6,6 +6,14 @@
 <title>Rodízio Popular — Shogatsu</title>
 <meta property="og:title" content="Rodízio Popular — Shogatsu Culinária Oriental">
 <meta property="og:description" content="Sushi à vontade, sabor sem limites. Terça, quarta, quinta, sexta, sábado e domingo.">
+<meta name="theme-color" content="#0a0705">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rodízio Popular">
+<link rel="manifest" href="manifest-divulgacao-rodizio.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -121,6 +129,13 @@ document.getElementById('chips').innerHTML = PROMO.chips.map(c => `<div class="c
     document.getElementById('footer-addr').textContent = cfg.address || cfg.storeName || '';
   } catch (e) { /* mantém textos padrão */ }
 })();
+
+// v54: registra o service worker — deixa essa página instalável (PWA) também.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#c0392b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Painel Shogatsu">
+<link rel="manifest" href="manifest-painel.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <title>Shogatsu — Painel de Controle</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -1845,6 +1853,12 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 // continuar usando uma versão desatualizada sem saber (foi exatamente o bug do master).
 (function checkForUpdates(){
   if (!('serviceWorker' in navigator)) return;
+  // v54: antes o painel só ESCUTAVA o service worker (supondo que ele já tinha sido
+  // registrado por uma visita anterior ao index.html) — quem abrisse o painel direto,
+  // sem nunca ter passado pelo site do cliente no mesmo navegador, ficava sem service
+  // worker nenhum (sem instalar como app, sem cache offline). Agora o painel registra
+  // o próprio service worker também, igual o index.html já fazia.
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloading) return;

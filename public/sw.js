@@ -7,9 +7,23 @@
 // v44: versão do cache subiu (v4 -> v5) junto com o sistema de atualização automática
 // (ver public/version-check.js) — isso já faz o próprio evento "activate" abaixo apagar o
 // cache antigo sozinho, sem tocar em IndexedDB/localStorage/cookies (dados do cliente).
-const CACHE = 'shogatsu-v5';
+// v54: sistema virou PWA instalável em TODAS as páginas (antes só index.html tinha o
+// manifest ligado, e painel.html registrava o service worker mas nunca tinha manifest
+// próprio). Cada área do sistema (painel, rastreio de entrega, cardápios de rodízio,
+// avaliação, divulgação, "peça agora") ganhou seu próprio manifest-*.json com nome e
+// tela inicial (start_url) certos pra ela — pra abrir direto na página certa quando
+// instalada, em vez de sempre cair em "/". Cache sobe de v5 pra v6 pra já entregar esses
+// arquivos novos pra quem já tinha o service worker instalado antes.
+const CACHE = 'shogatsu-v6';
 const ASSETS = [
   '/manifest.json',
+  '/manifest-painel.json',
+  '/manifest-entregador.json',
+  '/manifest-rodizio.json',
+  '/manifest-rodizio-popular.json',
+  '/manifest-avaliar-rodizio.json',
+  '/manifest-divulgacao-rodizio.json',
+  '/manifest-pedir-agora.json',
   '/icon-192.png',
   '/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap'
