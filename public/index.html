@@ -94,7 +94,10 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:sticky;top:var(--header-h,60px);z-index:190;}
 .mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:10px;align-items:center;}
-.mode-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .2s;max-width:180px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.mode-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .2s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;max-width:180px;display:flex;flex-direction:column;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent;}
+/* v53: animação premium ao passar o mouse (desktop) ou tocar (celular) */
+.mode-btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.25);}
+.mode-btn:active{transform:scale(.96);}
 .mode-btn .mode-btn-icon{font-size:20px;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--panel);transition:all .2s;}
 .mode-btn[data-color="delivery"] .mode-btn-icon{background:rgba(211,68,63,.14);}
 .mode-btn[data-color="retirada"] .mode-btn-icon{background:rgba(64,150,255,.14);}
@@ -155,7 +158,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .item-card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:14px;transition:border-color .2s;}
 .item-card:hover{border-color:var(--red-dk);}
-.item-img{width:var(--dish-img-size,80px);height:var(--dish-img-size,80px);border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
+.item-img{width:var(--dish-img-size,80px);height:var(--dish-img-size,80px);min-width:var(--dish-img-size,80px);min-height:var(--dish-img-size,80px);border-radius:4px;object-fit:cover;background:var(--panel);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
 .item-body{flex:1;}
 .item-name{font-family:'Cormorant Garamond',serif;font-size:calc(19px * var(--menu-fs-scale,1));font-weight:600;color:var(--white);margin-bottom:4px;line-height:1.25;letter-spacing:.2px;}
 .item-desc{font-size:calc(12px * var(--menu-fs-scale,1));color:#b8b0a8;line-height:1.65;margin-bottom:9px;letter-spacing:.1px;}
@@ -164,8 +167,9 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .item-badge{font-size:10px;font-weight:700;letter-spacing:.5px;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:3px 10px;border-radius:20px;margin-bottom:6px;display:inline-block;}
 .item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
-.add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .1s;}
-.add-btn:hover{background:var(--red-lt);}
+.add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;-webkit-tap-highlight-color:transparent;}
+.add-btn:hover{background:var(--red-lt);transform:scale(1.12);box-shadow:0 4px 12px rgba(196,30,58,.4);}
+.add-btn:active{transform:scale(.9);}
 .add-btn:active{transform:scale(.92);}
 .qty-ctrl{display:flex;align-items:center;gap:0;border:1px solid var(--red-dk);border-radius:50px;overflow:hidden;flex-shrink:0;}
 .qty-ctrl button{background:none;border:none;color:var(--white);width:32px;height:32px;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
@@ -422,10 +426,23 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 .splash-tagline{font-size:12px;letter-spacing:3px;color:rgba(255,255,255,.75);margin-top:8px;text-transform:uppercase;}
 .splash-progress{position:absolute;left:24px;right:24px;bottom:6%;height:3px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden;}
 .splash-progress-fill{height:100%;width:0%;background:var(--gold,#e3bd6a);border-radius:3px;transition:width linear;}
-.splash-skip{position:absolute;top:calc(20px + env(safe-area-inset-top,0px));right:16px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:12px;padding:8px 16px;border-radius:20px;backdrop-filter:blur(6px);}
+/* v53: o botão "Pular" no canto foi removido — a tela toda vira o gatilho de entrada, com uma
+   dica sutil piscando embaixo em vez de um botão isolado que ninguém achava. */
+#splash-screen{cursor:pointer;}
+.splash-tap-hint{position:absolute;left:0;right:0;bottom:2.2%;text-align:center;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.65);animation:splashHintPulse 1.8s ease-in-out infinite;pointer-events:none;}
+@keyframes splashHintPulse{0%,100%{opacity:.45;}50%{opacity:.9;}}
 #splash-screen.closing{animation:splashOut .55s ease forwards;}
 @keyframes splashOut{to{opacity:0;transform:scale(1.02);}}
 @media (max-width:480px){ .splash-logo{font-size:28px;} }
+
+/* v53: botão de horário reutilizado por Reservar Mesa e Agendar Pedido (delivery/retirada) —
+   mesmo componente visual nos dois lugares, com animação premium ao passar o mouse (desktop)
+   ou tocar (celular), pra dar aquele feedback tátil de app grande (iFood/Uber Eats). */
+.time-slot-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--white);font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease,border-color .18s ease,background-color .18s ease,color .18s ease;}
+.time-slot-btn:hover{transform:translateY(-2px) scale(1.06);box-shadow:0 6px 16px rgba(227,189,106,.28);border-color:var(--gold,#e3bd6a);}
+.time-slot-btn:active,.time-slot-btn.touch-active{transform:scale(.94);box-shadow:0 2px 8px rgba(227,189,106,.35);}
+.time-slot-btn.selected{background:var(--gold,#e3bd6a);color:#1a1400;border-color:var(--gold,#e3bd6a);box-shadow:0 4px 14px rgba(227,189,106,.4);}
+.time-slot-btn.selected:hover{transform:translateY(-2px) scale(1.04);}
 </style>
 </head>
 <body>
@@ -441,7 +458,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
     <div class="splash-tagline" id="splash-tagline">CULINÁRIA ORIENTAL</div>
   </div>
   <div class="splash-progress"><div class="splash-progress-fill" id="splash-progress-fill"></div></div>
-  <button class="splash-skip" id="splash-skip-btn" onclick="skipSplash()">Pular ›</button>
+  <div class="splash-tap-hint">👆 Toque para entrar</div>
 </div>
 
 <header class="header">
@@ -713,9 +730,14 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
         <input type="checkbox" id="f-schedule-toggle" onchange="toggleScheduleFields()"/> Quero agendar pra outro horário (em vez de "o quanto antes")
       </label>
       <div id="schedule-fields" style="display:none;">
-        <div class="form-row">
-          <div class="form-group"><label>Data</label><input type="date" id="f-schedule-date"/></div>
-          <div class="form-group"><label>Horário</label><input type="time" id="f-schedule-time"/></div>
+        <div class="form-group"><label>Data</label><input type="date" id="f-schedule-date"/></div>
+        <input type="hidden" id="f-schedule-time"/>
+        <!-- v53: agendamento de delivery/retirada agora usa o MESMO formato de horário da
+             Reserva de Mesa — botões de horário pré-estabelecidos pra tocar, em vez do
+             seletor nativo de hora do celular (que variava de aparelho pra aparelho). -->
+        <div class="form-group" id="f-schedule-time-slots-wrap" style="display:none;">
+          <label>Horário *</label>
+          <div id="f-schedule-time-slots" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"></div>
         </div>
         <p class="hint" id="schedule-hint" style="font-size:11px;"></p>
       </div>
@@ -1175,25 +1197,39 @@ function initScheduleSection() {
   const minMin = Number(cfg.scheduling.minMinutesAhead) || 60;
   const minDate = new Date(Date.now() + minMin * 60000);
   const dateEl = document.getElementById('f-schedule-date');
-  const timeEl = document.getElementById('f-schedule-time');
+  document.getElementById('f-schedule-time').value = '';
   // Só hoje: min e max iguais trava o seletor nativo de data no dia de hoje.
   dateEl.min = todayStr; dateEl.max = todayStr; dateEl.value = todayStr;
   // Horário só dentro do funcionamento de hoje, e nunca antes do tempo mínimo de antecedência.
   let hintMsg = `Agendamento disponível só pra hoje.`;
+  const slotsWrap = document.getElementById('f-schedule-time-slots-wrap');
+  const slotsEl = document.getElementById('f-schedule-time-slots');
   if (todaySchedule) {
     const openM = timeStrToMinutes(todaySchedule.openTime), closeM = timeStrToMinutes(todaySchedule.closeTime);
     const minMinutesToday = Math.max(openM, minDate.getHours() * 60 + minDate.getMinutes());
-    timeEl.min = minutesToTimeStr(Math.min(minMinutesToday, closeM));
-    timeEl.max = todaySchedule.closeTime;
     hintMsg += ` Horário de hoje: ${todaySchedule.openTime} às ${todaySchedule.closeTime} — a partir de ${minutesToTimeStr(minMinutesToday)}.`;
+    // v53: mesmos botões de horário clicáveis (a cada 30min) usados na Reserva de Mesa, em
+    // vez do seletor nativo de hora — visual e comportamento idênticos nas duas telas.
+    const slots = [];
+    for (let m = minMinutesToday; m <= closeM - 30; m += 30) slots.push(minutesToTimeStr(m));
+    slotsWrap.style.display = 'block';
+    slotsEl.innerHTML = slots.map(t => `<button type="button" class="time-slot-btn sch-slot-btn" data-t="${t}" onclick="selectScheduleSlot('${t}')">${t}</button>`).join('')
+      || `<span style="font-size:11px;color:var(--muted);">Sem horários disponíveis pra agendar hoje.</span>`;
+  } else {
+    slotsWrap.style.display = 'none';
   }
   document.getElementById('schedule-hint').textContent = hintMsg;
+}
+function selectScheduleSlot(t){
+  document.getElementById('f-schedule-time').value = t;
+  document.querySelectorAll('.sch-slot-btn').forEach(b => b.classList.toggle('selected', b.dataset.t === t));
 }
 function timeStrToMinutes(t) { const [h, m] = String(t || '00:00').split(':').map(Number); return h * 60 + (m || 0); }
 function minutesToTimeStr(m) { m = Math.max(0, Math.min(1439, m)); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 function toggleScheduleFields() {
   const on = document.getElementById('f-schedule-toggle').checked;
   document.getElementById('schedule-fields').style.display = on ? 'block' : 'none';
+  if (on) initScheduleSection();
 }
 function getScheduledForValue() {
   if (!document.getElementById('f-schedule-toggle') || !document.getElementById('f-schedule-toggle').checked) return null;
@@ -1244,17 +1280,12 @@ function onRsvDateChange(){
   const openM = timeStrToMinutes(openT), closeM = timeStrToMinutes(closeT);
   const slots = [];
   for (let m = openM; m <= closeM - 30; m += 30) slots.push(minutesToTimeStr(m));
-  slotsEl.innerHTML = slots.map(t => `<button type="button" class="rsv-slot-btn" data-t="${t}" onclick="selectRsvSlot('${t}')" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--white);font-size:13px;cursor:pointer;">${t}</button>`).join('')
+  slotsEl.innerHTML = slots.map(t => `<button type="button" class="time-slot-btn rsv-slot-btn" data-t="${t}" onclick="selectRsvSlot('${t}')">${t}</button>`).join('')
     || `<span style="font-size:11px;color:var(--muted);">Sem horários disponíveis nesse dia.</span>`;
 }
 function selectRsvSlot(t){
   document.getElementById('rsv-time').value = t;
-  document.querySelectorAll('.rsv-slot-btn').forEach(b => {
-    const on = b.dataset.t === t;
-    b.style.background = on ? 'var(--gold)' : 'var(--card)';
-    b.style.color = on ? '#1a1400' : 'var(--white)';
-    b.style.borderColor = on ? 'var(--gold)' : 'var(--border)';
-  });
+  document.querySelectorAll('.rsv-slot-btn').forEach(b => b.classList.toggle('selected', b.dataset.t === t));
 }
 function closeReservationScreen() {
   document.getElementById('reservation-screen').classList.remove('open');
@@ -1848,12 +1879,22 @@ function initSplashScreen(){
   document.getElementById('splash-tagline').textContent = (cfg.tagline||'CULINÁRIA ORIENTAL').toUpperCase();
   const fx = ['fx-zoom','fx-parallax','fx-fade'].includes('fx-'+s.transition) ? 'fx-'+s.transition : 'fx-zoom';
   const slidesEl = document.getElementById('splash-slides');
-  slidesEl.innerHTML = s.photos.map((p,i)=>`<div class="splash-slide ${fx}" style="background-image:url('${(p.url||p).replace(/'/g,"%27")}');"></div>`).join('');
+  // v53: cada foto agora pode ser "Foto Fixa" (imagem parada, como antes) ou "Live Photo"
+  // (um vídeo curto em loop, mudo, tocando por trás — dá o efeito de foto "viva" tipo iPhone).
+  slidesEl.innerHTML = s.photos.map((p,i)=>{
+    const url = (p.url||p).replace(/'/g,"%27").replace(/"/g,'&quot;');
+    const isLive = p && p.type === 'live';
+    return isLive
+      ? `<div class="splash-slide ${fx}"><video src="${url}" muted loop autoplay playsinline style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video></div>`
+      : `<div class="splash-slide ${fx}" style="background-image:url('${url}');"></div>`;
+  }).join('');
   const slides = Array.from(slidesEl.children);
   el.style.display = 'block';
   document.body.style.overflow = 'hidden';
 
-  const totalMs = Math.max(2, Math.min(5, Number(s.durationSeconds)||3)) * 1000;
+  // v53: duração máxima da splash foi ampliada de 5s pra 15s (a loja agora pode deixar a
+  // sequência de fotos/Live Photos rodar bem mais tempo antes de cair no cardápio).
+  const totalMs = Math.max(2, Math.min(15, Number(s.durationSeconds)||3)) * 1000;
   const perSlideMs = totalMs / slides.length;
   let idx = 0;
   slides[0].classList.add('active');
@@ -1875,16 +1916,21 @@ function initSplashScreen(){
     }, perSlideMs);
   }
   splashTimer = setTimeout(closeSplash, totalMs);
+
+  // v53: removido o botão "Pular" isolado no canto — agora a tela inteira funciona como
+  // gatilho: um toque (ou clique) em qualquer ponto da splash já entra direto no cardápio/
+  // tela de pedidos, sem precisar mirar num botãozinho específico.
+  el.onclick = closeSplash;
 }
 function closeSplash(){
   clearTimeout(splashTimer); clearInterval(splashInterval);
   const el = document.getElementById('splash-screen');
   if(!el || el.style.display==='none') return;
+  el.onclick = null;
   el.classList.add('closing');
   document.body.style.overflow = '';
   setTimeout(()=>{ el.style.display='none'; el.classList.remove('closing'); }, 550);
 }
-function skipSplash(){ closeSplash(); }
 
 // ═══════════════════════════════════════════
 // BANNER DE PROMOÇÕES — mostra cupons ativos pro cliente, direto no cardápio

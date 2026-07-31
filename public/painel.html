@@ -362,7 +362,14 @@ table{max-width:100%;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .photo-upload{display:flex;align-items:center;gap:14px;}
 .photo-preview-wrap{position:relative;width:74px;height:74px;border-radius:14px;flex-shrink:0;background:var(--panel);border:1px solid var(--border);overflow:hidden;}
-.photo-preview{width:100%;height:100%;object-fit:cover;display:block;}
+/* v53: BUG CORRIGIDO ("ícones se misturando" na caixa de fotos) — o <img> da prévia não tinha
+   display:none por padrão no CSS; ele só ficava escondido depois que o JS rodava
+   (resetItemPhotoPreview). Num primeiro carregamento mais lento, ou em qualquer caso onde o JS
+   demorasse um instante, o navegador chegava a desenhar o ícone de "imagem quebrada" (sem src)
+   por cima/junto do emoji de prato 🍽️ do placeholder — os dois ícones se misturando na mesma
+   caixinha. Agora o <img> começa escondido por CSS e só aparece quando o JS confirma que há
+   uma foto de verdade pra mostrar. */
+.photo-preview{width:100%;height:100%;object-fit:cover;display:none;}
 .photo-placeholder-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);pointer-events:none;}
 .photo-upload-actions{display:flex;flex-direction:column;gap:6px;}
 .photo-upload-actions input[type=file]{display:none;}
@@ -1214,8 +1221,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </label>
           <div class="field-row">
             <div class="field">
-              <label>Duração total (2 a 5 segundos)</label>
-              <input type="number" id="splash-duration" min="2" max="5" step="0.5" value="3"/>
+              <label>Duração total (2 a 15 segundos)</label>
+              <input type="number" id="splash-duration" min="2" max="15" step="0.5" value="3"/>
             </div>
             <div class="field">
               <label>Efeito de transição</label>
@@ -2764,12 +2771,22 @@ function renderSplashPhotosList(){
   const el = document.getElementById('splash-photos-list');
   el.innerHTML = splashDraftPhotos.map((p,i)=>{
     const url = typeof p === 'string' ? p : (p.url||'');
+    const type = (typeof p === 'object' && p.type === 'live') ? 'live' : 'photo';
     return `
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      ${url ? `<img src="${url.replace(/"/g,'&quot;')}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none';"/>` : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}
-      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg (ou envie do dispositivo →)" style="flex:1;min-width:140px;" oninput="splashDraftPhotos[${i}]={url:this.value};"/>
-      <input type="file" accept="image/*" id="splash-file-${i}" style="display:none;" onchange="uploadSplashPhoto(${i},this)"/>
-      <button type="button" class="btn secondary sm" onclick="document.getElementById('splash-file-${i}').click()" title="Enviar foto do dispositivo">📤 Upload</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;padding:8px;">
+      ${type==='live'
+        ? `${url ? `<video src="${url.replace(/"/g,'&quot;')}" muted loop autoplay playsinline style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;"></video>` : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}`
+        : `${url ? `<img src="${url.replace(/"/g,'&quot;')}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none';"/>` : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg);flex-shrink:0;"></div>`}`
+      }
+      <input value="${url.replace(/"/g,'&quot;')}" placeholder="https://.../foto.jpg (ou envie do dispositivo →)" style="flex:1;min-width:140px;" oninput="splashDraftPhotos[${i}]={url:this.value,type:'${type}'};"/>
+      <!-- v53: cada foto da splash agora pode ser "Foto Fixa" (imagem parada) ou "Live Photo"
+           (vídeo curto em loop, mudo — dá o efeito de foto "viva" tipo iPhone). -->
+      <select style="width:auto;" onchange="splashDraftPhotos[${i}]={url:'${url.replace(/'/g,"\\'")}',type:this.value}; renderSplashPhotosList();">
+        <option value="photo" ${type==='photo'?'selected':''}>🖼️ Foto Fixa</option>
+        <option value="live" ${type==='live'?'selected':''}>🎥 Live Photo</option>
+      </select>
+      <input type="file" accept="${type==='live'?'video/*':'image/*'}" id="splash-file-${i}" style="display:none;" onchange="uploadSplashPhoto(${i},this)"/>
+      <button type="button" class="btn secondary sm" onclick="document.getElementById('splash-file-${i}').click()" title="Enviar ${type==='live'?'vídeo':'foto'} do dispositivo">📤 Upload</button>
       <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},-1,renderSplashPhotosList)" ${i===0?'disabled':''} title="Mover pra cima">↑</button>
       <button type="button" class="btn secondary sm" onclick="rpMove(splashDraftPhotos,${i},1,renderSplashPhotosList)" ${i===(splashDraftPhotos.length-1)?'disabled':''} title="Mover pra baixo">↓</button>
       <button type="button" class="btn secondary sm" onclick="splashRemovePhoto(${i})" title="Remover">🗑</button>
@@ -2780,36 +2797,43 @@ function renderSplashPhotosList(){
 // v49: upload de foto direto do celular/computador pra Splash Screen — antes só dava pra
 // colar um link (https://...), agora tem um botão de upload de verdade igual ao das fotos
 // de item do cardápio (mesma compressão automática, pra não pesar no carregamento do app).
+// v53: quando a foto é do tipo "Live Photo", o arquivo é um vídeo — nesse caso pula a
+// compressão de imagem (que só entende JPG/PNG/WEBP) e envia o vídeo direto pro upload.
 async function uploadSplashPhoto(i, input){
   const file = input.files && input.files[0];
   if(!file) return;
+  const isLive = (typeof splashDraftPhotos[i] === 'object' && splashDraftPhotos[i].type === 'live');
   const statusEl = document.getElementById('splash-status-'+i);
   if(statusEl) statusEl.textContent = 'Enviando...';
   try{
     let dataUrl;
-    try{ dataUrl = await compressImageFile(file); }
-    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    if(isLive){
+      dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+    } else {
+      try{ dataUrl = await compressImageFile(file); }
+      catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    }
     const res = await apiPost('/api/upload', { dataUrl });
-    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
-    splashDraftPhotos[i] = { url: res.data.url };
+    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar o arquivo.'); return; }
+    splashDraftPhotos[i] = { url: res.data.url, type: isLive ? 'live' : 'photo' };
     renderSplashPhotosList();
     const newStatus = document.getElementById('splash-status-'+i);
-    if(newStatus) newStatus.textContent = '✅ Foto enviada';
+    if(newStatus) newStatus.textContent = isLive ? '✅ Live Photo enviada' : '✅ Foto enviada';
   }catch(e){
     if(statusEl) statusEl.textContent = '';
-    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
+    alert('Não foi possível enviar o arquivo. Tente um arquivo menor ou em outro formato.');
   }finally{
     input.value='';
   }
 }
-function splashAddPhoto(){ splashDraftPhotos.push({url:''}); renderSplashPhotosList(); }
+function splashAddPhoto(){ splashDraftPhotos.push({url:'',type:'photo'}); renderSplashPhotosList(); }
 function splashRemovePhoto(i){ splashDraftPhotos.splice(i,1); renderSplashPhotosList(); }
 async function saveSplashConfig(){
   const statusEl = document.getElementById('splash-save-status');
   const enabled = document.getElementById('splash-enabled').checked;
   const photos = splashDraftPhotos.filter(p => (typeof p==='string'?p:p.url||'').trim());
   if(enabled && !photos.length){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Adicione pelo menos uma foto pra poder ativar.</span>'; return; }
-  const durationSeconds = Math.max(2, Math.min(5, Number(document.getElementById('splash-duration').value)||3));
+  const durationSeconds = Math.max(2, Math.min(15, Number(document.getElementById('splash-duration').value)||3));
   const transition = document.getElementById('splash-transition').value;
   const splash = { enabled, durationSeconds, transition, photos };
   const res = await apiPost('/api/config', { cfg: { splash }, menu });
