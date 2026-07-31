@@ -119,6 +119,29 @@ function printStationTicket(printer, order, station, storeName) {
   return true;
 }
 
+// v54: extraído de dentro de printOrder() pra poder imprimir UMA via específica sob
+// demanda (reimpressão manual pedida do painel, de celular ou PC — ver evento
+// "print-order" mais abaixo), sem precisar reimprimir todas as vias desse agente de novo.
+async function printSingleStation(order, station) {
+  if (TEST_MODE) {
+    log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} na via: ${station}`);
+    return true;
+  }
+  const printer = buildPrinter();
+  try {
+    const connected = await printer.isPrinterConnected();
+    if (!connected) throw new Error('Impressora não respondeu (verifique se está ligada e na mesma rede/USB).');
+    const hadItems = printStationTicket(printer, order, station, cfg.storeName);
+    if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return false; }
+    await printer.execute();
+    log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso.`);
+    return true;
+  } catch (err) {
+    log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}"): ${err.message}`);
+    return false;
+  }
+}
+
 async function printOrder(order) {
   if (TEST_MODE) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
@@ -126,20 +149,21 @@ async function printOrder(order) {
   }
   let anyPrinted = false;
   for (const station of MY_STATIONS) {
-    const printer = buildPrinter();
-    try {
-      const connected = await printer.isPrinterConnected();
-      if (!connected) throw new Error('Impressora não respondeu (verifique se está ligada e na mesma rede/USB).');
-      const hadItems = printStationTicket(printer, order, station, cfg.storeName);
-      if (!hadItems) continue; // sem itens dessa via nesse pedido — pula sem imprimir papel em branco
-      await printer.execute();
-      anyPrinted = true;
-      log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso.`);
-    } catch (err) {
-      log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}"): ${err.message}`);
-    }
+    const printed = await printSingleStation(order, station);
+    if (printed) anyPrinted = true;
   }
   return anyPrinted;
+}
+
+// v54: reimpressão/impressão sob demanda de UMA via, pedida manualmente do painel (botão
+// "🖨 Imprimir/Reimprimir") — pode partir de QUALQUER aparelho logado (celular ou PC), o
+// servidor só repassa o pedido por SSE e este agente (ligado na impressora física) executa.
+// Só imprime se a via pedida for uma das que ESTE agente cuida (evita duplicar quando tem
+// mais de um agente rodando, cada um numa impressora/estação diferente).
+async function printOnDemand(order, station) {
+  if (!MY_STATIONS.includes(station)) return;
+  log(`🖨️  Impressão sob demanda pedida pra via "${station}" — pedido ${order.id} (${order.name || 'sem nome'}).`);
+  await printSingleStation(order, station);
 }
 
 // v46: teste de impressão pedido pelo painel ("🖨 Testar" numa via com método Automática) —
@@ -238,6 +262,14 @@ function connectStream() {
             log(`🧪 Teste de impressão recebido pra via "${payload.station}".`);
             printTestTicket(payload);
           } catch (e) { log(`⚠️  Não consegui interpretar o teste de impressão: ${e.message}`); }
+        } else if (eventName === 'print-order') {
+          // v54: impressão/reimpressão manual pedida pelo botão "🖨 Imprimir" do painel —
+          // pode ter partido de um celular ou de um PC, tanto faz: o servidor só repassa,
+          // este agente (ligado na impressora de verdade) é quem executa.
+          try {
+            const payload = JSON.parse(dataLine.slice(5).trim());
+            printOnDemand(payload.order, payload.station);
+          } catch (e) { log(`⚠️  Não consegui interpretar o pedido de impressão manual: ${e.message}`); }
         }
       }
     });
