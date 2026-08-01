@@ -156,6 +156,13 @@ table{max-width:100%;}
 .topbar-btn:hover{border-color:var(--red);color:var(--red-lt);}
 .topbar-btn.primary{background:var(--red);border-color:var(--red);color:#fff;}
 .topbar-btn.primary:hover{background:var(--red-lt);}
+/* v59: reordenação de botões (arrastar e soltar) */
+.reorder-mode{outline:1.5px dashed var(--gold);outline-offset:6px;border-radius:8px;padding:4px;background:rgba(212,175,55,.06);}
+.reorder-mode>[data-reorder-id]{cursor:grab;user-select:none;}
+.reorder-mode>[data-reorder-id]::before{content:'⠿';margin-right:5px;opacity:.65;font-size:11px;}
+.reorder-mode>[data-reorder-id]:active{cursor:grabbing;}
+.reorder-mode>[data-reorder-id].dragging{opacity:.35;}
+.reorder-toggle-btn.active{background:var(--gold);border-color:var(--gold);color:#111;}
 
 .content{flex:1;overflow-y:auto;padding:24px;}
 
@@ -566,10 +573,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 
     <!-- ── DASHBOARD ── -->
     <div class="page active" id="page-pedidos">
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <button class="topbar-btn active" id="ptab-visao" onclick="setPedidosView('visao')">📊 Visão Geral</button>
-        <button class="topbar-btn" id="ptab-lista" onclick="setPedidosView('lista')">📃 Lista</button>
-        <button class="topbar-btn" id="ptab-kanban" onclick="setPedidosView('kanban')">📋 Kanban</button>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <div id="pedidos-viewtabs" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="topbar-btn active" id="ptab-visao" data-reorder-id="ptab-visao" onclick="setPedidosView('visao')">📊 Visão Geral</button>
+          <button class="topbar-btn" id="ptab-lista" data-reorder-id="ptab-lista" onclick="setPedidosView('lista')">📃 Lista</button>
+          <button class="topbar-btn" id="ptab-kanban" data-reorder-id="ptab-kanban" onclick="setPedidosView('kanban')">📋 Kanban</button>
+        </div>
+        <button class="btn sm secondary reorder-toggle-btn" onclick="toggleReorderMode('pedidos-viewtabs','shog_btnorder_pedidos_viewtabs', this)" title="Arraste os botões acima pra reorganizar a posição deles">✏️ Editar posição</button>
       </div>
 
       <!-- ── Sub-aba: Visão Geral (ex-Dashboard) ── -->
@@ -628,13 +638,16 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 
       <!-- ── Sub-aba: Lista (ex-Pedidos) ── -->
       <div id="pedidos-view-lista" style="display:none;">
-        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-          <button class="topbar-btn active" id="filter-todos"   onclick="filterOrders('todos')"    style="border-color:var(--red);color:var(--red-lt)">Todos</button>
-          <button class="topbar-btn" id="filter-novo"     onclick="filterOrders('novo')">🔴 Novos</button>
-          <button class="topbar-btn" id="filter-prep"     onclick="filterOrders('prep')">🟡 Preparando</button>
-          <button class="topbar-btn" id="filter-pronto"   onclick="filterOrders('pronto')">🟢 Prontos</button>
-          <button class="topbar-btn" id="filter-entregue" onclick="filterOrders('entregue')">✅ Entregues</button>
-          <button class="topbar-btn" id="filter-cancelado" onclick="filterOrders('cancelado')">⛔ Cancelados</button>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+          <div id="pedidos-filterbar" style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="topbar-btn active" id="filter-todos" data-reorder-id="filter-todos" onclick="filterOrders('todos')" style="border-color:var(--red);color:var(--red-lt)">Todos</button>
+            <button class="topbar-btn" id="filter-novo" data-reorder-id="filter-novo" onclick="filterOrders('novo')">🔴 Novos</button>
+            <button class="topbar-btn" id="filter-prep" data-reorder-id="filter-prep" onclick="filterOrders('prep')">🟡 Preparando</button>
+            <button class="topbar-btn" id="filter-pronto" data-reorder-id="filter-pronto" onclick="filterOrders('pronto')">🟢 Prontos</button>
+            <button class="topbar-btn" id="filter-entregue" data-reorder-id="filter-entregue" onclick="filterOrders('entregue')">✅ Entregues</button>
+            <button class="topbar-btn" id="filter-cancelado" data-reorder-id="filter-cancelado" onclick="filterOrders('cancelado')">⛔ Cancelados</button>
+          </div>
+          <button class="btn sm secondary reorder-toggle-btn" onclick="toggleReorderMode('pedidos-filterbar','shog_btnorder_pedidos_filter', this)" title="Arraste os botões acima pra reorganizar a posição deles">✏️ Editar posição</button>
           <div style="margin-left:auto;display:flex;gap:8px;">
             <input style="background:var(--panel);border:1px solid var(--border);color:var(--white);padding:7px 12px;border-radius:6px;outline:none;font-size:12px;width:200px;" placeholder="🔍 Buscar por nome ou #pedido..." id="order-search" oninput="renderOrdersList()"/>
           </div>
@@ -650,11 +663,14 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 
     <!-- ── RESERVAS DE MESA ── -->
     <div class="page" id="page-reservas">
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-        <button class="topbar-btn active" id="rsvfilter-todos" onclick="filterReservations('todos')" style="border-color:var(--red);color:var(--red-lt)">Todas</button>
-        <button class="topbar-btn" id="rsvfilter-pendente" onclick="filterReservations('pendente')">🕐 Pendentes</button>
-        <button class="topbar-btn" id="rsvfilter-confirmada" onclick="filterReservations('confirmada')">✅ Confirmadas</button>
-        <button class="topbar-btn" id="rsvfilter-recusada" onclick="filterReservations('recusada')">✕ Recusadas/Canceladas</button>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <div id="reservas-filterbar" style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="topbar-btn active" id="rsvfilter-todos" data-reorder-id="rsvfilter-todos" onclick="filterReservations('todos')" style="border-color:var(--red);color:var(--red-lt)">Todas</button>
+          <button class="topbar-btn" id="rsvfilter-pendente" data-reorder-id="rsvfilter-pendente" onclick="filterReservations('pendente')">🕐 Pendentes</button>
+          <button class="topbar-btn" id="rsvfilter-confirmada" data-reorder-id="rsvfilter-confirmada" onclick="filterReservations('confirmada')">✅ Confirmadas</button>
+          <button class="topbar-btn" id="rsvfilter-recusada" data-reorder-id="rsvfilter-recusada" onclick="filterReservations('recusada')">✕ Recusadas/Canceladas</button>
+        </div>
+        <button class="btn sm secondary reorder-toggle-btn" onclick="toggleReorderMode('reservas-filterbar','shog_btnorder_reservas_filter', this)" title="Arraste os botões acima pra reorganizar a posição deles">✏️ Editar posição</button>
       </div>
       <div id="reservations-list"></div>
     </div>
@@ -1153,22 +1169,57 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
         </div>
         <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🤖 IA de Atendimento</div>
+          <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
-            tem tal prato etc.), usando a API da <a href="https://www.anthropic.com" target="_blank" style="color:var(--gold);">Anthropic (Claude)</a> — serviço pago de terceiros,
-            cobrado por uso. Sem chave cadastrada, o botão de dúvidas simplesmente não aparece pro
-            cliente, sem quebrar nada.
+            tem tal prato etc.). Escolha um provedor <b>gratuito</b> (Groq, OpenRouter, Hugging
+            Face ou Google Gemini) ou a Anthropic (paga). Sem chave cadastrada ou desativado, o
+            botão de dúvidas simplesmente não aparece pro cliente, sem quebrar nada. O cliente
+            sempre pode tocar em "Falar com atendente" pra um humano assumir a conversa.
           </div>
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
             <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
           </label>
           <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Chave de API (Anthropic)</label><input id="ia-apikey" type="password" placeholder="sk-ant-..."/></div>
+            <div class="field">
+              <label style="font-size:10px;">Provedor</label>
+              <select id="ia-provider" onchange="atualizarDicaProvedorIa()">
+                <option value="groq">Groq — grátis</option>
+                <option value="openrouter">OpenRouter — grátis</option>
+                <option value="huggingface">Hugging Face — grátis</option>
+                <option value="gemini">Google Gemini — grátis</option>
+                <option value="anthropic">Anthropic (Claude) — pago</option>
+              </select>
+            </div>
+            <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
           </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
+          </div>
+          <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
           <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
-          <button class="btn success sm" onclick="saveIaSettings()">💾 Salvar IA de Atendimento</button>
+
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
+            <div id="ia-faq-lista"></div>
+            <div class="field-row" style="margin-top:8px;">
+              <div class="field"><label style="font-size:10px;">Pergunta</label><input id="ia-faq-pergunta" placeholder="Ex: Vocês têm opção vegetariana?"/></div>
+              <div class="field"><label style="font-size:10px;">Resposta</label><input id="ia-faq-resposta" placeholder="Ex: Temos sim! Veja a categoria Vegetarianos."/></div>
+            </div>
+            <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
+          </div>
+
+          <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
           <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">💬 Conversas com Clientes</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Quando um cliente toca em "Falar com atendente" no chat do cardápio, a conversa aparece
+            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos.
+          </div>
+          <div id="atendimento-lista" style="display:flex;flex-direction:column;gap:10px;max-height:480px;overflow-y:auto;"></div>
         </div>
         <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
@@ -2067,8 +2118,100 @@ async function boot(){
   loadReservations();
   setInterval(loadReservations, 30000);
   setupCardControls();
+  restoreAllButtonOrders();
 }
 const ROLE_RANK_CLIENT = { vendas:1, admin:2, master:3 };
+
+// ═══════════════════════════════════════════
+// REORDENAÇÃO DE BOTÕES (v59) — arrastar e soltar pra reorganizar a posição
+// Usado em: Gerenciar Pedidos (abas Visão/Lista/Kanban e filtros da Lista) e Reserva de Mesas
+// (filtros). Cada botão do grupo leva data-reorder-id; a ordem escolhida fica salva no
+// navegador de quem está usando o painel (não afeta outros usuários/dispositivos).
+// ═══════════════════════════════════════════
+const BTN_REORDER_GROUPS = [
+  { container:'pedidos-viewtabs',   key:'shog_btnorder_pedidos_viewtabs' },
+  { container:'pedidos-filterbar',  key:'shog_btnorder_pedidos_filter' },
+  { container:'reservas-filterbar', key:'shog_btnorder_reservas_filter' },
+];
+
+function restoreAllButtonOrders(){
+  BTN_REORDER_GROUPS.forEach(g=>{
+    const el = document.getElementById(g.container);
+    if(el) applyButtonOrder(el, g.key);
+  });
+}
+
+function applyButtonOrder(container, storageKey){
+  let order;
+  try{ order = JSON.parse(localStorage.getItem(storageKey) || 'null'); }catch(e){ order = null; }
+  if(!Array.isArray(order) || !order.length) return;
+  const items = Array.from(container.children).filter(el=>el.dataset && el.dataset.reorderId);
+  const byId = {};
+  items.forEach(el=>{ byId[el.dataset.reorderId] = el; });
+  order.forEach(id=>{ if(byId[id]) container.appendChild(byId[id]); });
+  // botões novos que ainda não têm posição salva (ex.: adicionados em versão futura) vão pro fim,
+  // mantendo a ordem original entre eles
+  items.forEach(el=>{ if(!order.includes(el.dataset.reorderId)) container.appendChild(el); });
+}
+
+function saveButtonOrder(container, storageKey){
+  const order = Array.from(container.children)
+    .filter(el=>el.dataset && el.dataset.reorderId)
+    .map(el=>el.dataset.reorderId);
+  try{ localStorage.setItem(storageKey, JSON.stringify(order)); }catch(e){}
+}
+
+function toggleReorderMode(containerId, storageKey, btnEl){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const active = container.classList.toggle('reorder-mode');
+  Array.from(container.children).forEach(el=>{
+    if(el.dataset && el.dataset.reorderId) el.draggable = active;
+  });
+  if(btnEl){
+    btnEl.classList.toggle('active', active);
+    btnEl.textContent = active ? '✅ Concluir' : '✏️ Editar posição';
+  }
+  if(active) setupReorderDrag(container, storageKey);
+}
+
+function setupReorderDrag(container, storageKey){
+  if(container._reorderBound) return;
+  container._reorderBound = true;
+  let dragEl = null;
+  container.addEventListener('dragstart', e=>{
+    const t = e.target.closest('[data-reorder-id]');
+    if(!t || !container.contains(t)) return;
+    dragEl = t;
+    t.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.dataset.reorderId); }catch(err){}
+  });
+  container.addEventListener('dragend', e=>{
+    const t = e.target.closest('[data-reorder-id]');
+    if(t) t.classList.remove('dragging');
+    if(dragEl) saveButtonOrder(container, storageKey);
+    dragEl = null;
+  });
+  container.addEventListener('dragover', e=>{
+    if(!dragEl) return;
+    e.preventDefault();
+    const after = getReorderAfterElement(container, e.clientX, e.clientY);
+    if(after == null) container.appendChild(dragEl);
+    else container.insertBefore(dragEl, after);
+  });
+}
+
+function getReorderAfterElement(container, x, y){
+  const els = [...container.querySelectorAll('[data-reorder-id]:not(.dragging)')];
+  let closest = { offset: -Infinity, element: null };
+  els.forEach(child=>{
+    const box = child.getBoundingClientRect();
+    const sameRow = y >= box.top && y <= box.bottom;
+    const offset = sameRow ? (x - box.left - box.width/2) : -Infinity;
+    if(offset < 0 && offset > closest.offset) closest = { offset, element: child };
+  });
+  return closest.element;
+}
 
 // ═══════════════════════════════════════════
 // CONTROLES DE CARD (v31) — ➖ Minimizar · 📌 Fixar · ⚙️ Configurar · 👁️ Ocultar/Mostrar · ✖ Fechar
@@ -2539,7 +2682,7 @@ const QR_LINKS = [
   { key:'popular',  icon:'📖', label:'Cardápio Rodízio Popular', path:'/cardapio-rodizio-popular.html', desc:'Cardápio completo do rodízio (preços por grupo de dias, destaques do dia) — pode ir num QR separado se quiser um cardápio mais completo na mesa.' },
   { key:'divulgacao', icon:'📣', label:'Divulgação',            path:'/divulgacao-rodizio.html',        desc:'Página-vitrine do rodízio, pronta pra colar na bio do Instagram/Facebook ou mandar direto pro cliente.' },
   { key:'avaliar',  icon:'⭐', label:'Avaliação Rodízio',        path:'/avaliar-rodizio.html',           desc:'Link pra pedir avaliação de quem veio no rodízio presencial — pode imprimir o QR e deixar na mesa ou na conta.' },
-  { key:'entregador', icon:'🛵', label:'Painel do Entregador',   path:'/entregador.html',                desc:'Acesso rápido do motoboy pra ver e atualizar as entregas — manda o link direto pro celular dele.' },
+  { key:'entregador', icon:'🛵', label:'Motoboys',   path:'/entregador.html',                desc:'Acesso rápido do motoboy pra ver e atualizar as entregas — manda o link direto pro celular dele.' },
 ];
 let qrlActiveTab = 'pedir';
 function renderQrLinksPage(){
@@ -3191,8 +3334,30 @@ async function printOrder(id, ev, stations, isAuto){
   let win = window.open('', '_blank', 'width=380,height=600');
   if(win) win.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>');
   let printedAny=false, blockedAny=false, fellBackAny=false, delegatedAny=false, usedWin=false;
+  // v58: impressão simultânea de verdade — vias que imprimem direto no hardware (Rede/USB) não
+  // têm diálogo nenhum pra esperar nem janela pra reaproveitar, então em vez de mandar uma via de
+  // cada vez (esperando cada POST /api/print terminar antes de disparar a próxima), essas vias vão
+  // TODAS de uma vez em paralelo (Promise.all) — o cupom sai ao mesmo tempo em cada impressora, sem
+  // nenhuma precisar "esperar a vez" nem o usuário escolher/procurar impressora em lugar nenhum,
+  // porque Rede/USB nunca abrem a caixa de diálogo de impressão do sistema operacional (isso só
+  // acontece na via "Navegador", tratada à parte logo abaixo, sequencial, reaproveitando a mesma
+  // janela — não dá pra paralelizar isso sem travar o navegador, ver comentário da v51/v45).
+  const directStations = targetStations.filter(st => ['rede','usb'].includes((cfg.stations[st]||{}).method));
+  const otherStations = targetStations.filter(st => !directStations.includes(st));
   try{
-    for(const st of targetStations){
+    if(directStations.length){
+      const results = await Promise.all(directStations.map(st =>
+        apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto }).then(res => ({ st, res }))
+      ));
+      for(const { st, res } of results){
+        if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
+        const d = res.data;
+        if(d.skipped) continue;
+        if(d.printed) printedAny=true;
+        if(d.usedCaixaFallback) fellBackAny=true;
+      }
+    }
+    for(const st of otherStations){
       const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto });
       if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
       const d = res.data;
@@ -5053,25 +5218,104 @@ function loadSettings(){
   loadContatosImportados();
 }
 // ═══════════════════════════════════════════
-// IA de Atendimento (v56)
+// Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
 // ═══════════════════════════════════════════
+const IA_DICAS_PROVEDOR = {
+  groq: 'Grátis. Crie a chave em console.groq.com/keys. Modelo padrão: llama-3.3-70b-versatile.',
+  openrouter: 'Grátis (nos modelos marcados ":free"). Crie a chave em openrouter.ai/keys.',
+  huggingface: 'Grátis. Crie a chave (token de leitura) em huggingface.co/settings/tokens.',
+  gemini: 'Grátis. Crie a chave em aistudio.google.com/apikey. Modelo padrão: gemini-2.0-flash.',
+  anthropic: 'Pago, cobrado por uso. Crie a chave em console.anthropic.com.'
+};
+function atualizarDicaProvedorIa(){
+  const p = document.getElementById('ia-provider').value;
+  document.getElementById('ia-provider-dica').textContent = IA_DICAS_PROVEDOR[p] || '';
+}
+let iaFaqAtual = [];
+function renderFaqIaLista(){
+  const el = document.getElementById('ia-faq-lista');
+  if(!iaFaqAtual.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);">Nenhuma pergunta cadastrada ainda.</div>'; return; }
+  el.innerHTML = iaFaqAtual.map((f,i)=>`
+    <div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px;">
+      <div><b>${esc(f.pergunta)}</b><br><span style="color:var(--muted);">${esc(f.resposta)}</span></div>
+      <span style="color:var(--red-lt);cursor:pointer;white-space:nowrap;" onclick="removerFaqIa(${i})">remover</span>
+    </div>`).join('');
+}
+function adicionarFaqIa(){
+  const pergunta = document.getElementById('ia-faq-pergunta').value.trim();
+  const resposta = document.getElementById('ia-faq-resposta').value.trim();
+  if(!pergunta || !resposta) return;
+  iaFaqAtual.push({ pergunta, resposta });
+  document.getElementById('ia-faq-pergunta').value=''; document.getElementById('ia-faq-resposta').value='';
+  renderFaqIaLista();
+}
+function removerFaqIa(i){ iaFaqAtual.splice(i,1); renderFaqIaLista(); }
 async function loadIaSettings(){
   const res = await apiGet('/api/ia/settings');
   const enabledEl=document.getElementById('ia-enabled'); if(enabledEl) enabledEl.checked = !!res?.enabled;
+  const providerEl=document.getElementById('ia-provider'); if(providerEl) providerEl.value = res?.provider || 'groq';
+  const modeloEl=document.getElementById('ia-modelo'); if(modeloEl) modeloEl.value = res?.modelo || '';
+  iaFaqAtual = Array.isArray(res?.faq) ? res.faq : [];
+  renderFaqIaLista();
+  atualizarDicaProvedorIa();
   const statusEl=document.getElementById('ia-key-status');
   if(statusEl) statusEl.textContent = res?.hasKey ? '🔑 Já existe uma chave cadastrada. Deixe o campo em branco pra manter a atual.' : 'Nenhuma chave cadastrada ainda.';
 }
 async function saveIaSettings(){
   const statusEl=document.getElementById('ia-save-status');
   const enabled = document.getElementById('ia-enabled').checked;
+  const provider = document.getElementById('ia-provider').value;
   const apiKey = document.getElementById('ia-apikey').value.trim();
+  const modelo = document.getElementById('ia-modelo').value.trim();
   statusEl.style.color='var(--muted)'; statusEl.textContent='Salvando...';
-  const res = await apiPost('/api/ia/settings', { enabled, apiKey });
+  const res = await apiPost('/api/ia/settings', { enabled, provider, apiKey, modelo, faq: iaFaqAtual });
   if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao salvar.'; return; }
   document.getElementById('ia-apikey').value='';
   statusEl.style.color='#50c878'; statusEl.textContent='✅ Salvo!';
   loadIaSettings();
 }
+
+// ── Conversas com clientes (caixa/atendente assume no lugar da IA) ──
+let atendimentoPollTimer = null;
+async function loadAtendimentoConversas(){
+  const el = document.getElementById('atendimento-lista');
+  if(!el) return;
+  let data;
+  try{ data = await apiGet('/api/admin/atendimento'); }catch(e){ return; }
+  const conversas = data?.conversas || [];
+  if(!conversas.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);">Nenhuma conversa ainda.</div>'; return; }
+  el.innerHTML = conversas.map(c=>{
+    const ultima = c.mensagens[c.mensagens.length-1];
+    const precisaResposta = c.modo==='humano' && c.naoLidaAtendente;
+    return `
+    <div style="border:1px solid ${precisaResposta?'var(--gold)':'var(--border)'};border-radius:8px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;">
+        <span>${precisaResposta?'🔴 aguardando resposta':'modo: '+(c.modo==='ia'?'IA':'atendente')}</span>
+        <span>${new Date(c.ultimaAtividade).toLocaleString('pt-BR')}</span>
+      </div>
+      <div style="max-height:120px;overflow-y:auto;font-size:12px;margin-bottom:8px;display:flex;flex-direction:column;gap:4px;">
+        ${c.mensagens.slice(-6).map(m=>`<div style="align-self:${m.de==='cliente'?'flex-start':'flex-end'};background:${m.de==='cliente'?'var(--bg2,#222)':'var(--gold)'};color:${m.de==='cliente'?'inherit':'#1a1a1a'};padding:4px 8px;border-radius:6px;max-width:85%;">${esc(m.texto)}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input id="resp-${c.id}" placeholder="Responder..." style="flex:1;font-size:12px;" onkeydown="if(event.key==='Enter')responderAtendimento('${c.id}')"/>
+        <button class="btn success sm" onclick="responderAtendimento('${c.id}')">Enviar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function responderAtendimento(id){
+  const input = document.getElementById('resp-'+id);
+  const texto = input.value.trim();
+  if(!texto) return;
+  input.value='';
+  await apiPost('/api/admin/atendimento/'+id+'/responder', { texto });
+  loadAtendimentoConversas();
+}
+function iniciarPollingAtendimento(){
+  if(atendimentoPollTimer) return;
+  atendimentoPollTimer = setInterval(()=>{ if(document.getElementById('atendimento-lista')) loadAtendimentoConversas(); }, 5000);
+}
+iniciarPollingAtendimento();
 
 // ═══════════════════════════════════════════
 // Importação de contatos externos (v56) — CSV / vCard / bloco de notas, agrupados por DDD

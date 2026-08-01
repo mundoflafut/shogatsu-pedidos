@@ -620,17 +620,22 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 </div>
 
 <div class="drawer-overlay" id="ia-overlay" onclick="closeIaDuvida()"></div>
-<div class="drawer" id="ia-drawer">
+<div class="drawer" id="ia-drawer" style="display:flex;flex-direction:column;max-height:80vh;">
   <div class="drawer-handle"></div>
   <div class="drawer-header">
-    <span class="drawer-title">🤖 Tire sua dúvida</span>
+    <span class="drawer-title" id="ia-drawer-titulo">🤖 Tire sua dúvida</span>
     <button class="drawer-close" onclick="closeIaDuvida()">✕</button>
   </div>
-  <div class="drawer-body" id="ia-body">
-    <p style="font-size:12px;color:var(--muted,#999);margin:0 0 10px;">Resposta automática — pra pedidos ou algo urgente, prefira o WhatsApp.</p>
-    <textarea id="ia-pergunta" placeholder="Ex: vocês têm opção vegetariana? até que horas entregam hoje?" style="width:100%;min-height:64px;border-radius:8px;padding:10px;font-size:13px;box-sizing:border-box;"></textarea>
-    <button class="checkout-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="margin-top:8px;">Perguntar</button>
-    <div id="ia-resposta" style="margin-top:12px;font-size:13px;white-space:pre-wrap;"></div>
+  <div class="drawer-body" id="ia-body" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+    <div id="ia-mensagens" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px;"></div>
+    <div id="ia-faq-rapida" style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;"></div>
+    <div style="display:flex;gap:6px;align-items:flex-end;padding-top:6px;">
+      <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:18px;padding:10px 14px;font-size:13px;box-sizing:border-box;resize:none;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
+      <button class="checkout-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="border-radius:50%;width:42px;height:42px;padding:0;flex-shrink:0;">➤</button>
+    </div>
+    <div style="text-align:center;padding-top:8px;">
+      <span onclick="pedirAtendenteHumano()" style="font-size:11px;color:var(--muted,#999);text-decoration:underline;cursor:pointer;">Falar com atendente</span>
+    </div>
   </div>
 </div>
 
@@ -1954,35 +1959,113 @@ function closeContactSheet(){
 }
 
 // ═══════════════════════════════════════════
-// DÚVIDAS COM IA (v56) — resposta automática usando o cardápio como contexto
+// ATENDIMENTO — chat com IA e/ou atendente humano (v57)
 // ═══════════════════════════════════════════
+let iaConversaId = null;
+let iaModoAtual = 'ia';
+let iaPollTimer = null;
+function escIa(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function openIaDuvida(){
   document.getElementById('ia-overlay').classList.add('open');
   document.getElementById('ia-drawer').classList.add('open');
+  garantirConversaIa();
 }
 function closeIaDuvida(){
   document.getElementById('ia-overlay').classList.remove('open');
   document.getElementById('ia-drawer').classList.remove('open');
+  if(iaPollTimer){ clearInterval(iaPollTimer); iaPollTimer=null; }
+}
+async function garantirConversaIa(){
+  iaConversaId = localStorage.getItem('shogatsu_conversa_ia');
+  if(iaConversaId){
+    try{
+      const r = await fetch('/api/atendimento/'+iaConversaId);
+      if(r.ok){
+        const data = await r.json();
+        renderConversaIa(data.conversa);
+        renderFaqRapidaIa();
+        iniciarPollingIaSeNecessario();
+        return;
+      }
+    }catch(e){}
+  }
+  try{
+    const r = await fetch('/api/atendimento/iniciar', { method:'POST' });
+    const data = await r.json();
+    iaConversaId = data.conversaId;
+    localStorage.setItem('shogatsu_conversa_ia', iaConversaId);
+    iaModoAtual = data.modo;
+    document.getElementById('ia-mensagens').innerHTML = '<div style="text-align:center;font-size:12px;color:var(--muted,#999);">Olá! Pergunte algo ou escolha uma das opções abaixo.</div>';
+    renderFaqRapidaIa();
+  }catch(e){}
+}
+function renderConversaIa(conversa){
+  iaModoAtual = conversa.modo;
+  document.getElementById('ia-drawer-titulo').textContent = conversa.modo==='humano' ? '🧑‍🍳 Falando com atendente' : '🤖 Tire sua dúvida';
+  const el = document.getElementById('ia-mensagens');
+  el.innerHTML = conversa.mensagens.map(m=>{
+    if(m.de==='sistema') return `<div style="text-align:center;font-size:11px;color:var(--muted,#999);">${escIa(m.texto)}</div>`;
+    const meu = m.de==='cliente';
+    return `<div style="align-self:${meu?'flex-end':'flex-start'};background:${meu?'var(--gold,#c9a15a)':'rgba(120,120,120,.18)'};color:${meu?'#1a1a1a':'inherit'};padding:8px 12px;border-radius:14px;max-width:80%;font-size:13px;white-space:pre-wrap;">${escIa(m.texto)}</div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function renderFaqRapidaIa(){
+  const el = document.getElementById('ia-faq-rapida');
+  if(!el) return;
+  const faq = (cfg.ia && cfg.ia.faq) || [];
+  if(!faq.length || iaModoAtual==='humano'){ el.innerHTML=''; return; }
+  el.innerHTML = faq.slice(0,6).map((f,i)=>`<button onclick="perguntarFaqRapida(${i})" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--border,#444);background:transparent;color:inherit;cursor:pointer;">${escIa(f.pergunta)}</button>`).join('');
+}
+function perguntarFaqRapida(i){
+  const faq = (cfg.ia && cfg.ia.faq) || [];
+  if(!faq[i]) return;
+  document.getElementById('ia-pergunta').value = faq[i].pergunta;
+  enviarDuvidaIa();
 }
 async function enviarDuvidaIa(){
   const campo = document.getElementById('ia-pergunta');
-  const pergunta = campo.value.trim();
-  const respostaEl = document.getElementById('ia-resposta');
+  const texto = campo.value.trim();
+  if(!texto || !iaConversaId) return;
+  campo.value='';
   const btn = document.getElementById('ia-perguntar-btn');
-  if(!pergunta){ campo.focus(); return; }
-  btn.disabled = true; btn.textContent = 'Perguntando...';
-  respostaEl.textContent = '';
+  btn.disabled = true;
+  const el = document.getElementById('ia-mensagens');
+  el.insertAdjacentHTML('beforeend', `<div style="align-self:flex-end;background:var(--gold,#c9a15a);color:#1a1a1a;padding:8px 12px;border-radius:14px;max-width:80%;font-size:13px;">${escIa(texto)}</div>`);
+  el.scrollTop = el.scrollHeight;
   try{
-    const r = await fetch('/api/ia/duvida', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pergunta }) });
+    const r = await fetch('/api/atendimento/'+iaConversaId+'/mensagem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ texto }) });
     const data = await r.json();
-    if(!r.ok) throw new Error(data.error || 'Não consegui responder agora.');
-    respostaEl.textContent = data.resposta;
+    if(!r.ok) throw new Error(data.error || 'Não consegui enviar.');
+    renderConversaIa(data.conversa);
+    renderFaqRapidaIa();
+    iniciarPollingIaSeNecessario();
   }catch(e){
-    respostaEl.textContent = '⚠️ ' + (e.message || 'Não consegui responder agora, tenta o WhatsApp.');
+    el.insertAdjacentHTML('beforeend', `<div style="text-align:center;font-size:11px;color:#c0392b;">⚠️ ${escIa(e.message || 'Não consegui responder agora, tenta o WhatsApp.')}</div>`);
   }finally{
-    btn.disabled = false; btn.textContent = 'Perguntar';
+    btn.disabled = false;
   }
 }
+async function pedirAtendenteHumano(){
+  if(!iaConversaId) return;
+  try{
+    const r = await fetch('/api/atendimento/'+iaConversaId+'/humano', { method:'POST' });
+    const data = await r.json();
+    if(r.ok){ renderConversaIa(data.conversa); renderFaqRapidaIa(); iniciarPollingIaSeNecessario(); }
+  }catch(e){}
+}
+function iniciarPollingIaSeNecessario(){
+  if(iaPollTimer){ clearInterval(iaPollTimer); iaPollTimer=null; }
+  if(iaModoAtual==='humano'){
+    iaPollTimer = setInterval(async ()=>{
+      try{
+        const r = await fetch('/api/atendimento/'+iaConversaId);
+        if(r.ok){ const data = await r.json(); renderConversaIa(data.conversa); }
+      }catch(e){}
+    }, 4000);
+  }
+}
+
 function formatPhoneDisplay(digits){
   const d = digits.length>11 ? digits.slice(-11) : digits;
   return d.length===11 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}` : d;
