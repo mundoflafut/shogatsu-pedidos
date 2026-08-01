@@ -32,6 +32,7 @@ const FICHAS_TECNICAS_FILE = path.join(DATA_DIR, 'fichas-tecnicas.json');
 const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const CONTATOS_IMPORTADOS_FILE = path.join(DATA_DIR, 'contatos-importados.json'); // v56: contatos importados de CSV/vCard/txt, separado dos clientes reais (que vêm de pedidos)
+const ATENDIMENTO_FILE = path.join(DATA_DIR, 'atendimento.json'); // v57: conversas do chat (IA e/ou atendente humano)
 const webpush = require('./webpush');
 
 // ═══════════════════════════════════════════════════════════
@@ -189,7 +190,7 @@ const DEFAULT_CFG = {
   // contexto, e lê foto de nota fiscal/catálogo pra sugerir ingredientes em Custos & Ficha Técnica.
   // Usa a API da Anthropic (Claude) com a chave que o restaurante cadastra aqui. OPCIONAL: sem
   // isso configurado, os botões de IA simplesmente avisam que não está configurado, sem quebrar nada.
-  ia: { enabled: false, apiKey: '' },
+  ia: { enabled: false, provider: 'groq', apiKey: '', modelo: '', faq: [] },
   // ── Redes sociais (v56) — botão de pedido direto no Instagram/Facebook do cardápio online.
   // Deixe em branco pra não mostrar o botão correspondente.
   social: { instagram: '', facebook: '' },
@@ -279,6 +280,7 @@ if (!fs.existsSync(FICHAS_TECNICAS_FILE)) fs.writeFileSync(FICHAS_TECNICAS_FILE,
 if (!fs.existsSync(CUSTOS_CONFIG_FILE)) fs.writeFileSync(CUSTOS_CONFIG_FILE, JSON.stringify({ diasParaDesatualizado: 21, margemPadrao: 65 }, null, 2));
 if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
 if (!fs.existsSync(CONTATOS_IMPORTADOS_FILE)) fs.writeFileSync(CONTATOS_IMPORTADOS_FILE, '[]');
+if (!fs.existsSync(ATENDIMENTO_FILE)) fs.writeFileSync(ATENDIMENTO_FILE, '{}');
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -769,31 +771,34 @@ function sendSMS(toPhone, body, smsCfg) {
   });
 }
 
-// ─── IA de atendimento (v56) — usa a API da Anthropic (Claude) com a chave cadastrada em
-// Configurações. Tudo opcional: sem chave cadastrada, as funções abaixo rejeitam com uma
-// mensagem clara, e o restante do sistema continua funcionando normal (mesmo espírito do
-// SMS/WhatsApp automático, que também são "se configurado, senão avisa e segue o jogo").
-function chamarClaude(messagesPayload, iaCfg, maxTokens) {
+// ─── IA de atendimento (v57) — multi-provedor. O restaurante escolhe qual usar em
+// Configurações → Atendimento: Anthropic (paga), ou Groq / OpenRouter / Hugging Face / Google
+// Gemini (todos com camada gratuita hoje). Tudo opcional: sem chave cadastrada, ou com o modo
+// "manual" escolhido, as funções de IA nem são chamadas — o caixa responde na mão (ver mais
+// abaixo, seção "Atendimento — conversas").
+const IA_PROVEDORES = {
+  anthropic:   { label: 'Anthropic (Claude) — pago',        modeloPadrao: 'claude-sonnet-5' },
+  groq:        { label: 'Groq — grátis',                    modeloPadrao: 'llama-3.3-70b-versatile' },
+  openrouter:  { label: 'OpenRouter — grátis',               modeloPadrao: 'meta-llama/llama-3.3-70b-instruct:free' },
+  huggingface: { label: 'Hugging Face — grátis',             modeloPadrao: 'meta-llama/Llama-3.3-70B-Instruct' },
+  gemini:      { label: 'Google Gemini — grátis',            modeloPadrao: 'gemini-2.0-flash' }
+};
+// Formato genérico de mensagem usado internamente: { role:'user'|'assistant', content: string |
+// [{type:'text',text} | {type:'image', mediaType, data}] } — convertido pro formato de cada
+// provedor dentro de cada função abaixo.
+function chamarOpenAICompativel(hostname, path, mensagens, apiKey, modelo, maxTokens, extraHeaders) {
   return new Promise((resolve, reject) => {
-    if (!iaCfg || !iaCfg.enabled || !iaCfg.apiKey) {
-      return reject(new Error('IA de atendimento não configurada. Cadastre a chave em Configurações → IA.'));
-    }
-    const body = JSON.stringify({
-      model: 'claude-sonnet-5',
-      max_tokens: maxTokens || 800,
-      messages: messagesPayload
-    });
+    const msgsConvertidas = mensagens.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map(p =>
+        p.type === 'text' ? { type: 'text', text: p.text } : { type: 'image_url', image_url: { url: `data:${p.mediaType};base64,${p.data}` } }
+      )
+    }));
+    const body = JSON.stringify({ model: modelo, messages: msgsConvertidas, max_tokens: maxTokens || 800 });
     const req = https.request({
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
-      method: 'POST',
-      headers: {
-        'x-api-key': iaCfg.apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      },
-      timeout: 20000
+      hostname, path, method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), ...(extraHeaders || {}) },
+      timeout: 25000
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
@@ -801,12 +806,11 @@ function chamarClaude(messagesPayload, iaCfg, maxTokens) {
         try {
           const parsed = JSON.parse(data);
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            const texto = (parsed.content || []).map(b => b.text || '').filter(Boolean).join('\n');
-            resolve(texto);
+            resolve((parsed.choices && parsed.choices[0] && parsed.choices[0].message && parsed.choices[0].message.content) || '');
           } else {
-            reject(new Error((parsed.error && parsed.error.message) || 'Falha ao consultar a IA.'));
+            reject(new Error((parsed.error && (parsed.error.message || parsed.error)) || `Falha ao consultar ${hostname}.`));
           }
-        } catch (e) { reject(new Error('Resposta inválida da IA.')); }
+        } catch (e) { reject(new Error(`Resposta inválida de ${hostname}.`)); }
       });
     });
     req.on('error', reject);
@@ -815,16 +819,104 @@ function chamarClaude(messagesPayload, iaCfg, maxTokens) {
     req.end();
   });
 }
-// Responde a dúvida de um cliente do cardápio, usando o cardápio atual como contexto.
-function perguntarIA(pergunta, iaCfg, cfg, menu) {
+function chamarAnthropic(mensagens, apiKey, modelo, maxTokens) {
+  return new Promise((resolve, reject) => {
+    const msgsConvertidas = mensagens.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map(p =>
+        p.type === 'text' ? { type: 'text', text: p.text } : { type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }
+      )
+    }));
+    const body = JSON.stringify({ model: modelo, max_tokens: maxTokens || 800, messages: msgsConvertidas });
+    const req = https.request({
+      hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 25000
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve((parsed.content || []).map(b => b.text || '').filter(Boolean).join('\n'));
+          } else {
+            reject(new Error((parsed.error && parsed.error.message) || 'Falha ao consultar a Anthropic.'));
+          }
+        } catch (e) { reject(new Error('Resposta inválida da Anthropic.')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Tempo esgotado ao consultar a IA.')); });
+    req.write(body);
+    req.end();
+  });
+}
+function chamarGemini(mensagens, apiKey, modelo, maxTokens) {
+  return new Promise((resolve, reject) => {
+    const contents = mensagens.filter(m => m.role !== 'system').map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: typeof m.content === 'string' ? [{ text: m.content }] : m.content.map(p =>
+        p.type === 'text' ? { text: p.text } : { inline_data: { mime_type: p.mediaType, data: p.data } }
+      )
+    }));
+    const body = JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens || 800 } });
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/${encodeURIComponent(modelo)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      timeout: 25000
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const partes = parsed.candidates && parsed.candidates[0] && parsed.candidates[0].content && parsed.candidates[0].content.parts || [];
+            resolve(partes.map(p => p.text || '').join('\n'));
+          } else {
+            reject(new Error((parsed.error && parsed.error.message) || 'Falha ao consultar o Gemini.'));
+          }
+        } catch (e) { reject(new Error('Resposta inválida do Gemini.')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Tempo esgotado ao consultar a IA.')); });
+    req.write(body);
+    req.end();
+  });
+}
+// Despachante único — todo o resto do sistema chama só isso, sem saber qual provedor está por trás.
+function chamarIA(mensagens, iaCfg, maxTokens) {
+  if (!iaCfg || !iaCfg.enabled || !iaCfg.apiKey) {
+    return Promise.reject(new Error('IA de atendimento não configurada. Cadastre em Configurações → Atendimento.'));
+  }
+  const provedor = IA_PROVEDORES[iaCfg.provider] ? iaCfg.provider : 'anthropic';
+  const modelo = iaCfg.modelo || IA_PROVEDORES[provedor].modeloPadrao;
+  if (provedor === 'anthropic') return chamarAnthropic(mensagens, iaCfg.apiKey, modelo, maxTokens);
+  if (provedor === 'gemini') return chamarGemini(mensagens, iaCfg.apiKey, modelo, maxTokens);
+  if (provedor === 'groq') return chamarOpenAICompativel('api.groq.com', '/openai/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens);
+  if (provedor === 'openrouter') return chamarOpenAICompativel('openrouter.ai', '/api/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens, { 'HTTP-Referer': 'https://shogatsu.local', 'X-Title': 'Shogatsu' });
+  if (provedor === 'huggingface') return chamarOpenAICompativel('router.huggingface.co', '/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens);
+  return Promise.reject(new Error('Provedor de IA desconhecido: ' + provedor));
+}
+// Responde a dúvida de um cliente do cardápio, usando o cardápio atual e o histórico da conversa
+// como contexto. Se houver FAQ pré-cadastrada, ela entra também — a IA prioriza essas respostas.
+function perguntarIA(historicoMensagens, iaCfg, cfg, menu) {
   const itensTexto = (menu || []).flatMap(cat => (cat.items || []).map(it => `- ${it.name}: R$ ${Number(it.price || 0).toFixed(2)}`)).join('\n');
-  const prompt = `Você é o atendimento automático do restaurante "${cfg.name}", respondendo dúvidas de um cliente ` +
-    `no próprio site de pedidos. Responda curto, simpático, em português do Brasil, sem inventar informação que ` +
-    `você não tem (se não souber, sugira falar direto pelo WhatsApp: ${cfg.storePhone || ''}).\n\n` +
+  const faqTexto = (iaCfg.faq || []).map(f => `P: ${f.pergunta}\nR: ${f.resposta}`).join('\n\n');
+  const sistema = `Você é o atendimento automático do restaurante "${cfg.name}", conversando com um cliente ` +
+    `no próprio site de pedidos. Responda curto, simpático, em português do Brasil, sem inventar informação ` +
+    `que você não tem (se não souber, sugira o botão "Falar com atendente"). Se a pergunta do cliente bater com ` +
+    `alguma das Perguntas Frequentes abaixo, use aquela resposta como base.\n\n` +
+    `Perguntas Frequentes cadastradas:\n${faqTexto || '(nenhuma)'}\n\n` +
     `Cardápio atual:\n${itensTexto || '(cardápio vazio no momento)'}\n\n` +
-    `Horário: ${cfg.days}, ${cfg.hours}. Taxa de entrega: R$ ${Number(cfg.fee || 0).toFixed(2)}. Pedido mínimo: R$ ${Number(cfg.min || 0).toFixed(2)}.\n\n` +
-    `Pergunta do cliente: "${pergunta}"\n\nResponda apenas com o texto da resposta, sem explicações extras.`;
-  return chamarClaude([{ role: 'user', content: prompt }], iaCfg, 500);
+    `Horário: ${cfg.days}, ${cfg.hours}. Taxa de entrega: R$ ${Number(cfg.fee || 0).toFixed(2)}. Pedido mínimo: R$ ${Number(cfg.min || 0).toFixed(2)}.`;
+  const mensagens = [{ role: 'user', content: sistema + '\n\n(Confirme que entendeu respondendo apenas "ok".)' }, { role: 'assistant', content: 'ok' },
+    ...historicoMensagens.map(m => ({ role: m.de === 'cliente' ? 'user' : 'assistant', content: m.texto }))];
+  return chamarIA(mensagens, iaCfg, 500);
 }
 // Lê uma foto de nota fiscal (custo de compra) ou catálogo/cardápio (preço de venda) e devolve uma
 // lista de itens em JSON — usada em Custos & Ficha Técnica pra sugerir ingredientes sem digitar.
@@ -832,11 +924,8 @@ function lerImagemIA(base64, mediaType, tipo, iaCfg) {
   const instrucao = tipo === 'catalogo'
     ? 'Leia esta imagem de um catálogo ou cardápio com preços. Extraia cada produto e seu preço de venda. Responda APENAS com um JSON array no formato [{"nome":"...","preco":0.0}], sem texto antes ou depois, sem markdown.'
     : 'Leia esta imagem de uma nota fiscal de compra. Extraia cada item comprado, a quantidade e o valor total pago por ele. Responda APENAS com um JSON array no formato [{"nome":"...","quantidade":0,"valorTotal":0.0}], sem texto antes ou depois, sem markdown.';
-  const content = [
-    { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: base64 } },
-    { type: 'text', text: instrucao }
-  ];
-  return chamarClaude([{ role: 'user', content }], iaCfg, 1500).then(texto => {
+  const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
+  return chamarIA([{ role: 'user', content }], iaCfg, 1500).then(texto => {
     const limpo = texto.replace(/```json|```/g, '').trim();
     return JSON.parse(limpo);
   });
@@ -1072,7 +1161,7 @@ const server = http.createServer(async (req, res) => {
     // v56: a chave de API da IA também não pode vazar pro público (o cardápio é servido pra
     // qualquer visitante) — só o campo "enabled" é público, pra o cardápio saber se mostra o
     // botão de dúvidas. A pergunta em si vai pro servidor, que usa a chave guardada aqui dentro.
-    publicCfg.ia = { enabled: !!(cfg.ia && cfg.ia.enabled) };
+    publicCfg.ia = { enabled: !!(cfg.ia && cfg.ia.enabled), faq: (cfg.ia && cfg.ia.faq) || [] };
     return sendJSON(res, 200, { cfg: publicCfg, menu });
   }
 
@@ -1254,14 +1343,17 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, { removido: antes !== lista.length });
   }
 
-  // ── IA de atendimento (v56) ──
+  // ── IA de atendimento (v57) ──
   // GET/POST /api/ia/settings — nunca devolve a chave de API crua (só se está preenchida ou não),
   // do mesmo jeito que senhas nunca voltam pro painel. Ficam fora do fluxo normal de /api/config
   // de propósito, pra a chave nunca correr o risco de ser reenviada em branco num "Salvar Tudo".
   if (pathname === '/api/ia/settings' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
     const { cfg } = readConfig();
-    return sendJSON(res, 200, { enabled: !!cfg.ia.enabled, hasKey: !!cfg.ia.apiKey });
+    return sendJSON(res, 200, {
+      enabled: !!cfg.ia.enabled, hasKey: !!cfg.ia.apiKey, provider: cfg.ia.provider || 'groq',
+      modelo: cfg.ia.modelo || '', faq: cfg.ia.faq || [], provedores: IA_PROVEDORES
+    });
   }
   if (pathname === '/api/ia/settings' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
@@ -1271,22 +1363,14 @@ const server = http.createServer(async (req, res) => {
       const iaAtual = data.cfg.ia || {};
       data.cfg.ia = {
         enabled: !!body.enabled,
-        apiKey: (typeof body.apiKey === 'string' && body.apiKey.trim()) ? body.apiKey.trim() : iaAtual.apiKey || ''
+        provider: IA_PROVEDORES[body.provider] ? body.provider : (iaAtual.provider || 'groq'),
+        apiKey: (typeof body.apiKey === 'string' && body.apiKey.trim()) ? body.apiKey.trim() : iaAtual.apiKey || '',
+        modelo: typeof body.modelo === 'string' ? body.modelo.trim() : (iaAtual.modelo || ''),
+        faq: Array.isArray(body.faq) ? body.faq.slice(0, 100).map(f => ({ pergunta: String(f.pergunta || '').slice(0, 200), resposta: String(f.resposta || '').slice(0, 600) })).filter(f => f.pergunta && f.resposta) : (iaAtual.faq || [])
       };
       writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
       return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-  // POST /api/ia/duvida — pública (cliente no cardápio perguntando), sem autenticação.
-  if (pathname === '/api/ia/duvida' && req.method === 'POST') {
-    try {
-      const { pergunta } = await readBody(req);
-      const p = String(pergunta || '').trim().slice(0, 500);
-      if (!p) return sendJSON(res, 400, { error: 'Escreva sua dúvida.' });
-      const { cfg, menu } = readConfig();
-      const resposta = await perguntarIA(p, cfg.ia, cfg, menu);
-      return sendJSON(res, 200, { resposta });
-    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui responder agora.' }); }
   }
   // POST /api/custos/ler-imagem — lê foto de nota fiscal (custo) ou catálogo (preço de venda) e
   // devolve uma lista pra o admin CONFERIR antes de salvar (não grava nada sozinho).
@@ -1299,6 +1383,100 @@ const server = http.createServer(async (req, res) => {
       const itens = await lerImagemIA(imagemBase64, mediaType, tipo, cfg.ia);
       return sendJSON(res, 200, { itens });
     } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui ler essa imagem.' }); }
+  }
+
+  // ── Atendimento — conversas (v57) ── janela de chat do cliente, estilo WhatsApp: começa com a
+  // IA (se configurada) e o cliente pode pedir "falar com atendente" a qualquer momento, o que
+  // marca a conversa pra aparecer no painel (Configurações → Atendimento) pro caixa responder na
+  // mão. Tudo público do lado do cliente (não exige login), autenticado do lado do painel.
+  function lerAtendimentos() { return readJSON(ATENDIMENTO_FILE); }
+  function salvarAtendimentos(obj) { writeJSON(ATENDIMENTO_FILE, obj); }
+
+  if (pathname === '/api/atendimento/iniciar' && req.method === 'POST') {
+    const { cfg } = readConfig();
+    const todas = lerAtendimentos();
+    const id = crypto.randomBytes(10).toString('hex');
+    todas[id] = {
+      id, criadaEm: new Date().toISOString(), ultimaAtividade: new Date().toISOString(),
+      modo: (cfg.ia && cfg.ia.enabled) ? 'ia' : 'humano', naoLidaAtendente: false, mensagens: []
+    };
+    salvarAtendimentos(todas);
+    return sendJSON(res, 200, { conversaId: id, modo: todas[id].modo });
+  }
+  const conversaGetMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)$/);
+  if (conversaGetMatch && req.method === 'GET') {
+    const todas = lerAtendimentos();
+    const conversa = todas[conversaGetMatch[1]];
+    if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+    return sendJSON(res, 200, { conversa });
+  }
+  const conversaMsgMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/mensagem$/);
+  if (conversaMsgMatch && req.method === 'POST') {
+    try {
+      const { texto } = await readBody(req);
+      const t = String(texto || '').trim().slice(0, 500);
+      if (!t) return sendJSON(res, 400, { error: 'Escreva uma mensagem.' });
+      const todas = lerAtendimentos();
+      const conversa = todas[conversaMsgMatch[1]];
+      if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+      conversa.mensagens.push({ de: 'cliente', texto: t, ts: new Date().toISOString() });
+      conversa.ultimaAtividade = new Date().toISOString();
+      if (conversa.modo === 'humano') {
+        conversa.naoLidaAtendente = true;
+        salvarAtendimentos(todas);
+        return sendJSON(res, 200, { conversa });
+      }
+      // modo IA
+      const { cfg, menu } = readConfig();
+      try {
+        const resposta = await perguntarIA(conversa.mensagens, cfg.ia, cfg, menu);
+        conversa.mensagens.push({ de: 'ia', texto: resposta || 'Não consegui pensar numa resposta agora — quer falar com um atendente?', ts: new Date().toISOString() });
+      } catch (e) {
+        conversa.mensagens.push({ de: 'ia', texto: 'No momento não consigo responder automaticamente. Toque em "Falar com atendente" que alguém te responde.', ts: new Date().toISOString() });
+      }
+      salvarAtendimentos(todas);
+      return sendJSON(res, 200, { conversa });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  const conversaHumanoMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/humano$/);
+  if (conversaHumanoMatch && req.method === 'POST') {
+    const todas = lerAtendimentos();
+    const conversa = todas[conversaHumanoMatch[1]];
+    if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+    conversa.modo = 'humano';
+    conversa.naoLidaAtendente = true;
+    conversa.mensagens.push({ de: 'sistema', texto: 'Cliente pediu pra falar com um atendente.', ts: new Date().toISOString() });
+    conversa.ultimaAtividade = new Date().toISOString();
+    salvarAtendimentos(todas);
+    return sendJSON(res, 200, { conversa });
+  }
+  // Painel — listar e responder conversas
+  if (pathname === '/api/admin/atendimento' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const todas = lerAtendimentos();
+    const lista = Object.values(todas)
+      .filter(c => c.mensagens.length > 0)
+      .sort((a, b) => new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade))
+      .slice(0, 200);
+    return sendJSON(res, 200, { conversas: lista });
+  }
+  const conversaResponderMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/responder$/);
+  if (conversaResponderMatch && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { texto } = await readBody(req);
+      const t = String(texto || '').trim().slice(0, 1000);
+      if (!t) return sendJSON(res, 400, { error: 'Escreva uma resposta.' });
+      const todas = lerAtendimentos();
+      const conversa = todas[conversaResponderMatch[1]];
+      if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+      conversa.modo = 'humano';
+      conversa.naoLidaAtendente = false;
+      conversa.mensagens.push({ de: 'atendente', texto: t, ts: new Date().toISOString() });
+      conversa.ultimaAtividade = new Date().toISOString();
+      salvarAtendimentos(todas);
+      return sendJSON(res, 200, { conversa });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
 
