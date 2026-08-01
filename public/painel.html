@@ -722,6 +722,11 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
               <div class="field" style="width:110px;"><label>Preço (R$)</label><input id="ni-preco" type="number" step="0.01" placeholder="0,00"/></div>
               <button class="btn primary" onclick="criarIngrediente()" style="height:38px;margin-bottom:14px;">Adicionar</button>
             </div>
+            <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
+              <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px;">📷 Ou envie uma foto/print da nota fiscal — a IA lê os itens e cadastra os ingredientes sozinha, sem digitar nada (precisa da IA de Atendimento configurada em Configurações)</label>
+              <input type="file" accept="image/*" onchange="lerNotaFiscalIngredientes(event)"/>
+              <div id="ni-foto-status" style="font-size:12px;margin-top:6px;"></div>
+            </div>
             <p style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">💡 Esse programa não busca preço ao vivo na internet sozinho (isso exigiria contratar uma API paga de cotação). Cada vez que você muda o preço aqui, a data de atualização é registrada automaticamente, e o sistema avisa quando ela ficar velha.</p>
           </div>
         </div>
@@ -1146,6 +1151,52 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div id="announcements-list" style="display:flex;flex-direction:column;gap:10px;"></div>
           <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 IA de Atendimento</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
+            tem tal prato etc.), usando a API da <a href="https://www.anthropic.com" target="_blank" style="color:var(--gold);">Anthropic (Claude)</a> — serviço pago de terceiros,
+            cobrado por uso. Sem chave cadastrada, o botão de dúvidas simplesmente não aparece pro
+            cliente, sem quebrar nada.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
+          </label>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Chave de API (Anthropic)</label><input id="ia-apikey" type="password" placeholder="sk-ant-..."/></div>
+          </div>
+          <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
+          <button class="btn success sm" onclick="saveIaSettings()">💾 Salvar IA de Atendimento</button>
+          <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Se preenchido, o cardápio mostra um botão que abre a conversa direto no Instagram ou
+            Facebook do restaurante. Deixe em branco pra não mostrar o botão.
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">@ do Instagram</label><input id="cfg-social-instagram" placeholder="seu_instagram"/></div>
+            <div class="field"><label style="font-size:10px;">Usuário/ID da página do Facebook</label><input id="cfg-social-facebook" placeholder="suapagina"/></div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
+        </div>
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📥 Importar Contatos Externos</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Importa uma lista de contatos externa (CSV do Google Contatos, CSV do Outlook, vCard
+            .vcf do Android/iOS, ou bloco de notas .txt com um contato por linha) pra ampliar quem
+            recebe SMS promocional. Fica separado dos "Clientes cadastrados" (que vêm de pedidos
+            reais) — cada telefone é agrupado automaticamente por DDD.
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:12px;">
+            <label>CSV (Google/Outlook)<br/><input type="file" accept=".csv" onchange="importarContatosArquivo(event,'csv')"/></label>
+            <label>vCard (Android/iOS)<br/><input type="file" accept=".vcf" onchange="importarContatosArquivo(event,'vcard')"/></label>
+            <label>Bloco de notas (.txt)<br/><input type="file" accept=".txt" onchange="importarContatosArquivo(event,'txt')"/></label>
+          </div>
+          <div id="contatos-import-status" style="font-size:12px;margin-bottom:10px;"></div>
+          <div id="contatos-por-ddd" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;">Nenhum contato importado ainda.</div>
         </div>
         <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📢 SMS para Clientes</div>
@@ -3954,6 +4005,45 @@ async function criarIngrediente(){
   await renderCustosPage();
   showToast('✅ Ingrediente adicionado', nome);
 }
+function fileParaBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result).split(',')[1]);
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
+async function lerNotaFiscalIngredientes(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('ni-foto-status');
+  statusEl.style.color='var(--muted)'; statusEl.textContent='Lendo imagem...';
+  try{
+    const base64 = await fileParaBase64(file);
+    const r = await fetch('/api/custos/ler-imagem', {
+      method:'POST', headers: authHeaders({'Content-Type':'application/json'}),
+      body: JSON.stringify({ imagemBase64: base64, mediaType: file.type||'image/jpeg', tipo:'nota' })
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Não consegui ler essa imagem.');
+    let criados=0;
+    for(const it of (data.itens||[])){
+      const nome = String(it.nome||'').trim();
+      const qtd = Number(it.quantidade)||1;
+      const valor = Number(it.valorTotal)||0;
+      if(!nome || valor<=0) continue;
+      const res = await apiPost('/api/custos/ingredientes', { nome, categoria:'Geral', unidade:'un', precoUnitario: valor/qtd });
+      if(res.ok) criados++;
+    }
+    statusEl.style.color = criados>0 ? '#50c878' : 'var(--red-lt)';
+    statusEl.textContent = criados>0 ? `✅ ${criados} ingrediente(s) adicionado(s) a partir da foto. Confira e ajuste a unidade/categoria se precisar.` : 'Não achei nenhum item legível nessa foto.';
+    await renderCustosPage();
+  }catch(e){
+    statusEl.style.color='var(--red-lt)';
+    statusEl.textContent = e.message || 'Erro ao ler a imagem.';
+  }
+  ev.target.value='';
+}
 async function atualizarPrecoIngrediente(input){
   const id=input.dataset.id;
   const r=await fetch('/api/custos/ingredientes/'+id, {method:'PUT', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({precoUnitario:Number(input.value)})});
@@ -4955,9 +5045,112 @@ function loadSettings(){
   document.getElementById('print-color').value = cfg.printColor||'#000000';
   updatePrintFontPreview();
   loadCoupons();
+  const socialInstaEl=document.getElementById('cfg-social-instagram'); if(socialInstaEl) socialInstaEl.value=cfg.social?.instagram||'';
+  const socialFbEl=document.getElementById('cfg-social-facebook'); if(socialFbEl) socialFbEl.value=cfg.social?.facebook||'';
   loadSmsSettings();
   loadAnnouncements();
+  loadIaSettings();
+  loadContatosImportados();
 }
+// ═══════════════════════════════════════════
+// IA de Atendimento (v56)
+// ═══════════════════════════════════════════
+async function loadIaSettings(){
+  const res = await apiGet('/api/ia/settings');
+  const enabledEl=document.getElementById('ia-enabled'); if(enabledEl) enabledEl.checked = !!res?.enabled;
+  const statusEl=document.getElementById('ia-key-status');
+  if(statusEl) statusEl.textContent = res?.hasKey ? '🔑 Já existe uma chave cadastrada. Deixe o campo em branco pra manter a atual.' : 'Nenhuma chave cadastrada ainda.';
+}
+async function saveIaSettings(){
+  const statusEl=document.getElementById('ia-save-status');
+  const enabled = document.getElementById('ia-enabled').checked;
+  const apiKey = document.getElementById('ia-apikey').value.trim();
+  statusEl.style.color='var(--muted)'; statusEl.textContent='Salvando...';
+  const res = await apiPost('/api/ia/settings', { enabled, apiKey });
+  if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao salvar.'; return; }
+  document.getElementById('ia-apikey').value='';
+  statusEl.style.color='#50c878'; statusEl.textContent='✅ Salvo!';
+  loadIaSettings();
+}
+
+// ═══════════════════════════════════════════
+// Importação de contatos externos (v56) — CSV / vCard / bloco de notas, agrupados por DDD
+// ═══════════════════════════════════════════
+function extrairDDDPainel(telefone){
+  let d = String(telefone||'').replace(/\D/g,'');
+  if(d.startsWith('55') && d.length>=12) d = d.slice(2);
+  return d.length>=10 ? d.slice(0,2) : '??';
+}
+function parseContatosCSV(texto){
+  const linhas = texto.split(/\r?\n/).filter(l=>l.trim());
+  const contatos = [];
+  linhas.slice(1).forEach(linha=>{
+    const campos = linha.split(',').map(c=>c.replace(/^"|"$/g,'').trim());
+    const telCampo = campos.find(c=>/\d{4,}/.test(c.replace(/\D/g,'')) && /\d/.test(c));
+    if(!telCampo) return;
+    const nomeCampo = campos.find(c=>c && !/\d{4,}/.test(c.replace(/\D/g,''))) || 'Sem nome';
+    contatos.push({ nome: nomeCampo, telefone: telCampo });
+  });
+  return contatos;
+}
+function parseContatosVCard(texto){
+  const blocos = texto.split(/BEGIN:VCARD/i).slice(1);
+  return blocos.map(b=>{
+    const nomeMatch = b.match(/FN:(.*)/i);
+    const telMatch = b.match(/TEL[^:]*:(.*)/i);
+    return { nome: nomeMatch?nomeMatch[1].trim():'Sem nome', telefone: telMatch?telMatch[1].trim():'' };
+  }).filter(c=>c.telefone);
+}
+function parseContatosTexto(texto){
+  const linhas = texto.split(/\r?\n/).filter(l=>l.trim());
+  return linhas.map(l=>{
+    const telMatch = l.match(/[\d()+\-\s]{8,}/);
+    const telefone = telMatch?telMatch[0].trim():'';
+    const nome = telefone ? l.replace(telefone,'').replace(/[,;:-]+$/,'').trim() : l.trim();
+    return { nome: nome||'Sem nome', telefone };
+  }).filter(c=>c.telefone);
+}
+async function importarContatosArquivo(ev, tipo){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('contatos-import-status');
+  const texto = await file.text();
+  let contatos = [];
+  if(tipo==='vcard') contatos = parseContatosVCard(texto);
+  else if(tipo==='csv') contatos = parseContatosCSV(texto);
+  else contatos = parseContatosTexto(texto);
+  if(!contatos.length){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Nenhum contato encontrado nesse arquivo.'; ev.target.value=''; return; }
+  statusEl.style.color='var(--muted)'; statusEl.textContent=`Importando ${contatos.length} contato(s)...`;
+  const res = await apiPost('/api/admin/contatos/importar', { contatos, origem: tipo });
+  ev.target.value='';
+  if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao importar.'; return; }
+  statusEl.style.color='#50c878';
+  statusEl.textContent = `✅ ${res.data.criados} novo(s) importado(s)${res.data.ignorados?`, ${res.data.ignorados} já existente(s) ou inválido(s)`:''}. Total: ${res.data.total}.`;
+  loadContatosImportados();
+}
+async function loadContatosImportados(){
+  const el = document.getElementById('contatos-por-ddd');
+  if(!el) return;
+  const res = await apiGet('/api/admin/contatos');
+  const lista = res?.contatos || [];
+  if(!lista.length){ el.innerHTML = 'Nenhum contato importado ainda.'; return; }
+  const grupos = {};
+  lista.forEach(c=>{ const d=c.ddd||extrairDDDPainel(c.telefone); (grupos[d]=grupos[d]||[]).push(c); });
+  el.innerHTML = Object.keys(grupos).sort().map(ddd=>`
+    <div style="margin-bottom:10px;">
+      <div style="font-weight:600;color:var(--gold);margin-bottom:4px;">DDD ${ddd} (${grupos[ddd].length})</div>
+      ${grupos[ddd].map(c=>`
+        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border);">
+          <span>${esc(c.nome)} — ${esc(c.telefone)}</span>
+          <span style="color:var(--red-lt);cursor:pointer;" onclick="removerContatoImportado('${c.id}')">remover</span>
+        </div>`).join('')}
+    </div>`).join('');
+}
+async function removerContatoImportado(id){
+  await fetch('/api/admin/contatos/'+id, { method:'DELETE', headers: authHeaders() });
+  loadContatosImportados();
+}
+
 // ═══════════════════════════════════════════
 // SMS — configuração + envio de promoções
 // ═══════════════════════════════════════════
@@ -5545,6 +5738,12 @@ async function saveAllSettings(){
     fromNumber: document.getElementById('sms-from').value.trim(),
     fromWhatsApp: document.getElementById('sms-whatsapp-from')?.value.trim() || '',
     notifyWhatsApp: document.getElementById('sms-whatsapp-notify')?.checked || false
+  };
+
+  // Redes sociais — botão de pedido direto no Instagram/Facebook do cardápio (v56)
+  cfg.social = {
+    instagram: document.getElementById('cfg-social-instagram')?.value.trim() || '',
+    facebook: document.getElementById('cfg-social-facebook')?.value.trim() || ''
   };
 
   // Fonte de impressão (impressoras em si já ficam salvas em cfg.stations, atualizado ao digitar)

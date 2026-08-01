@@ -619,6 +619,22 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
   <div class="drawer-body" id="contact-body"></div>
 </div>
 
+<div class="drawer-overlay" id="ia-overlay" onclick="closeIaDuvida()"></div>
+<div class="drawer" id="ia-drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <span class="drawer-title">🤖 Tire sua dúvida</span>
+    <button class="drawer-close" onclick="closeIaDuvida()">✕</button>
+  </div>
+  <div class="drawer-body" id="ia-body">
+    <p style="font-size:12px;color:var(--muted,#999);margin:0 0 10px;">Resposta automática — pra pedidos ou algo urgente, prefira o WhatsApp.</p>
+    <textarea id="ia-pergunta" placeholder="Ex: vocês têm opção vegetariana? até que horas entregam hoje?" style="width:100%;min-height:64px;border-radius:8px;padding:10px;font-size:13px;box-sizing:border-box;"></textarea>
+    <button class="checkout-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="margin-top:8px;">Perguntar</button>
+    <div id="ia-resposta" style="margin-top:12px;font-size:13px;white-space:pre-wrap;"></div>
+  </div>
+</div>
+
+
 <div class="screen" id="account-screen">
   <div class="screen-header">
     <button class="back-btn" onclick="closeAccountScreen()">←</button>
@@ -1920,6 +1936,9 @@ function openContactSheet(){
   if(phoneDigits) options.push({icon:'📞', name:'Ligar', sub:cfg.storePhone||formatPhoneDisplay(phoneDigits), href:`tel:+55${phoneDigits.length<=11?phoneDigits:phoneDigits.slice(-11)}`});
   if(phoneDigits) options.push({icon:'✉️', name:'Enviar SMS', sub:'Mensagem de texto', href:`sms:+55${phoneDigits.length<=11?phoneDigits:phoneDigits.slice(-11)}?body=${msg}`});
   if(whatsDigits) options.push({icon:'💬', name:'WhatsApp', sub:'Resposta mais rápida', href:`https://wa.me/${whatsDigits}?text=${msg}`});
+  if(cfg.social && cfg.social.instagram) options.push({icon:'📸', name:'Instagram', sub:'Peça por lá', href:`https://ig.me/m/${String(cfg.social.instagram).replace('@','')}`});
+  if(cfg.social && cfg.social.facebook) options.push({icon:'👍', name:'Facebook', sub:'Peça por lá', href:`https://m.me/${cfg.social.facebook}`});
+  if(cfg.ia && cfg.ia.enabled) options.push({icon:'🤖', name:'Tirar uma dúvida', sub:'Resposta automática', onclick:'closeContactSheet();openIaDuvida();'});
   if(cfg.reservations && cfg.reservations.enabled) options.push({icon:'📅', name:'Reservar uma mesa', sub:'Escolha data e horário', onclick:'closeContactSheet();openReservationScreen();'});
   document.getElementById('contact-body').innerHTML = options.map(o=>`
     <a class="contact-opt" ${o.href?`href="${o.href}" target="_blank" rel="noopener"`:`href="javascript:void(0)" onclick="${o.onclick}"`}>
@@ -1932,6 +1951,37 @@ function openContactSheet(){
 function closeContactSheet(){
   document.getElementById('contact-overlay').classList.remove('open');
   document.getElementById('contact-drawer').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
+// DÚVIDAS COM IA (v56) — resposta automática usando o cardápio como contexto
+// ═══════════════════════════════════════════
+function openIaDuvida(){
+  document.getElementById('ia-overlay').classList.add('open');
+  document.getElementById('ia-drawer').classList.add('open');
+}
+function closeIaDuvida(){
+  document.getElementById('ia-overlay').classList.remove('open');
+  document.getElementById('ia-drawer').classList.remove('open');
+}
+async function enviarDuvidaIa(){
+  const campo = document.getElementById('ia-pergunta');
+  const pergunta = campo.value.trim();
+  const respostaEl = document.getElementById('ia-resposta');
+  const btn = document.getElementById('ia-perguntar-btn');
+  if(!pergunta){ campo.focus(); return; }
+  btn.disabled = true; btn.textContent = 'Perguntando...';
+  respostaEl.textContent = '';
+  try{
+    const r = await fetch('/api/ia/duvida', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pergunta }) });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Não consegui responder agora.');
+    respostaEl.textContent = data.resposta;
+  }catch(e){
+    respostaEl.textContent = '⚠️ ' + (e.message || 'Não consegui responder agora, tenta o WhatsApp.');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Perguntar';
+  }
 }
 function formatPhoneDisplay(digits){
   const d = digits.length>11 ? digits.slice(-11) : digits;
