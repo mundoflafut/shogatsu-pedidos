@@ -31,6 +31,7 @@ const INGREDIENTES_FILE = path.join(DATA_DIR, 'ingredientes.json');
 const FICHAS_TECNICAS_FILE = path.join(DATA_DIR, 'fichas-tecnicas.json');
 const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
+const CONTATOS_IMPORTADOS_FILE = path.join(DATA_DIR, 'contatos-importados.json'); // v56: contatos importados de CSV/vCard/txt, separado dos clientes reais (que vêm de pedidos)
 const webpush = require('./webpush');
 
 // ═══════════════════════════════════════════════════════════
@@ -184,6 +185,14 @@ const DEFAULT_CFG = {
   // ── SMS (envio de promoções pros clientes cadastrados) — usa a API da Twilio.
   // Precisa de conta própria em twilio.com (pago, mas barato); sem isso configurado, o envio simplesmente falha com aviso claro.
   sms: { accountSid: '', authToken: '', fromNumber: '', fromWhatsApp: '', notifyWhatsApp: false },
+  // ── IA de atendimento (v56) — responde dúvida do cliente automaticamente usando o cardápio como
+  // contexto, e lê foto de nota fiscal/catálogo pra sugerir ingredientes em Custos & Ficha Técnica.
+  // Usa a API da Anthropic (Claude) com a chave que o restaurante cadastra aqui. OPCIONAL: sem
+  // isso configurado, os botões de IA simplesmente avisam que não está configurado, sem quebrar nada.
+  ia: { enabled: false, apiKey: '' },
+  // ── Redes sociais (v56) — botão de pedido direto no Instagram/Facebook do cardápio online.
+  // Deixe em branco pra não mostrar o botão correspondente.
+  social: { instagram: '', facebook: '' },
   // ── Avaliações — frase que aparece pro cliente depois que ele confirma que recebeu o pedido ──
   reviewPrompt: 'O que você achou do seu pedido? Sua opinião ajuda muito a gente! 🍣',
   reviewPhrases: [
@@ -269,6 +278,7 @@ if (!fs.existsSync(INGREDIENTES_FILE)) fs.writeFileSync(INGREDIENTES_FILE, '[]')
 if (!fs.existsSync(FICHAS_TECNICAS_FILE)) fs.writeFileSync(FICHAS_TECNICAS_FILE, '[]');
 if (!fs.existsSync(CUSTOS_CONFIG_FILE)) fs.writeFileSync(CUSTOS_CONFIG_FILE, JSON.stringify({ diasParaDesatualizado: 21, margemPadrao: 65 }, null, 2));
 if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
+if (!fs.existsSync(CONTATOS_IMPORTADOS_FILE)) fs.writeFileSync(CONTATOS_IMPORTADOS_FILE, '[]');
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -419,6 +429,8 @@ function readConfig() {
     slides: data.cfg.slides || DEFAULT_CFG.slides,
     users: (Array.isArray(data.cfg.users) && data.cfg.users.length) ? data.cfg.users : DEFAULT_CFG.users,
     sms: { ...DEFAULT_CFG.sms, ...(data.cfg.sms || {}) },
+    ia: { ...DEFAULT_CFG.ia, ...(data.cfg.ia || {}) },
+    social: { ...DEFAULT_CFG.social, ...(data.cfg.social || {}) },
     schedule: { ...DEFAULT_CFG.schedule, ...(data.cfg.schedule || {}) },
     weekSchedule: Array.isArray(data.cfg.weekSchedule) && data.cfg.weekSchedule.length === 7
       ? DEFAULT_CFG.weekSchedule.map((d, i) => ({ ...d, ...(data.cfg.weekSchedule[i] || {}) }))
@@ -757,6 +769,79 @@ function sendSMS(toPhone, body, smsCfg) {
   });
 }
 
+// ─── IA de atendimento (v56) — usa a API da Anthropic (Claude) com a chave cadastrada em
+// Configurações. Tudo opcional: sem chave cadastrada, as funções abaixo rejeitam com uma
+// mensagem clara, e o restante do sistema continua funcionando normal (mesmo espírito do
+// SMS/WhatsApp automático, que também são "se configurado, senão avisa e segue o jogo").
+function chamarClaude(messagesPayload, iaCfg, maxTokens) {
+  return new Promise((resolve, reject) => {
+    if (!iaCfg || !iaCfg.enabled || !iaCfg.apiKey) {
+      return reject(new Error('IA de atendimento não configurada. Cadastre a chave em Configurações → IA.'));
+    }
+    const body = JSON.stringify({
+      model: 'claude-sonnet-5',
+      max_tokens: maxTokens || 800,
+      messages: messagesPayload
+    });
+    const req = https.request({
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'x-api-key': iaCfg.apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      },
+      timeout: 20000
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const texto = (parsed.content || []).map(b => b.text || '').filter(Boolean).join('\n');
+            resolve(texto);
+          } else {
+            reject(new Error((parsed.error && parsed.error.message) || 'Falha ao consultar a IA.'));
+          }
+        } catch (e) { reject(new Error('Resposta inválida da IA.')); }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Tempo esgotado ao consultar a IA.')); });
+    req.write(body);
+    req.end();
+  });
+}
+// Responde a dúvida de um cliente do cardápio, usando o cardápio atual como contexto.
+function perguntarIA(pergunta, iaCfg, cfg, menu) {
+  const itensTexto = (menu || []).flatMap(cat => (cat.items || []).map(it => `- ${it.name}: R$ ${Number(it.price || 0).toFixed(2)}`)).join('\n');
+  const prompt = `Você é o atendimento automático do restaurante "${cfg.name}", respondendo dúvidas de um cliente ` +
+    `no próprio site de pedidos. Responda curto, simpático, em português do Brasil, sem inventar informação que ` +
+    `você não tem (se não souber, sugira falar direto pelo WhatsApp: ${cfg.storePhone || ''}).\n\n` +
+    `Cardápio atual:\n${itensTexto || '(cardápio vazio no momento)'}\n\n` +
+    `Horário: ${cfg.days}, ${cfg.hours}. Taxa de entrega: R$ ${Number(cfg.fee || 0).toFixed(2)}. Pedido mínimo: R$ ${Number(cfg.min || 0).toFixed(2)}.\n\n` +
+    `Pergunta do cliente: "${pergunta}"\n\nResponda apenas com o texto da resposta, sem explicações extras.`;
+  return chamarClaude([{ role: 'user', content: prompt }], iaCfg, 500);
+}
+// Lê uma foto de nota fiscal (custo de compra) ou catálogo/cardápio (preço de venda) e devolve uma
+// lista de itens em JSON — usada em Custos & Ficha Técnica pra sugerir ingredientes sem digitar.
+function lerImagemIA(base64, mediaType, tipo, iaCfg) {
+  const instrucao = tipo === 'catalogo'
+    ? 'Leia esta imagem de um catálogo ou cardápio com preços. Extraia cada produto e seu preço de venda. Responda APENAS com um JSON array no formato [{"nome":"...","preco":0.0}], sem texto antes ou depois, sem markdown.'
+    : 'Leia esta imagem de uma nota fiscal de compra. Extraia cada item comprado, a quantidade e o valor total pago por ele. Responda APENAS com um JSON array no formato [{"nome":"...","quantidade":0,"valorTotal":0.0}], sem texto antes ou depois, sem markdown.';
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: base64 } },
+    { type: 'text', text: instrucao }
+  ];
+  return chamarClaude([{ role: 'user', content }], iaCfg, 1500).then(texto => {
+    const limpo = texto.replace(/```json|```/g, '').trim();
+    return JSON.parse(limpo);
+  });
+}
+
 
 // ─── Impressão — rede (ESC/POS via TCP) e USB (dispositivo local) ───
 // Comandos ESC/POS básicos
@@ -984,6 +1069,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/config' && req.method === 'GET') {
     const { cfg, menu } = readConfig();
     const { adminPass, masterPass, ...publicCfg } = cfg; // nunca vaza as senhas
+    // v56: a chave de API da IA também não pode vazar pro público (o cardápio é servido pra
+    // qualquer visitante) — só o campo "enabled" é público, pra o cardápio saber se mostra o
+    // botão de dúvidas. A pergunta em si vai pro servidor, que usa a chave guardada aqui dentro.
+    publicCfg.ia = { enabled: !!(cfg.ia && cfg.ia.enabled) };
     return sendJSON(res, 200, { cfg: publicCfg, menu });
   }
 
@@ -1021,6 +1110,8 @@ const server = http.createServer(async (req, res) => {
           uiFonts: { ...current.cfg.uiFonts, ...(body.cfg && body.cfg.uiFonts || {}) },
           theme: { ...current.cfg.theme, ...(body.cfg && body.cfg.theme || {}) },
           sms: { ...current.cfg.sms, ...(body.cfg && body.cfg.sms || {}) },
+          ia: { ...current.cfg.ia, ...(body.cfg && body.cfg.ia || {}) },
+          social: { ...current.cfg.social, ...(body.cfg && body.cfg.social || {}) },
           schedule: { ...current.cfg.schedule, ...(body.cfg && body.cfg.schedule || {}) },
           weekSchedule: (Array.isArray(body.cfg && body.cfg.weekSchedule) && body.cfg.weekSchedule.length === 7)
             ? current.cfg.weekSchedule.map((d, i) => ({ ...d, ...(body.cfg.weekSchedule[i] || {}) }))
@@ -1111,6 +1202,105 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { ok: true, ...results });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
+
+  // ── Contatos importados (v56) — CSV do Google/Outlook, vCard (.vcf) ou bloco de notas (.txt).
+  // Fica num arquivo separado de customers.json de propósito: customers.json é gerado sozinho a
+  // partir de pedidos reais, e não deve ser misturado com uma lista externa que ninguém confirmou
+  // que já comprou algo. Serve pra ampliar o alcance de campanhas de SMS/promoção por região (DDD).
+  function extrairDDD(telefone) {
+    let d = String(telefone || '').replace(/\D/g, '');
+    if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+    return d.length >= 10 ? d.slice(0, 2) : '??';
+  }
+  if (pathname === '/api/admin/contatos' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const lista = readJSON(CONTATOS_IMPORTADOS_FILE, []);
+    return sendJSON(res, 200, { contatos: lista });
+  }
+  if (pathname === '/api/admin/contatos/importar' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const body = await readBody(req);
+      const recebidos = Array.isArray(body.contatos) ? body.contatos.slice(0, 5000) : [];
+      if (!recebidos.length) return sendJSON(res, 400, { error: 'Nenhum contato recebido.' });
+      const lista = readJSON(CONTATOS_IMPORTADOS_FILE, []);
+      const existentes = new Set(lista.map(c => c.telefone.replace(/\D/g, '')));
+      let criados = 0;
+      recebidos.forEach(c => {
+        const telDigitos = String(c.telefone || '').replace(/\D/g, '');
+        if (!telDigitos || telDigitos.length < 8 || existentes.has(telDigitos)) return;
+        existentes.add(telDigitos);
+        lista.push({
+          id: crypto.randomBytes(8).toString('hex'),
+          nome: String(c.nome || 'Sem nome').trim().slice(0, 120),
+          telefone: telDigitos,
+          ddd: extrairDDD(telDigitos),
+          origem: String(body.origem || 'importação').slice(0, 40),
+          importadoEm: new Date().toISOString()
+        });
+        criados++;
+      });
+      writeJSON(CONTATOS_IMPORTADOS_FILE, lista);
+      return sendJSON(res, 200, { ok: true, criados, ignorados: recebidos.length - criados, total: lista.length });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  const contatoMatch = pathname.match(/^\/api\/admin\/contatos\/([^/]+)$/);
+  if (contatoMatch && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    let lista = readJSON(CONTATOS_IMPORTADOS_FILE, []);
+    const antes = lista.length;
+    lista = lista.filter(c => c.id !== contatoMatch[1]);
+    writeJSON(CONTATOS_IMPORTADOS_FILE, lista);
+    return sendJSON(res, 200, { removido: antes !== lista.length });
+  }
+
+  // ── IA de atendimento (v56) ──
+  // GET/POST /api/ia/settings — nunca devolve a chave de API crua (só se está preenchida ou não),
+  // do mesmo jeito que senhas nunca voltam pro painel. Ficam fora do fluxo normal de /api/config
+  // de propósito, pra a chave nunca correr o risco de ser reenviada em branco num "Salvar Tudo".
+  if (pathname === '/api/ia/settings' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const { cfg } = readConfig();
+    return sendJSON(res, 200, { enabled: !!cfg.ia.enabled, hasKey: !!cfg.ia.apiKey });
+  }
+  if (pathname === '/api/ia/settings' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const body = await readBody(req);
+      const data = readConfig();
+      const iaAtual = data.cfg.ia || {};
+      data.cfg.ia = {
+        enabled: !!body.enabled,
+        apiKey: (typeof body.apiKey === 'string' && body.apiKey.trim()) ? body.apiKey.trim() : iaAtual.apiKey || ''
+      };
+      writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
+      return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // POST /api/ia/duvida — pública (cliente no cardápio perguntando), sem autenticação.
+  if (pathname === '/api/ia/duvida' && req.method === 'POST') {
+    try {
+      const { pergunta } = await readBody(req);
+      const p = String(pergunta || '').trim().slice(0, 500);
+      if (!p) return sendJSON(res, 400, { error: 'Escreva sua dúvida.' });
+      const { cfg, menu } = readConfig();
+      const resposta = await perguntarIA(p, cfg.ia, cfg, menu);
+      return sendJSON(res, 200, { resposta });
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui responder agora.' }); }
+  }
+  // POST /api/custos/ler-imagem — lê foto de nota fiscal (custo) ou catálogo (preço de venda) e
+  // devolve uma lista pra o admin CONFERIR antes de salvar (não grava nada sozinho).
+  if (pathname === '/api/custos/ler-imagem' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { imagemBase64, mediaType, tipo } = await readBody(req, 15e6);
+      if (!imagemBase64) return sendJSON(res, 400, { error: 'Nenhuma imagem recebida.' });
+      const { cfg } = readConfig();
+      const itens = await lerImagemIA(imagemBase64, mediaType, tipo, cfg.ia);
+      return sendJSON(res, 200, { itens });
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui ler essa imagem.' }); }
+  }
+
 
   if (pathname === '/api/admin/users' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'master')) return sendJSON(res, 403, { error: 'Só o usuário master pode gerenciar usuários.' });
