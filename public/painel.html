@@ -537,6 +537,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       </div>
       <label class="toggle"><input type="checkbox" id="store-toggle" checked onchange="toggleStore(this)"><span class="toggle-slider"></span></label>
     </div>
+    <div class="store-toggle" style="margin-top:8px;" title="Quando ligado, todo pedido novo já entra ACEITO automaticamente (com número de ficha), sem precisar clicar em &quot;Aceitar Pedido&quot; — combine com uma via em modo Automática pra ter impressão 100% sem toque nenhum.">
+      <div>
+        <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;" id="auto-accept-status-text">Aceite Automático</div>
+        <div class="store-toggle-label" id="auto-accept-status-sub">desligado</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
+    </div>
   </div>
   <div class="sidebar-resize-handle" id="sidebar-resize-handle" title="Arraste para redimensionar"></div>
 </aside>
@@ -2124,6 +2131,8 @@ async function loadConfigAndMenu(){
   const autoSched = cfg.schedule && cfg.schedule.enabled;
   document.getElementById('store-toggle').disabled = !!autoSched;
   document.getElementById('store-status-text').textContent = (Number(cfg.open) ? 'Restaurante Aberto' : 'Restaurante Fechado') + (autoSched ? ' (auto)' : '');
+  document.getElementById('auto-accept-toggle').checked = Boolean(Number(cfg.autoAcceptOrders));
+  document.getElementById('auto-accept-status-sub').textContent = Number(cfg.autoAcceptOrders) ? 'ligado — aceita sozinho' : 'desligado';
 }
 
 async function loadOrders(){
@@ -2298,6 +2307,18 @@ async function toggleStore(el){
   showToast(cfg.open?'✅ Aberto':'❌ Fechado', cfg.open?'Restaurante está aceitando pedidos.':'Restaurante não está aceitando pedidos.');
 }
 
+// v55: liga/desliga o aceite automático de pedidos — quando ligado, todo pedido novo já
+// nasce ACEITO no servidor (status "preparando" + número de ficha), sem precisar clicar em
+// "Aceitar Pedido". Combine com uma via em modo "🤖 Automática" (Configurações →
+// Impressoras) pra ter impressão de ponta a ponta sem ninguém tocar em nada.
+async function toggleAutoAccept(el){
+  cfg.autoAcceptOrders = el.checked ? 1 : 0;
+  document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado';
+  const res = await apiPost('/api/config',{ cfg:{autoAcceptOrders:cfg.autoAcceptOrders}, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  showToast(cfg.autoAcceptOrders?'🤖 Aceite automático ligado':'✋ Aceite automático desligado', cfg.autoAcceptOrders?'Pedidos novos já entram aceitos, sem precisar clicar em nada.':'Volta a precisar clicar em "Aceitar Pedido" pra cada um.');
+}
+
 // ═══════════════════════════════════════════
 // ORDERS — helpers
 // ═══════════════════════════════════════════
@@ -2425,8 +2446,13 @@ async function finishAdvanceStatus(id, body, wasAccepting){
   if(idx>-1) orders[idx]=res.data.order;
   updateNewBadge();
   refreshCurrentPage();
-  // Ao aceitar o pedido, já abre a impressão das vias automaticamente
-  if(wasAccepting) printOrder(id);
+  // Ao aceitar o pedido, já abre a impressão das vias automaticamente. v55: marcado como
+  // "auto" (isAuto=true) — pras vias em modo Automática, o Agente Local já imprimiu esse
+  // pedido sozinho assim que ele chegou (evento "new-order", direto, sem depender de
+  // aceite); sem essa marcação, aceitar o pedido mandava um SEGUNDO aviso de impressão pro
+  // agente e cada comanda saía duplicada. Vias em modo Navegador continuam abrindo a caixa
+  // de impressão normalmente aqui — essa marcação só afeta o aviso extra pro Agente Local.
+  if(wasAccepting) printOrder(id, null, null, true);
   // v34: ao marcar como "saiu para entrega", mostra o link de rastreio pra mandar pro motoboy
   if(body.status==='saiu' && res.data.order && res.data.order.mode==='delivery') showCourierLinkModal(id);
 }
@@ -3099,7 +3125,7 @@ function stationIcon(key){
 }
 const payLabelsPrint = { pix:'PIX', credito:'Cartão de Crédito', debito:'Cartão de Débito', dinheiro:'Dinheiro' };
 
-async function printOrder(id, ev, stations){
+async function printOrder(id, ev, stations, isAuto){
   const targetStations = (Array.isArray(stations) && stations.length) ? stations : getPrintStations();
   const btn = (ev||window.event)?.currentTarget;
   if(btn) btn.classList.add('printing');
@@ -3116,7 +3142,7 @@ async function printOrder(id, ev, stations){
   let printedAny=false, blockedAny=false, fellBackAny=false, delegatedAny=false, usedWin=false;
   try{
     for(const st of targetStations){
-      const res = await apiPost('/api/print', { orderId:id, station: st });
+      const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto });
       if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
       const d = res.data;
       if(d.skipped) continue; // essa via não tem itens desse pedido (ou está desativada) — pula sem incomodar

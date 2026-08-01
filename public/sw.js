@@ -14,7 +14,7 @@
 // tela inicial (start_url) certos pra ela — pra abrir direto na página certa quando
 // instalada, em vez de sempre cair em "/". Cache sobe de v5 pra v6 pra já entregar esses
 // arquivos novos pra quem já tinha o service worker instalado antes.
-const CACHE = 'shogatsu-v6';
+const CACHE = 'shogatsu-v7';
 const ASSETS = [
   '/manifest.json',
   '/manifest-painel.json',
