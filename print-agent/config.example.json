@@ -5,9 +5,27 @@
 
   "storeName": "Shogatsu Culinária Oriental",
 
-  "printerType": "epson",
-  "printerInterface": "tcp://192.168.1.50:9100",
-  "printerWidth": 42,
-
-  "stations": ["caixa", "cozinha"]
+  "printers": [
+    {
+      "label": "Caixa (USB)",
+      "type": "epson",
+      "interface": "printer:NOME_DA_IMPRESSORA_USB",
+      "width": 42,
+      "stations": ["caixa"]
+    },
+    {
+      "label": "Cozinha (Rede 1)",
+      "type": "epson",
+      "interface": "tcp://192.168.1.51:9100",
+      "width": 48,
+      "stations": ["cozinha"]
+    },
+    {
+      "label": "Sushibar (Rede 2)",
+      "type": "epson",
+      "interface": "tcp://192.168.1.52:9100",
+      "width": 48,
+      "stations": ["sushibar", "bar"]
+    }
+  ]
 }

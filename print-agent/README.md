@@ -36,21 +36,33 @@ Copie `config.example.json` pra `config.json` e preencha:
 - `serverUrl`: o endereço do seu site (ex: `https://shogatsu-pedidos.onrender.com`)
 - `username` / `password`: um login do painel (recomendo criar um usuário próprio só
   pra isso em Configurações → Usuários, em vez de usar o do dono)
-- `printerType`: `"epson"` ou `"star"` (a maioria das impressoras térmicas de cupom
-  usa protocolo Epson, mesmo sendo de outra marca — se não souber, tente `epson`
-  primeiro)
-- `printerInterface`: como o agente encontra a impressora:
-  - **Rede/Wi-Fi**: `"tcp://IP_DA_IMPRESSORA:9100"` (o IP você vê no menu de
-    configuração da própria impressora, ou no roteador)
-  - **USB (Windows)**: `"printer:NOME_DA_IMPRESSORA"` (o nome que aparece em
-    "Dispositivos e Impressoras")
-  - **USB (Linux)**: geralmente `"/dev/usb/lp0"`
-- `printerWidth`: `42` pra impressora de 58mm, `48` pra 80mm (a mais comum)
-- `stations`: lista das vias que ESSE agente/computador vai imprimir, ex:
-  `["caixa", "cozinha"]`. Se a loja tiver uma impressora só, pode listar todas
-  (`["caixa","cozinha","sushibar","bar"]`) que ele imprime uma via separada pra cada uma no
-  mesmo pedido. Se tiver mais de uma impressora, rode um agente por computador/impressora,
-  cada um com o `stations` só das vias daquela impressora.
+- `storeName`: nome que aparece no topo dos cupons impressos
+- `printers`: **lista de impressoras** — desde a v55, um agente só (um computador só)
+  já dá conta de várias impressoras ao mesmo tempo (ex: uma USB no caixa + uma de rede na
+  cozinha + outra de rede no sushibar). Cada impressora da lista tem:
+  - `label`: um nome só pra você identificar nos logs (ex: `"Caixa (USB)"`)
+  - `type`: `"epson"` ou `"star"` (a maioria das impressoras térmicas de cupom usa
+    protocolo Epson, mesmo sendo de outra marca — se não souber, tente `epson` primeiro)
+  - `interface`: como o agente encontra ESSA impressora:
+    - **Rede/Wi-Fi**: `"tcp://IP_DA_IMPRESSORA:9100"` (o IP você vê no menu de
+      configuração da própria impressora, ou no roteador)
+    - **USB (Windows)**: `"printer:NOME_DA_IMPRESSORA"` (o nome que aparece em
+      "Dispositivos e Impressoras")
+    - **USB (Linux)**: geralmente `"/dev/usb/lp0"`
+  - `width`: `42` pra impressora de 58mm, `48` pra 80mm (a mais comum)
+  - `stations`: quais vias (estações) essa impressora especifica vai imprimir, ex:
+    `["cozinha"]` ou `["sushibar","bar"]`. **Cada via só deve aparecer numa impressora**
+    — se colocar a mesma via em duas, vai sair duplicado.
+
+**Exemplo com 3 impressoras (USB + Rede 1 + Rede 2), cada uma no seu local:** veja
+`config.example.json` — já vem pronto assim, só trocar IPs/nomes.
+
+**Se a loja tiver uma impressora só** pra tudo, deixe só uma no array com todas as vias:
+`"stations": ["caixa","cozinha","sushibar","bar"]`.
+
+**Se preferir manter um computador por impressora** (em vez de centralizar num só),
+também funciona — cada computador roda seu próprio agente, cada `config.json` com só a
+impressora e as vias daquele local.
 
 ⚠️ **Pra esse agente ter efeito, a via correspondente precisa estar configurada como
 "🤖 Automática" no painel (Configurações → Impressoras) — não como "Navegador".** É a

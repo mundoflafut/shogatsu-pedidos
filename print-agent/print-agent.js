@@ -42,23 +42,64 @@ function log(line) {
   try { fs.appendFileSync(LOG_PATH, msg + '\n'); } catch (e) { /* nunca deixa o log derrubar o agente */ }
 }
 
-// ─── Impressora ───
-function buildPrinter() {
+// ─── Impressoras (v55: agora suporta MAIS DE UMA impressora no mesmo agente/computador —
+// ex: uma na USB do balcão + uma de rede na cozinha + outra de rede no sushibar. Cada
+// impressora cuida das vias (estações) que você atribuir a ela; o agente descobre sozinho
+// pra qual impressora mandar cada via na hora de imprimir. Isso substitui a necessidade de
+// rodar um agente por computador quando a loja tem mais de uma impressora — agora dá pra
+// centralizar as três (USB + rede 1 + rede 2) num único agente, num único computador, desde
+// que ele enxergue a rede das impressoras de rede e tenha a USB ligada nele.
+//
+// Formato novo do config.json:
+//   "printers": [
+//     { "label": "Caixa (USB)",      "type": "epson", "interface": "printer:NOME", "width": 42, "stations": ["caixa"] },
+//     { "label": "Cozinha (Rede 1)", "type": "epson", "interface": "tcp://192.168.1.51:9100", "width": 48, "stations": ["cozinha"] },
+//     { "label": "Sushibar (Rede 2)","type": "epson", "interface": "tcp://192.168.1.52:9100", "width": 48, "stations": ["sushibar","bar"] }
+//   ]
+//
+// Continua funcionando com o config.json antigo (uma impressora só, campos soltos
+// printerType/printerInterface/printerWidth/stations) — é convertido sozinho pro formato
+// novo aqui embaixo, sem quebrar quem já tinha configurado do jeito anterior.
+function loadPrinters() {
+  if (Array.isArray(cfg.printers) && cfg.printers.length) {
+    return cfg.printers.map(p => ({
+      label: p.label || p.stations?.join(', ') || 'Impressora',
+      type: p.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
+      interface: p.interface,
+      width: p.width || 42,
+      stations: Array.isArray(p.stations) && p.stations.length ? p.stations : ['caixa']
+    }));
+  }
+  // formato antigo (uma impressora só) — mantém compatibilidade
+  return [{
+    label: 'Impressora principal',
+    type: cfg.printerType === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
+    interface: cfg.printerInterface,
+    width: cfg.printerWidth || 42,
+    stations: Array.isArray(cfg.stations) && cfg.stations.length ? cfg.stations : ['caixa']
+  }];
+}
+const PRINTERS = loadPrinters();
+
+function printerForStation(station) {
+  return PRINTERS.find(p => p.stations.includes(station)) || null;
+}
+
+function buildPrinter(printerCfg) {
   if (TEST_MODE) return null; // modo teste não precisa de impressora de verdade
   return new ThermalPrinter({
-    type: cfg.printerType === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
-    interface: cfg.printerInterface,          // ex: "tcp://192.168.1.50:9100" ou "printer:USB001" ou "/dev/usb/lp0"
-    width: cfg.printerWidth || 42,
+    type: printerCfg.type,
+    interface: printerCfg.interface,          // ex: "tcp://192.168.1.50:9100" ou "printer:USB001" ou "/dev/usb/lp0"
+    width: printerCfg.width,
     removeSpecialCharacters: false,
     options: { timeout: 5000 }
   });
 }
 
 const money = (n) => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
-// v46: quais vias esse agente é responsável por imprimir (um computador pode rodar mais de um
-// agente, um por impressora física — ex: um pro Caixa, outro pra Cozinha). Se não configurar
-// nada, assume só "caixa" (comportamento antigo, continua funcionando sem quebrar quem já usava).
-const MY_STATIONS = Array.isArray(cfg.stations) && cfg.stations.length ? cfg.stations : ['caixa'];
+// v55: quais vias esse agente é responsável por imprimir — agora é a UNIÃO das vias de
+// TODAS as impressoras configuradas acima (antes era uma lista solta em cfg.stations).
+const MY_STATIONS = [...new Set(PRINTERS.flatMap(p => p.stations))];
 const STATION_LABELS = { caixa: 'Caixa', cozinha: 'Cozinha', sushibar: 'Sushibar', bar: 'Bar' };
 
 // v46: layout igual ao das outras vias do sistema (painel.html/server.js) — cabeçalho
@@ -122,26 +163,35 @@ function printStationTicket(printer, order, station, storeName) {
 // v54: extraído de dentro de printOrder() pra poder imprimir UMA via específica sob
 // demanda (reimpressão manual pedida do painel, de celular ou PC — ver evento
 // "print-order" mais abaixo), sem precisar reimprimir todas as vias desse agente de novo.
+// v55: agora escolhe AUTOMATICAMENTE qual impressora física usar (USB, Rede 1, Rede 2...)
+// de acordo com qual delas cuida dessa via — cada comanda sai na impressora certa, no
+// local certo, mesmo com várias impressoras diferentes no mesmo agente.
 async function printSingleStation(order, station) {
+  const printerCfg = printerForStation(station);
+  if (!printerCfg) { log(`⚠️  Nenhuma impressora configurada pra via "${station}" — nada impresso (confira "printers" no config.json).`); return false; }
   if (TEST_MODE) {
-    log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} na via: ${station}`);
+    log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} na via: ${station} (impressora: ${printerCfg.label})`);
     return true;
   }
-  const printer = buildPrinter();
+  const printer = buildPrinter(printerCfg);
   try {
     const connected = await printer.isPrinterConnected();
-    if (!connected) throw new Error('Impressora não respondeu (verifique se está ligada e na mesma rede/USB).');
+    if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
     const hadItems = printStationTicket(printer, order, station, cfg.storeName);
     if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return false; }
     await printer.execute();
-    log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso.`);
+    log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso na impressora "${printerCfg.label}".`);
     return true;
   } catch (err) {
-    log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}"): ${err.message}`);
+    log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}", impressora "${printerCfg.label}"): ${err.message}`);
     return false;
   }
 }
 
+// v55: imprime TODAS as vias desse pedido de uma vez, cada uma na sua impressora — é o que
+// dá o efeito de "um clique só (ou automático) manda tudo pro lugar certo": a via do caixa
+// sai na impressora do caixa, a da cozinha na da cozinha, etc., mesmo sendo impressoras
+// físicas diferentes (USB + rede 1 + rede 2), tudo dentro da mesma chamada.
 async function printOrder(order) {
   if (TEST_MODE) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
@@ -169,23 +219,27 @@ async function printOnDemand(order, station) {
 // v46: teste de impressão pedido pelo painel ("🖨 Testar" numa via com método Automática) —
 // imprime só se essa via for uma das que ESTE agente cuida (evita confusão quando tem mais de
 // um agente rodando, cada um numa impressora diferente).
+// v55: também escolhe a impressora certa (USB/Rede 1/Rede 2) pra essa via automaticamente.
 async function printTestTicket(payload) {
   if (!MY_STATIONS.includes(payload.station)) return;
-  if (TEST_MODE) { log(`🧪 [TEST_MODE] Teste de impressão pra via "${payload.station}":\n   ` + String(payload.text || '').split('\n').join('\n   ')); return; }
-  const printer = buildPrinter();
+  const printerCfg = printerForStation(payload.station);
+  if (!printerCfg) { log(`⚠️  Nenhuma impressora configurada pra via "${payload.station}" — teste não enviado.`); return; }
+  if (TEST_MODE) { log(`🧪 [TEST_MODE] Teste de impressão pra via "${payload.station}" (impressora: ${printerCfg.label}):\n   ` + String(payload.text || '').split('\n').join('\n   ')); return; }
+  const printer = buildPrinter(printerCfg);
   try {
     const connected = await printer.isPrinterConnected();
-    if (!connected) throw new Error('Impressora não respondeu.');
+    if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu.`);
     printer.alignCenter(); printer.bold(true);
     printer.println('TESTE DE IMPRESSAO');
     printer.bold(false);
     printer.println('Via: ' + (payload.label || payload.station));
+    printer.println('Impressora: ' + printerCfg.label);
     printer.println(new Date().toLocaleString('pt-BR'));
     printer.newLine(); printer.cut();
     await printer.execute();
-    log(`✅ Teste de impressão da via "${payload.station}" concluído.`);
+    log(`✅ Teste de impressão da via "${payload.station}" concluído na impressora "${printerCfg.label}".`);
   } catch (err) {
-    log(`❌ Falha no teste de impressão (via "${payload.station}"): ${err.message}`);
+    log(`❌ Falha no teste de impressão (via "${payload.station}", impressora "${printerCfg.label}"): ${err.message}`);
   }
 }
 
@@ -289,6 +343,8 @@ function scheduleReconnect() {
 
 async function start() {
   log(`🍣 Agente de impressão iniciando${TEST_MODE ? ' (TEST_MODE — não vai imprimir de verdade)' : ''}...`);
+  log(`🖨️  ${PRINTERS.length} impressora(s) configurada(s):`);
+  PRINTERS.forEach(p => log(`   • ${p.label} → vias: ${p.stations.join(', ')} (${p.interface})`));
   try {
     await login();
     connectStream();
