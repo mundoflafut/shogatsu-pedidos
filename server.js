@@ -93,6 +93,7 @@ const DEFAULT_CFG = {
   ],
   logoUrl: '',
   print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
+  autoAcceptOrders: 0,          // v55: 1 = pedido novo já nasce ACEITO sozinho (pula o clique em "Aceitar Pedido"), com número de ficha já atribuído — pensado pra combinar com impressão automática (vias já saem com o número certo, sem ninguém precisar tocar em nada)
   sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
   customerAlertSound: 'classico', // som tocado no app do cliente a cada aviso (classico|suave|dupla|sino|oriental)
   labels: {                     // textos dos botões/status do painel, customizáveis pelo admin
@@ -1712,7 +1713,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/print' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { orderId, station } = await readBody(req);
+      const { orderId, station, auto } = await readBody(req);
       const { cfg } = readConfig();
       // v49 — BUG CORRIGIDO ("impressora não imprime" em vias novas): essa checagem só aceitava
       // as 4 vias originais — qualquer via nova (delivery, expedição, ou uma via customizada
@@ -1777,7 +1778,18 @@ function estimateDeliveryWindow(order, cfg) {
         // é assim que "celular manda, impressora do PC obedece" funciona de verdade: o
         // servidor é o intermediário, o Agente Local (rodando no PC ligado na impressora)
         // escuta esse evento e imprime na hora, não importa de qual aparelho o pedido partiu.
-        broadcast('print-order', { order, station: st });
+        //
+        // v55 — BUG CORRIGIDO (impressão em dobro): quando um painel fica aberto com
+        // "imprimir automaticamente ao chegar pedido novo" ligado, ele mesmo chama essa rota
+        // assim que o pedido chega — mas o Agente Local JÁ recebeu e imprimiu esse pedido
+        // diretamente pelo evento "new-order" (é o caminho normal dele, não depende dessa
+        // rota). Sem essa checagem, o painel aberto mandava um SEGUNDO aviso ("print-order")
+        // pro mesmo agente, que imprimia tudo de novo — duplicando toda comanda. Agora, só
+        // quando é esse disparo automático (`auto:true`, mandado só nesse caso específico
+        // pelo painel.html), pula o aviso extra; um clique manual de "Imprimir"/"Reimprimir"
+        // continua avisando o agente normalmente, porque aí é uma reimpressão de verdade,
+        // pedida de propósito, e não tem nenhum outro caminho já cuidando dela.
+        if (!auto) broadcast('print-order', { order, station: st });
         return sendJSON(res, 200, { ok: true, printed: false, delegated: true, order, station: st, method: 'automatica' });
       }
 
@@ -2542,6 +2554,24 @@ function estimateDeliveryWindow(order, cfg) {
           if (geo) { order.customerLat = geo.lat; order.customerLng = geo.lng; }
         } catch (e) { /* mapa fica sem o marcador do cliente, sem afetar o pedido */ }
       }
+      // v55: aceite automático de pedidos — se a chave estiver ligada (Configurações →
+      // aceite automático, ou o interruptor na barra lateral do painel), o pedido já nasce
+      // ACEITO (status "preparando"), com número de ficha já atribuído — igual ao que
+      // acontece quando alguém clica em "Aceitar Pedido" manualmente. Sem isso, um pedido
+      // impresso automaticamente (via "🤖 Automática") saía sem número de ficha, porque o
+      // número só era atribuído no clique manual de aceite; combinando as duas coisas, a
+      // impressão automática já sai com o número certinho, sem ninguém precisar tocar em nada.
+      if (cfg.autoAcceptOrders) {
+        order.status = 'preparando';
+        let next = Number(cfg.nextTicketNumber) >= 1 && Number(cfg.nextTicketNumber) <= 200 ? Number(cfg.nextTicketNumber) : 1;
+        const activeNumbers = new Set(orders.filter(o => o.ticketNumber && !['entregue', 'cancelado'].includes(o.status)).map(o => o.ticketNumber));
+        for (let i = 0; i < 200 && activeNumbers.has(next); i++) next = next >= 200 ? 1 : next + 1;
+        order.ticketNumber = next;
+        const cfgData = readConfig();
+        cfgData.cfg.nextTicketNumber = next >= 200 ? 1 : next + 1;
+        writeJSON(CONFIG_FILE, cfgData);
+      }
+
       orders.unshift(order);
       writeJSON(ORDERS_FILE, orders);
 
