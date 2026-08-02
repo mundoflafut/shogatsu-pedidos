@@ -269,7 +269,8 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .wa-close:hover{color:#D32F2F;border-color:#D32F2F;}
 .wa-messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 12px;display:flex;flex-direction:column;gap:3px;background:#0F1115;background-image:
   radial-gradient(circle at 20% 10%, rgba(255,255,255,.015) 0, transparent 40%),
-  radial-gradient(circle at 80% 90%, rgba(255,255,255,.015) 0, transparent 40%);}
+  radial-gradient(circle at 80% 90%, rgba(255,255,255,.015) 0, transparent 40%);
+  background-size:cover;background-position:center;background-repeat:no-repeat;transition:background-image .25s ease;}
 .wa-date-sep{align-self:center;background:#1F2937;color:#BDBDBD;font-size:11px;padding:4px 12px;border-radius:12px;margin:10px 0;letter-spacing:.3px;}
 .wa-row{display:flex;margin:2px 4px;max-width:100%;animation:waMsgIn .22s ease;}
 @keyframes waMsgIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
@@ -2314,6 +2315,7 @@ async function loadConfig() {
   }
   applyTheme();
   initSplashScreen();
+  applyChatBackground();
   restoreActiveOrderTracking();
   renderSlider();
   renderMenu();
@@ -2413,6 +2415,27 @@ function closeSplash(){
   el.classList.add('closing');
   document.body.style.overflow = '';
   setTimeout(()=>{ el.style.display='none'; el.classList.remove('closing'); }, 550);
+}
+
+// ═══════════════════════════════════════════
+// v67: FUNDO DO CHAT (Chat Express) — igual ao "papel de parede" do WhatsApp, aplicado direto
+// no container das mensagens (#ia-mensagens). Usa background-image com dois valores empilhados
+// (gradiente escuro + a foto) pra manter as bolhas do chat legíveis em cima de qualquer imagem,
+// sem precisar de nenhum elemento extra no HTML. background-size:cover garante que a foto nunca
+// deforma e sempre preenche a área toda, em qualquer tamanho de tela (celular/tablet/PC).
+function applyChatBackground(){
+  const el = document.getElementById('ia-mensagens');
+  if(!el) return;
+  const cb = cfg.chatBackground;
+  if(cb && cb.enabled && cb.url){
+    const overlay = (typeof cb.overlay === 'number') ? cb.overlay : 0.45;
+    const safeUrl = String(cb.url).replace(/'/g,"%27").replace(/"/g,'&quot;');
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,${overlay}), rgba(0,0,0,${overlay})), url('${safeUrl}')`;
+    el.classList.add('has-chat-bg');
+  } else {
+    el.style.backgroundImage = '';
+    el.classList.remove('has-chat-bg');
+  }
 }
 
 // ═══════════════════════════════════════════

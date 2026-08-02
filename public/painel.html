@@ -1475,6 +1475,53 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
       </div>
 
+      <div class="settings-section-title">🖼️ Fundo do Chat (Chat Express)</div>
+      <div class="settings-grid">
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📷 Personalizar fundo do chat</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Escolha uma imagem para usar como fundo nas conversas do Chat Express — igual ao papel
+            de parede do WhatsApp. A foto aparece pro cliente no celular, tablet e computador, com
+            um escurecido automático por cima pra manter as mensagens sempre legíveis.
+          </div>
+
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
+            <input type="checkbox" id="chatbg-enabled" onchange="toggleChatBgEnabled(this.checked)"/> Ativar fundo personalizado
+          </label>
+
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;">
+            <div style="flex:0 0 auto;">
+              <label style="display:block;margin-bottom:6px;">Pré-visualização</label>
+              <div id="chatbg-preview" style="width:160px;height:230px;border-radius:14px;border:1px solid var(--border);background:#0F1115;background-size:cover;background-position:center;display:flex;align-items:flex-end;padding:8px;overflow:hidden;">
+                <div style="background:#D32F2F;color:#fff;font-size:10px;padding:5px 8px;border-radius:10px;border-bottom-right-radius:3px;">Prévia da mensagem</div>
+              </div>
+              <div id="chatbg-info" style="font-size:10px;color:var(--muted);margin-top:6px;max-width:160px;"></div>
+            </div>
+
+            <div style="flex:1;min-width:220px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="chatbg-file-input" style="display:none;" onchange="uploadChatBgPhoto(this)"/>
+              <button type="button" class="btn primary sm" onclick="document.getElementById('chatbg-file-input').click()">📤 Enviar imagem</button>
+              <button type="button" class="btn secondary sm" onclick="removeChatBg()">🗑 Remover fundo</button>
+              <div style="font-size:10px;color:var(--muted);margin-top:6px;">PNG, JPG ou WEBP — máximo 5MB.</div>
+
+              <div class="field" style="margin-top:14px;max-width:280px;">
+                <label>Escurecido sobre a foto (legibilidade)</label>
+                <input type="range" id="chatbg-overlay" min="0" max="0.8" step="0.05" value="0.45" oninput="document.getElementById('chatbg-overlay-val').textContent = Math.round(this.value*100)+'%'; renderChatBgPreview();" onchange="saveChatBgOverlay(this.value)"/>
+                <div style="font-size:10px;color:var(--muted);">Atual: <span id="chatbg-overlay-val">45%</span></div>
+              </div>
+
+              <div id="chatbg-status" style="font-size:12px;margin-top:10px;"></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Galeria de fundos prontos</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Clique numa foto para usar direto — ou envie a sua própria acima.</div>
+            <div id="chatbg-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-section-title">🖨 Impressão</div>
       <div class="settings-grid">
         <div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
@@ -3209,6 +3256,126 @@ async function saveSplashConfig(){
   if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
   cfg.splash = splash;
   statusEl.innerHTML = '<span style="color:var(--green);">✅ Salvo! Já vale na próxima vez que o cardápio for aberto.</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+
+// ═══════════════════════════════════════════
+// v67: FUNDO DO CHAT (Chat Express) — Configurações → Aparência → Fundo do Chat.
+// Diferente da Splash Screen (várias fotos em sequência), aqui é só UMA imagem de cada vez,
+// salva direto via /api/chat/background (endpoints próprios, fora do "Salvar Tudo" genérico) —
+// então cada ação (upload, escolher da galeria, ativar/desativar, ajustar escurecido, remover)
+// já salva sozinha na hora, sem precisar de botão "Salvar" separado.
+// ═══════════════════════════════════════════
+const CHATBG_GALLERY = [
+  { name: 'Sushi Premium',        url: '/images/chat-backgrounds/sushi-premium.svg' },
+  { name: 'Restaurante Japonês',  url: '/images/chat-backgrounds/restaurante-japones.svg' },
+  { name: 'Bambu',                url: '/images/chat-backgrounds/bambu.svg' },
+  { name: 'Madeira Escura',       url: '/images/chat-backgrounds/madeira-escura.svg' },
+  { name: 'Dragão Japonês',       url: '/images/chat-backgrounds/dragao-japones.svg' },
+  { name: 'Monte Fuji',           url: '/images/chat-backgrounds/monte-fuji.svg' },
+  { name: 'Flores de Cerejeira',  url: '/images/chat-backgrounds/flores-cerejeira.svg' },
+  { name: 'Onda Japonesa',        url: '/images/chat-backgrounds/onda-japonesa.svg' },
+  { name: 'Preto Texturizado',    url: '/images/chat-backgrounds/preto-texturizado.svg' },
+  { name: 'Minimalista Escuro',   url: '/images/chat-backgrounds/minimalista-escuro.svg' }
+];
+function renderChatBgEditor(){
+  if(!document.getElementById('chatbg-enabled')) return;
+  const cb = cfg.chatBackground || { enabled:false, url:'', name:'', size:0, width:0, height:0, overlay:0.45 };
+  document.getElementById('chatbg-enabled').checked = !!cb.enabled;
+  document.getElementById('chatbg-overlay').value = (typeof cb.overlay==='number') ? cb.overlay : 0.45;
+  document.getElementById('chatbg-overlay-val').textContent = Math.round(((typeof cb.overlay==='number')?cb.overlay:0.45)*100)+'%';
+  renderChatBgPreview();
+  renderChatBgInfo();
+  renderChatBgGallery();
+}
+function renderChatBgPreview(){
+  const cb = cfg.chatBackground || {};
+  const el = document.getElementById('chatbg-preview');
+  const overlay = Number(document.getElementById('chatbg-overlay').value ?? cb.overlay ?? 0.45);
+  if(cb.url){
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,${overlay}), rgba(0,0,0,${overlay})), url('${cb.url}')`;
+  } else {
+    el.style.backgroundImage = '';
+  }
+}
+function renderChatBgInfo(){
+  const cb = cfg.chatBackground || {};
+  const el = document.getElementById('chatbg-info');
+  if(!cb.url){ el.textContent = 'Nenhuma imagem definida ainda.'; return; }
+  const kb = cb.size ? Math.round(cb.size/1024)+' KB' : '';
+  const dim = (cb.width && cb.height) ? `${cb.width}×${cb.height}px` : '';
+  el.textContent = [cb.name, dim, kb].filter(Boolean).join(' · ');
+}
+function renderChatBgGallery(){
+  const cb = cfg.chatBackground || {};
+  const el = document.getElementById('chatbg-gallery');
+  el.innerHTML = CHATBG_GALLERY.map(g => {
+    const active = cb.url === g.url;
+    return `<button type="button" onclick="selectChatBgPreset('${g.url}','${g.name.replace(/'/g,"\\'")}')"
+      style="padding:0;border-radius:10px;overflow:hidden;border:2px solid ${active?'#D32F2F':'var(--border)'};height:74px;background-image:url('${g.url}');background-size:cover;background-position:center;position:relative;cursor:pointer;">
+      <span style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:9px;padding:3px 4px;text-align:center;line-height:1.2;">${g.name}</span>
+    </button>`;
+  }).join('');
+}
+async function uploadChatBgPhoto(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('chatbg-status');
+  if(file.size > 5*1024*1024){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Imagem muito grande (máx. 5MB).</span>'; input.value=''; return; }
+  statusEl.textContent = 'Enviando...';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const res = await apiPost('/api/chat/background', { dataUrl: reader.result });
+    input.value = '';
+    if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao enviar.')+'</span>'; return; }
+    cfg.chatBackground = res.data.chatBackground;
+    renderChatBgEditor();
+    statusEl.innerHTML = '<span style="color:var(--green);">✅ Fundo atualizado!</span>';
+    setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+  };
+  reader.readAsDataURL(file);
+}
+async function selectChatBgPreset(url, name){
+  const statusEl = document.getElementById('chatbg-status');
+  statusEl.textContent = 'Aplicando...';
+  const res = await apiPost('/api/chat/background', { presetUrl: url, presetName: name });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao aplicar.')+'</span>'; return; }
+  cfg.chatBackground = res.data.chatBackground;
+  renderChatBgEditor();
+  statusEl.innerHTML = '<span style="color:var(--green);">✅ Fundo "'+name+'" aplicado!</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+async function toggleChatBgEnabled(checked){
+  const statusEl = document.getElementById('chatbg-status');
+  const cb = cfg.chatBackground || {};
+  if(checked && !cb.url){
+    document.getElementById('chatbg-enabled').checked = false;
+    statusEl.innerHTML = '<span style="color:var(--red-lt);">Envie uma imagem ou escolha uma da galeria antes de ativar.</span>';
+    return;
+  }
+  const res = await apiPost('/api/chat/background', { enabled: checked });
+  if(!res.ok){ document.getElementById('chatbg-enabled').checked = !checked; statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  cfg.chatBackground = res.data.chatBackground;
+  statusEl.innerHTML = checked ? '<span style="color:var(--green);">✅ Fundo ativado.</span>' : 'Fundo desativado — voltou pro padrão do sistema.';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+let chatBgOverlaySaveTimer = null;
+function saveChatBgOverlay(value){
+  clearTimeout(chatBgOverlaySaveTimer);
+  chatBgOverlaySaveTimer = setTimeout(async () => {
+    const res = await apiPost('/api/chat/background', { overlay: Number(value) });
+    if(res.ok) cfg.chatBackground = res.data.chatBackground;
+  }, 400); // pequeno debounce pra não disparar uma chamada a cada pixel arrastado no slider
+}
+async function removeChatBg(){
+  if(!confirm('Remover a imagem de fundo do chat e voltar pro padrão do sistema?')) return;
+  const statusEl = document.getElementById('chatbg-status');
+  const r = await fetch('/api/chat/background', { method:'DELETE', headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(data.error||'Erro ao remover.')+'</span>'; return; }
+  cfg.chatBackground = data.chatBackground;
+  renderChatBgEditor();
+  statusEl.innerHTML = 'Fundo removido — voltou pro padrão do sistema.';
   setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
 }
 
@@ -5335,6 +5502,7 @@ function loadSettings(){
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
   renderWeekScheduleEditor();
   renderSplashEditor();
+  renderChatBgEditor();
   // v33: aparência do cardápio (foto do prato e fonte)
   const dpsEl=document.getElementById('cfg-dishphotosize');
   if(dpsEl){ dpsEl.value = cfg.dishPhotoSize || 80; document.getElementById('cfg-dishphoto-val').textContent = (cfg.dishPhotoSize||80)+'px'; }
