@@ -286,7 +286,7 @@ table{max-width:100%;}
 .menu-items-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
 .menu-items-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .menu-items-body{flex:1;overflow-y:auto;padding:14px;}
-.menu-item-row{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;display:grid;grid-template-columns:20px 46px 1fr auto auto auto auto auto;gap:10px;align-items:center;}
+.menu-item-row{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;display:grid;grid-template-columns:22px 46px 1fr auto auto auto auto auto;gap:10px;align-items:center;}
 .o-item-results{position:relative;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:14px;margin-top:4px;background:var(--bg);}
 .o-item-results:empty{display:none;border:none;}
 .o-result-row{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);}
@@ -318,11 +318,19 @@ table{max-width:100%;}
 .cat-reorder button{border:none;background:var(--border2);color:var(--muted);font-size:10px;width:16px;height:16px;line-height:16px;padding:0;border-radius:3px;cursor:pointer;}
 .cat-reorder button:hover:not(:disabled){color:var(--white);background:var(--gold);}
 .cat-reorder button:disabled{opacity:.25;cursor:default;}
+/* v59: cardápio estilo iFood — arrastar pra reordenar */
+.cat-drag-handle,.mi-drag-handle{cursor:grab;color:var(--muted);opacity:.7;font-size:13px;user-select:none;}
+.cat-drag-handle:hover,.mi-drag-handle:hover{opacity:1;color:var(--gold);}
+.menu-cat-item[draggable="true"]:active,.menu-item-row[draggable="true"]:active{cursor:grabbing;}
+.menu-cat-item.dragging,.menu-item-row.dragging{opacity:.35;}
+.menu-cat-item[draggable="true"],.menu-item-row[draggable="true"]{transition:opacity .15s;}
 .mi-thumb{width:46px;height:46px;border-radius:14px;object-fit:cover;background:var(--card);border:1px solid var(--border);}
 .mi-thumb.empty{display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted);}
 .mi-name{font-size:15px;font-weight:500;}
 .mi-desc{font-size:12px;color:var(--muted);margin-top:2px;}
-.mi-price{font-size:16px;font-weight:700;color:var(--green-lt);white-space:nowrap;}
+.mi-price{font-size:16px;font-weight:700;color:var(--green-lt);white-space:nowrap;cursor:pointer;border-radius:4px;padding:2px 4px;}
+.mi-price:hover{background:rgba(80,200,120,.12);outline:1px dashed var(--green-lt);}
+.mi-price-input{width:66px;background:var(--bg);border:1px solid var(--gold);border-radius:4px;color:var(--white);font-size:14px;font-weight:700;padding:2px 4px;}
 .mi-badge{font-size:10px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--border2);border-radius:20px;padding:2px 7px;color:var(--muted);}
 .mi-btn{border:none;border-radius:5px;padding:6px 12px;font-size:13px;transition:all .15s;}
 .mi-btn.edit{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue);font-size:15px;font-weight:600;padding:9px 16px;}
@@ -404,10 +412,34 @@ table{max-width:100%;}
 
 /* ── SETTINGS ── */
 .settings-section-title{font-size:15px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin:28px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+/* v59: abas de Configurações — menos abas, cada uma com moldura própria */
+.cfgtabs-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+.cfgtab-btn{background:var(--panel);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;transition:all .15s;}
+.cfgtab-btn:hover{border-color:var(--gold);color:var(--gold);}
+.cfgtab-btn.active{background:var(--gold-bg,rgba(201,168,76,.12));border-color:var(--gold);color:var(--gold);}
+.cfgtab-panel{display:none;border:1px solid var(--border);border-radius:14px;padding:18px 18px 6px;background:rgba(255,255,255,.012);}
+.cfgtab-panel.active{display:block;}
+.cfgtab-panel .settings-section-title:first-child{margin-top:0;}
 .settings-section-title:first-child{margin-top:0;}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 .save-all-bar{position:sticky;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);padding:14px 20px;margin:24px -20px -20px;display:flex;align-items:center;justify-content:flex-end;gap:14px;box-shadow:0 -4px 20px rgba(0,0,0,.25);}
 .settings-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
+/* v59: Conversas com Clientes — caixa de mensagens maior, estilo WhatsApp */
+.atd-messages{max-height:320px;min-height:140px;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.015) 0 2px,transparent 2px 40px);}
+.atd-bubble{max-width:78%;padding:9px 13px;border-radius:16px;font-size:13.5px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+.atd-bubble.in{align-self:flex-start;background:var(--panel2,rgba(255,255,255,.06));border-bottom-left-radius:4px;}
+.atd-bubble.out{align-self:flex-end;background:var(--gold);color:#1a1a1a;border-bottom-right-radius:4px;}
+.atd-compose-bar{display:flex;align-items:flex-end;gap:8px;padding:10px;border-top:1px solid var(--border);background:var(--panel);}
+.atd-compose-input{flex:1;resize:none;min-height:40px;max-height:120px;border-radius:20px;border:1px solid var(--border);background:var(--bg,#12141a);color:var(--white);padding:10px 16px;font-size:13.5px;font-family:inherit;outline:none;line-height:1.4;}
+.atd-compose-input:focus{border-color:var(--gold);}
+.atd-mic-btn,.atd-send-btn{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:none;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.atd-mic-btn{background:var(--panel2,rgba(255,255,255,.06));color:var(--muted);}
+.atd-mic-btn:hover{color:var(--gold);}
+.atd-mic-btn.recording{background:var(--red);color:#fff;animation:atdPulse 1.2s infinite;}
+@keyframes atdPulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.5);}50%{box-shadow:0 0 0 8px rgba(192,57,43,0);}}
+.atd-send-btn{background:var(--gold);color:#1a1a1a;}
+.atd-send-btn:hover{background:var(--gold-lt,#e0c169);}
+.atd-mic-timer{font-size:11px;color:var(--red-lt);font-variant-numeric:tabular-nums;align-self:center;}
 .card-ctrl-btn{background:none;border:none;cursor:pointer;opacity:.55;font-size:13px;padding:2px 4px;border-radius:4px;transition:opacity .15s,background .15s;}
 .card-ctrl-btn:hover{opacity:1;background:rgba(255,255,255,.08);}
 .card-minimized{padding-bottom:20px;}
@@ -973,15 +1005,28 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="page" id="page-configuracoes">
 
       <div style="position:sticky;top:0;z-index:20;background:var(--bg,#12141a);padding:10px 0 12px;margin-bottom:6px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">
-        <button type="button" class="btn secondary sm" onclick="document.getElementById('settings-printer-card').scrollIntoView({behavior:'smooth',block:'start'})" title="Ir direto pra configuração de impressoras">
+        <button type="button" class="btn secondary sm" onclick="goToPrinterSettings()" title="Ir direto pra configuração de impressoras">
           🖨 Escolher Impressora
         </button>
       </div>
 
+      <!-- v59: abas reduzidas de 6 pra 4 — funções parecidas (Splash Screen + Impressão + Painel/Fluxo,
+           que juntas eram 3 abas cuidando de "como o sistema se comporta") ficam juntas numa aba só,
+           "Aparência & Operação". Cada aba tem moldura própria pra ficar claro onde uma termina e a
+           outra começa. -->
+      <div class="cfgtabs-bar">
+        <button type="button" class="cfgtab-btn active" id="cfgtabbtn-restaurante" onclick="switchConfigTab('restaurante')">🏪 Restaurante</button>
+        <button type="button" class="cfgtab-btn" id="cfgtabbtn-entrega" onclick="switchConfigTab('entrega')">🛵 Entrega, Marketing &amp; Atendimento</button>
+        <button type="button" class="cfgtab-btn" id="cfgtabbtn-operacao" onclick="switchConfigTab('operacao')">🎨 Aparência &amp; Operação</button>
+        <button type="button" class="cfgtab-btn" id="cfgtabbtn-perigo" data-min-role="master" onclick="switchConfigTab('perigo')">⚠️ Zona de Perigo</button>
+      </div>
+
+      <div id="cfgtab-restaurante" class="cfgtab-panel active">
       <div class="settings-section-title">🏪 Restaurante</div>
       <div class="settings-grid">
         <div class="settings-card">
           <div class="settings-card-title">🎨 Aparência do Cardápio</div>
+
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ajusta como o cardápio aparece pro cliente — dá pra testar e ver o resultado ao vivo abrindo o site em outra aba.</div>
           <div class="field">
             <label style="display:flex;align-items:center;justify-content:space-between;">
@@ -1094,7 +1139,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div style="font-size:10px;color:var(--muted);">Exemplo: 18:00 até 23:00 — abre 18h, fecha 23h, todo dia. Funciona mesmo passando da meia-noite (ex: 18:00 até 02:00).</div>
         </div>
       </div>
+      </div><!-- /cfgtab-restaurante -->
 
+      <div id="cfgtab-entrega" class="cfgtab-panel">
       <div class="settings-section-title">🛵 Entrega e Cupons</div>
       <div class="settings-grid">
         <div class="settings-card" style="grid-column:1/-1;">
@@ -1214,12 +1261,16 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
 
         <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">💬 Conversas com Clientes</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:2px;">
+            <div class="settings-card-title" style="margin-bottom:0;">💬 Conversas com Clientes</div>
+            <button class="btn danger sm" onclick="apagarTodasConversas()" title="Apaga o histórico de todas as conversas — não dá pra desfazer">🗑️ Apagar todas as conversas</button>
+          </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Quando um cliente toca em "Falar com atendente" no chat do cardápio, a conversa aparece
-            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos.
+            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos. Dá pra
+            responder por texto ou gravando um áudio, igual no WhatsApp.
           </div>
-          <div id="atendimento-lista" style="display:flex;flex-direction:column;gap:10px;max-height:480px;overflow-y:auto;"></div>
+          <div id="atendimento-lista" style="display:flex;flex-direction:column;gap:14px;max-height:640px;overflow-y:auto;"></div>
         </div>
         <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
@@ -1306,11 +1357,27 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
             <input type="checkbox" id="push-send-all"/> 📢 Enviar pra TODOS os inscritos (ignora a lista abaixo — inclui quem ativou sem ter conta)
           </label>
+          <div class="field"><label style="font-size:10px;">📋 Mensagem pré-determinada (opcional)</label>
+            <div style="display:flex;gap:8px;">
+              <select id="push-preset-select" style="flex:1;" onchange="aplicarPushPreset(this.value)">
+                <option value="">— Escolher um modelo salvo —</option>
+              </select>
+              <button type="button" class="btn secondary sm" onclick="salvarPushPreset()" title="Salva o título/mensagem/imagem atuais como um novo modelo">💾 Salvar modelo</button>
+              <button type="button" class="btn secondary sm" id="push-preset-del-btn" style="display:none;" onclick="excluirPushPreset()" title="Excluir o modelo selecionado">🗑️</button>
+            </div>
+          </div>
           <div class="field"><label style="font-size:10px;">Título da notificação</label><input id="push-title" placeholder="Ex: Shogatsu"/></div>
           <textarea id="push-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;margin-top:8px;"></textarea>
           <div class="field" style="margin-top:8px;">
-            <label style="font-size:10px;">Imagem grande (opcional — deixa a notificação parecida com apps de delivery tipo iFood; cole o link de uma foto do prato/promoção)</label>
-            <input id="push-image" placeholder="https://.../foto-promocao.jpg"/>
+            <label style="font-size:10px;">Imagem grande (opcional — deixa a notificação parecida com apps de delivery tipo iFood)</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="push-image" placeholder="https://.../foto-promocao.jpg" style="flex:1;"/>
+              <label class="btn secondary sm" style="cursor:pointer;white-space:nowrap;">📤 Enviar foto<input type="file" accept="image/*" style="display:none;" onchange="uploadPushImage(this)"/></label>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+              <img id="push-image-preview" src="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;display:none;background:var(--bg);"/>
+              <span id="push-image-status" style="font-size:11px;color:var(--muted);"></span>
+            </div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
             <label style="font-size:10px;color:var(--muted);">Clientes cadastrados (que também ativaram push)</label>
@@ -1324,7 +1391,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
       </div>
+      </div><!-- /cfgtab-entrega -->
 
+      <div id="cfgtab-operacao" class="cfgtab-panel">
       <div class="settings-section-title">🎬 Splash Screen (Tela de Abertura)</div>
       <div class="settings-grid">
         <div class="settings-card" style="grid-column:1/-1;">
@@ -1488,7 +1557,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
         </div>
       </div>
+      </div><!-- /cfgtab-operacao -->
 
+      <div id="cfgtab-perigo" class="cfgtab-panel" data-min-role="master">
       <div class="settings-section-title" data-min-role="master">⚠️ Zona de Perigo</div>
       <div class="settings-grid" data-min-role="master">
         <div class="settings-card" style="grid-column:1/-1;border-color:var(--red-dk);">
@@ -1501,6 +1572,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <button class="btn danger sm" onclick="openDeleteDataModal()">🗑️ Excluir Dados...</button>
         </div>
       </div>
+      </div><!-- /cfgtab-perigo -->
 
       <div class="save-all-bar">
         <span id="save-all-status" style="font-size:12px;color:var(--muted);"></span>
@@ -1512,6 +1584,20 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 
     <div class="page" id="page-motoboys">
       <div class="settings-grid">
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📍 Link de Rastreio pro Motoboy</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">
+            <!-- v59: movido de "QR Code & Links" pra cá — tudo que é de motoboy fica junto nesta
+                 página. O link antigo era genérico (sem o pedido) e não funcionava sozinho; o link
+                 de verdade é sempre gerado automaticamente por entrega, com o código daquele
+                 pedido específico. -->
+            Cada entrega tem o seu próprio link de rastreio — ele é gerado <b>automaticamente</b>
+            assim que você marca um pedido de delivery como "🛵 Saiu para Entrega" em Gerenciar
+            Pedidos. Nesse momento aparece uma janela com o link pronto pra copiar e mandar pro
+            WhatsApp do motoboy daquela entrega — não precisa de um QR Code fixo aqui, porque o
+            link muda a cada pedido.
+          </div>
+        </div>
         <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">🛵 Motoboys Cadastrados</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
@@ -2073,6 +2159,11 @@ async function apiPatch(path, body){
   if(r.status===401){ doLogout(); throw new Error('unauthorized'); }
   return { ok:r.ok, status:r.status, data: await r.json() };
 }
+async function apiDelete(path, body){
+  const r = await fetch(path, { method:'DELETE', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body||{}) });
+  if(r.status===401){ doLogout(); throw new Error('unauthorized'); }
+  return { ok:r.ok, status:r.status, data: await r.json() };
+}
 
 async function doLogin(){
   const user = document.getElementById('login-user').value.trim();
@@ -2455,6 +2546,7 @@ function goPage(id, silent){
   if(id==='configuracoes' && !silent)loadSettings();
   if(id==='usuarios')loadUsersPage();
   if(id==='motoboys')loadCouriersPage();
+  if(id==='configuracoes'){ let t='restaurante'; try{ t=localStorage.getItem('shog_cfgtab')||'restaurante'; }catch(e){} switchConfigTab(CONFIG_TABS.includes(t)?t:'restaurante'); }
   if(id==='avaliacoes')loadReviewsPage();
 }
 
@@ -2682,7 +2774,6 @@ const QR_LINKS = [
   { key:'popular',  icon:'📖', label:'Cardápio Rodízio Popular', path:'/cardapio-rodizio-popular.html', desc:'Cardápio completo do rodízio (preços por grupo de dias, destaques do dia) — pode ir num QR separado se quiser um cardápio mais completo na mesa.' },
   { key:'divulgacao', icon:'📣', label:'Divulgação',            path:'/divulgacao-rodizio.html',        desc:'Página-vitrine do rodízio, pronta pra colar na bio do Instagram/Facebook ou mandar direto pro cliente.' },
   { key:'avaliar',  icon:'⭐', label:'Avaliação Rodízio',        path:'/avaliar-rodizio.html',           desc:'Link pra pedir avaliação de quem veio no rodízio presencial — pode imprimir o QR e deixar na mesa ou na conta.' },
-  { key:'entregador', icon:'🛵', label:'Motoboys',   path:'/entregador.html',                desc:'Acesso rápido do motoboy pra ver e atualizar as entregas — manda o link direto pro celular dele.' },
 ];
 let qrlActiveTab = 'pedir';
 function renderQrLinksPage(){
@@ -3482,6 +3573,11 @@ function buildPlainTicketLines(order, station, deliveryWindow){
     L.push(HR);
     L.push((order.ticketNumber?`Pedido Nº ${order.ticketNumber}`:`Pedido #${order.id}`));
     L.push(order.mode==='delivery'?'DELIVERY':'RETIRADA');
+    // v59: mesma previsão real de entrega que já aparecia no Caixa, agora também na via de
+    // delivery/expedição — é a que costuma ir junto com o motoboy.
+    if((station==='delivery'||station==='expedicao') && order.mode==='delivery'){
+      L.push(`Previsao cliente: ${deliveryWindow||'—'}`);
+    }
     L.push(HR); L.push({text:'ITENS DA '+stationLabel(station).toUpperCase(), bold:true}); L.push(HR);
     items.forEach(i=>L.push('* '+i.qty+'x '+i.name));
     L.push(HR);
@@ -3537,6 +3633,7 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-row" style="margin-top:8px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${esc(order.troco)})`:''}</div>
   ` : `
     <div class="t-block-title">ITENS DA ${stationLabel(station).toUpperCase()}</div>
+    ${((station==='delivery'||station==='expedicao') && order.mode==='delivery')?`<div class="t-row">⏰ Previsão de entrega (cliente): <b>${deliveryWindow||'—'}</b></div><div class="t-hr"></div>`:''}
     ${items.map(i=>`<div class="t-bullet-item">• ${i.qty}x ${esc(i.name)}</div>`).join('')}
     <div class="t-hr"></div>
     <div class="t-row"><b>Observações:</b></div>
@@ -3644,6 +3741,7 @@ function updateNewBadge(){
 
 function goToPrinterSettings(){
   goPage('configuracoes');
+  switchConfigTab('operacao');
   setTimeout(()=>{
     const el=document.getElementById('stations-list');
     if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
@@ -3960,9 +4058,10 @@ function renderOrdersList(){
         <div style="font-size:12px;color:var(--muted)">${esc(o.address)||'—'}</div>
       </div>
       <div class="order-items">${itemsText(o)}</div>
-      ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`<div style="display:flex;gap:10px;font-size:11px;color:var(--muted);margin-top:4px;">
+      ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`<div style="display:flex;gap:10px;font-size:11px;color:var(--muted);margin-top:4px;flex-wrap:wrap;">
         <span>Entrada: <b style="color:var(--text,#eee);">${orderTime(o.createdAt)}</b></span>
         <span>Previsão de saída: <b style="color:var(--gold);">${calcPrevisaoSaida(o.createdAt, orderPrepTime(o))}</b></span>
+        <span>${o.mode==='retirada'?'🏪 Previsão de retirada':'🛵 Previsão de entrega'} (cliente): <b style="color:var(--green-lt);">${calcPrevisaoEntregaReal(o)}</b></span>
       </div>`:''}
       ${o.obs?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Obs: ${esc(o.obs)}</div>`:''}
       ${o.status==='cancelado'&&o.cancelReason?`<div style="font-size:11px;color:var(--red-lt);margin-top:4px;">Cancelado ${o.cancelledBy==='cliente'?'pelo cliente':'pela loja'} · Motivo: ${o.cancelReason}</div>`:''}
@@ -4090,6 +4189,7 @@ function renderKanban(){
           <div class="k-card-id">${o.ticketNumber?'#'+o.ticketNumber+' · ':''}${o.id} · ${orderTime(o.createdAt)}</div>
           <div class="k-card-name">${esc(o.name)}</div>
           <div class="k-card-items">${itemsText(o)}</div>
+          ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`<div style="font-size:10px;color:var(--green-lt);margin:2px 0;">⏰ ${calcPrevisaoEntregaReal(o)}</div>`:''}
           <div class="k-card-footer">
             <span class="k-card-total">R$ ${Number(o.total).toFixed(2).replace('.',',')}</span>
             <span style="font-size:10px;color:var(--muted)">${o.mode==='delivery'?'🛵':'🏪'}</span>
@@ -4120,6 +4220,18 @@ async function renderCustosPage(){
   switchCustosTab(custosTabAtual);
   renderCustosDashboard();
 }
+// v59: alterna entre as 4 abas de Configurações (antes eram 6 seções soltas na mesma rolagem)
+const CONFIG_TABS = ['restaurante','entrega','operacao','perigo'];
+function switchConfigTab(tab){
+  CONFIG_TABS.forEach(t=>{
+    const panel = document.getElementById('cfgtab-'+t);
+    const btn = document.getElementById('cfgtabbtn-'+t);
+    if(panel) panel.classList.toggle('active', t===tab);
+    if(btn) btn.classList.toggle('active', t===tab);
+  });
+  try{ localStorage.setItem('shog_cfgtab', tab); }catch(e){}
+}
+
 function switchCustosTab(tab){
   custosTabAtual=tab;
   document.getElementById('custos-tab-ingredientes').style.display = tab==='ingredientes'?'block':'none';
@@ -4381,8 +4493,9 @@ function renderMenuEditor(){
   document.getElementById('menu-cats-list').innerHTML = menu.length===0
     ? '<div style="text-align:center;padding:30px 12px;color:var(--muted);font-size:12px;">Nenhuma categoria ainda.<br>Clique em + Categoria.</div>'
     : menu.map((s,i)=>`
-    <div class="menu-cat-item ${i===activeCatIdx?'active':''}" onclick="selectCat(${i})">
+    <div class="menu-cat-item ${i===activeCatIdx?'active':''}" data-cat-idx="${i}" draggable="true" onclick="selectCat(${i})" title="Arraste ⠿ pra reordenar rápido">
       <div class="menu-cat-item-top">
+        <span class="cat-drag-handle" title="Arrastar pra reordenar">⠿</span>
         <span>${s.icon||'🍽️'}</span>
         <span class="menu-cat-name" title="${s.title}">${s.title}</span>
         <span class="menu-cat-count">${s.items.length}</span>
@@ -4398,6 +4511,7 @@ function renderMenuEditor(){
         </span>
       </div>
     </div>`).join('');
+  setupCatDragDrop();
   renderMenuItems();
 }
 function selectCat(i){activeCatIdx=i;document.getElementById('menu-search').value='';menuSearchQuery='';renderMenuEditor();}
@@ -4445,6 +4559,7 @@ function renderMenuItems(){
   document.getElementById('menu-items-body').innerHTML=sec.items.length===0
     ?'<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum item. Clique em + Novo Item.</div>'
     :sec.items.map((item,ii)=>menuItemRowHTML(sec,activeCatIdx,item,ii,true)).join('');
+  setupItemDragDrop();
 }
 function stIcons(stations){
   return (stations&&stations.length?stations:[cfg.defaultStation||'cozinha']).map(s=>stationIcon(s)).join(' ');
@@ -4452,10 +4567,13 @@ function stIcons(stations){
 function menuItemRowHTML(sec,si,item,ii,allowReorder){
   const vCount=(item.variants||[]).length;
   return `
-      <div class="menu-item-row">
-        ${allowReorder?`<span class="cat-reorder" style="flex-direction:column;">
-          <button onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover para cima">▲</button>
-          <button onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover para baixo">▼</button>
+      <div class="menu-item-row" ${allowReorder?`data-item-idx="${ii}" draggable="true"`:''}>
+        ${allowReorder?`<span style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+          <span class="mi-drag-handle" title="Arrastar pra reordenar">⠿</span>
+          <span class="cat-reorder" style="flex-direction:column;">
+            <button onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover para cima">▲</button>
+            <button onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover para baixo">▼</button>
+          </span>
         </span>`:`<span></span>`}
         ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`:`<div class="mi-thumb empty">🍽️</div>`}
         <div>
@@ -4466,13 +4584,102 @@ function menuItemRowHTML(sec,si,item,ii,allowReorder){
           ${vCount?`<span class="mi-badge" style="background:rgba(201,168,76,.15);color:var(--gold);">⚙ ${vCount} variação${vCount>1?'ões':''}</span>`:''}
           <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons(item.stations)}</span>
         </div>
-        <div class="mi-price">R$ ${Number(item.price).toFixed(2).replace('.',',')}</div>
+        <div class="mi-price" onclick="startInlinePriceEdit(this,${si},${ii})" title="Clique pra editar o preço rápido, sem abrir o formulário">R$ ${Number(item.price).toFixed(2).replace('.',',')}</div>
         <div style="font-size:11px;color:var(--muted)">${item.qty||'—'}</div>
         <button class="mi-btn" onclick="toggleItemAvailability(${si},${ii})" style="${item.available===false?'background:var(--red-bg);color:var(--red-lt);':'background:rgba(80,200,120,.12);color:#50c878;'}">${item.available===false?'🚫 Esgotado':'✅ Disponível'}</button>
         <button class="mi-btn edit" onclick="openEditItem(${si},${ii})"><span style="font-size:17px;">✏️</span> Editar</button>
         <button class="mi-btn stations" onclick="openItemStationsModal(${si},${ii})" title="Estações de Impressão"><span style="font-size:17px;">📠</span> Estações</button>
         <button class="mi-btn del"  onclick="deleteItem(${si},${ii})">🗑</button>
       </div>`;
+}
+// v59: edição rápida de preço, direto na lista (estilo iFood) — sem precisar abrir o formulário
+function startInlinePriceEdit(el, si, ii){
+  if(el.querySelector('input')) return;
+  const item = menu[si].items[ii];
+  const current = Number(item.price).toFixed(2);
+  el.onclick = null;
+  el.innerHTML = `R$ <input type="number" step="0.01" min="0" value="${current}" class="mi-price-input" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){this.blur();} if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}" onblur="commitInlinePriceEdit(this,${si},${ii})"/>`;
+  const input = el.querySelector('input');
+  input.focus();
+  input.select();
+}
+async function commitInlinePriceEdit(input, si, ii){
+  if(input.dataset.cancel){ renderMenuItems(); return; }
+  const val = parseFloat(String(input.value||'0').replace(',','.'));
+  if(isNaN(val) || val<0){ renderMenuItems(); return; }
+  const old = menu[si].items[ii].price;
+  menu[si].items[ii].price = val;
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ menu[si].items[ii].price = old; alert(res.data.error||'Erro ao salvar preço.'); renderMenuItems(); return; }
+  renderMenuItems();
+  showToast('💲 Preço atualizado', `${menu[si].items[ii].name}: R$ ${val.toFixed(2).replace('.',',')}`);
+}
+// v59: arrastar e soltar pra reordenar categorias e itens do cardápio (estilo iFood)
+function setupCatDragDrop(){
+  const container = document.getElementById('menu-cats-list');
+  if(!container || container._dragBound) return;
+  container._dragBound = true;
+  let dragIdx = null;
+  container.addEventListener('dragstart', e=>{
+    const row = e.target.closest('.menu-cat-item');
+    if(!row) return;
+    dragIdx = Number(row.dataset.catIdx);
+    row.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed='move'; }catch(err){}
+  });
+  container.addEventListener('dragend', e=>{
+    const row = e.target.closest('.menu-cat-item');
+    if(row) row.classList.remove('dragging');
+    dragIdx = null;
+  });
+  container.addEventListener('dragover', e=>{ if(dragIdx!=null) e.preventDefault(); });
+  container.addEventListener('drop', e=>{
+    e.preventDefault();
+    const row = e.target.closest('.menu-cat-item');
+    if(!row || dragIdx==null) return;
+    const dropIdx = Number(row.dataset.catIdx);
+    if(dropIdx===dragIdx) return;
+    const [moved] = menu.splice(dragIdx,1);
+    menu.splice(dropIdx,0,moved);
+    if(activeCatIdx===dragIdx) activeCatIdx=dropIdx;
+    else if(dragIdx<activeCatIdx && dropIdx>=activeCatIdx) activeCatIdx--;
+    else if(dragIdx>activeCatIdx && dropIdx<=activeCatIdx) activeCatIdx++;
+    saveMenuSilently();
+    renderMenuEditor();
+    showToast('↕️ Categoria reordenada','');
+  });
+}
+function setupItemDragDrop(){
+  const container = document.getElementById('menu-items-body');
+  if(!container || container._dragBound) return;
+  container._dragBound = true;
+  let dragIdx = null;
+  container.addEventListener('dragstart', e=>{
+    const row = e.target.closest('.menu-item-row[data-item-idx]');
+    if(!row) return;
+    dragIdx = Number(row.dataset.itemIdx);
+    row.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed='move'; }catch(err){}
+  });
+  container.addEventListener('dragend', e=>{
+    const row = e.target.closest('.menu-item-row[data-item-idx]');
+    if(row) row.classList.remove('dragging');
+    dragIdx = null;
+  });
+  container.addEventListener('dragover', e=>{ if(dragIdx!=null) e.preventDefault(); });
+  container.addEventListener('drop', e=>{
+    e.preventDefault();
+    const row = e.target.closest('.menu-item-row[data-item-idx]');
+    if(!row || dragIdx==null) return;
+    const dropIdx = Number(row.dataset.itemIdx);
+    if(dropIdx===dragIdx) return;
+    const items = menu[activeCatIdx].items;
+    const [moved] = items.splice(dragIdx,1);
+    items.splice(dropIdx,0,moved);
+    saveMenuSilently();
+    renderMenuItems();
+    showToast('↕️ Item reordenado','');
+  });
 }
 async function toggleItemAvailability(si,ii){
   menu[si].items[ii].available = menu[si].items[ii].available===false ? true : false;
@@ -4538,6 +4745,24 @@ function compressImageFile(file, maxSize=1600, quality=0.82){
     reader.onerror=reject;
     reader.readAsDataURL(file);
   });
+}
+// v59: helper genérico de upload de imagem — comprime no navegador e manda pro /api/upload,
+// devolvendo a URL final (ou null se der erro). BUG CORRIGIDO: essa função já era chamada em
+// uploadCourierPhoto() (foto do motoboy) mas nunca tinha sido criada — o upload de foto do
+// motoboy ficava travado em "Enviando..." pra sempre. Agora também é usada no upload de imagem
+// das Notificações Push.
+async function uploadImageAndGetUrl(file){
+  try{
+    let dataUrl;
+    try{ dataUrl = await compressImageFile(file, 1600); }
+    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ alert(res.data.error||'Erro ao enviar a imagem.'); return null; }
+    return res.data.url;
+  }catch(e){
+    alert('Não foi possível enviar a imagem. Tente um arquivo menor ou em outro formato (PNG/JPG/WEBP).');
+    return null;
+  }
 }
 async function uploadItemPhoto(input){
   const file=input.files&&input.files[0];
@@ -5284,32 +5509,117 @@ async function loadAtendimentoConversas(){
   try{ data = await apiGet('/api/admin/atendimento'); }catch(e){ return; }
   const conversas = data?.conversas || [];
   if(!conversas.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);">Nenhuma conversa ainda.</div>'; return; }
+  // v59: se algum card estiver com o campo de resposta focado (funcionário digitando), não
+  // recria esse card no meio da digitação — evita perder o texto/foco no polling automático.
+  const focusedId = document.activeElement && document.activeElement.id && document.activeElement.id.startsWith('resp-')
+    ? document.activeElement.id.slice(5) : null;
   el.innerHTML = conversas.map(c=>{
-    const ultima = c.mensagens[c.mensagens.length-1];
+    if(c.id===focusedId) return document.getElementById('atd-card-'+c.id)?.outerHTML || '';
     const precisaResposta = c.modo==='humano' && c.naoLidaAtendente;
     return `
-    <div style="border:1px solid ${precisaResposta?'var(--gold)':'var(--border)'};border-radius:8px;padding:10px;">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;">
+    <div class="atd-card" id="atd-card-${c.id}" style="border:1px solid ${precisaResposta?'var(--gold)':'var(--border)'};border-radius:10px;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:8px 10px;background:var(--panel2,rgba(255,255,255,.02));">
         <span>${precisaResposta?'🔴 aguardando resposta':'modo: '+(c.modo==='ia'?'IA':'atendente')}</span>
         <span>${new Date(c.ultimaAtividade).toLocaleString('pt-BR')}</span>
       </div>
-      <div style="max-height:120px;overflow-y:auto;font-size:12px;margin-bottom:8px;display:flex;flex-direction:column;gap:4px;">
-        ${c.mensagens.slice(-6).map(m=>`<div style="align-self:${m.de==='cliente'?'flex-start':'flex-end'};background:${m.de==='cliente'?'var(--bg2,#222)':'var(--gold)'};color:${m.de==='cliente'?'inherit':'#1a1a1a'};padding:4px 8px;border-radius:6px;max-width:85%;">${esc(m.texto)}</div>`).join('')}
+      <div class="atd-messages" id="atd-msgs-${c.id}">
+        ${c.mensagens.slice(-30).map(m=>atdBubbleHTML(m)).join('')}
       </div>
-      <div style="display:flex;gap:6px;">
-        <input id="resp-${c.id}" placeholder="Responder..." style="flex:1;font-size:12px;" onkeydown="if(event.key==='Enter')responderAtendimento('${c.id}')"/>
-        <button class="btn success sm" onclick="responderAtendimento('${c.id}')">Enviar</button>
+      <div class="atd-compose-bar">
+        <textarea id="resp-${c.id}" rows="1" placeholder="Digite uma mensagem..." class="atd-compose-input"
+          oninput="atdAutoGrow(this)"
+          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();responderAtendimento('${c.id}');}"></textarea>
+        <button class="atd-mic-btn" id="mic-${c.id}" onclick="toggleVoiceRecording('${c.id}')" title="Gravar mensagem de voz">🎤</button>
+        <span class="atd-mic-timer" id="mictimer-${c.id}" style="display:none;"></span>
+        <button class="atd-send-btn" onclick="responderAtendimento('${c.id}')" title="Enviar">➤</button>
       </div>
     </div>`;
   }).join('');
+  // rola pro fim de cada janela de mensagens
+  conversas.forEach(c=>{ const m=document.getElementById('atd-msgs-'+c.id); if(m) m.scrollTop = m.scrollHeight; });
+}
+function atdBubbleHTML(m){
+  if(m.de==='sistema') return `<div style="text-align:center;font-size:11px;color:var(--muted);margin:6px 0;">${esc(m.texto)}</div>`;
+  const meu = m.de!=='cliente'; // "meu" = mensagem da loja (atendente/IA), alinhada à direita, igual WhatsApp
+  if(m.tipo==='audio' && m.audioData){
+    return `<div class="atd-bubble ${meu?'out':'in'}"><audio controls src="${m.audioData}" style="max-width:230px;height:36px;"></audio></div>`;
+  }
+  return `<div class="atd-bubble ${meu?'out':'in'}">${esc(m.texto)}</div>`;
+}
+// v59: caixa de texto que cresce sozinha conforme o funcionário digita (até um limite), igual o
+// campo de mensagem do WhatsApp — facilita escrever textos mais longos sem o campo ficar minúsculo.
+function atdAutoGrow(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 async function responderAtendimento(id){
   const input = document.getElementById('resp-'+id);
   const texto = input.value.trim();
   if(!texto) return;
   input.value='';
+  input.style.height='';
   await apiPost('/api/admin/atendimento/'+id+'/responder', { texto });
   loadAtendimentoConversas();
+}
+async function apagarTodasConversas(){
+  if(!confirm('Apagar TODAS as conversas com clientes? Essa ação não pode ser desfeita.')) return;
+  const r = await apiDelete('/api/admin/atendimento');
+  if(!r.ok){ showToast('Erro', r.data.error||'Não foi possível apagar as conversas.'); return; }
+  showToast('🗑️ Conversas apagadas', 'Todo o histórico de conversas foi removido.');
+  loadAtendimentoConversas();
+}
+// v59: mensagem de voz — clique no microfone pra começar a gravar (fica vermelho e mostra o
+// tempo), clique de novo pra parar e enviar automaticamente. Igual o botão de áudio do WhatsApp,
+// só que sem "segurar e soltar" (mais confiável no navegador).
+let atdRecorder = null, atdChunks = [], atdRecordingId = null, atdRecordTimer = null, atdRecordStart = 0;
+async function toggleVoiceRecording(convId){
+  if(atdRecorder && atdRecorder.state==='recording'){
+    if(atdRecordingId===convId) atdRecorder.stop();
+    else showToast('🎤 Já gravando outra conversa', 'Termine essa gravação antes de começar outra.');
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showToast('🎤 Sem suporte', 'Esse navegador não permite gravar áudio.');
+    return;
+  }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    atdChunks = [];
+    atdRecordingId = convId;
+    atdRecorder = new MediaRecorder(stream);
+    atdRecorder.ondataavailable = e=>{ if(e.data && e.data.size>0) atdChunks.push(e.data); };
+    atdRecorder.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      clearInterval(atdRecordTimer);
+      const micBtn = document.getElementById('mic-'+convId);
+      const timerEl = document.getElementById('mictimer-'+convId);
+      if(micBtn){ micBtn.classList.remove('recording'); micBtn.textContent='🎤'; }
+      if(timerEl){ timerEl.style.display='none'; }
+      const blob = new Blob(atdChunks, { type: 'audio/webm' });
+      atdRecordingId = null;
+      if(blob.size < 800) return; // gravação cancelada ou curta demais pra valer a pena
+      const reader = new FileReader();
+      reader.onloadend = async ()=>{
+        const r = await apiPost('/api/admin/atendimento/'+convId+'/responder', { audio: reader.result });
+        if(!r.ok) showToast('Erro', r.data.error||'Não foi possível enviar o áudio.');
+        loadAtendimentoConversas();
+      };
+      reader.readAsDataURL(blob);
+    };
+    atdRecorder.start();
+    atdRecordStart = Date.now();
+    const micBtn = document.getElementById('mic-'+convId);
+    const timerEl = document.getElementById('mictimer-'+convId);
+    if(micBtn){ micBtn.classList.add('recording'); micBtn.textContent='⏹'; }
+    if(timerEl){ timerEl.style.display='inline'; timerEl.textContent='00:00'; }
+    atdRecordTimer = setInterval(()=>{
+      if(!timerEl) return;
+      const s = Math.floor((Date.now()-atdRecordStart)/1000);
+      timerEl.textContent = String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+    }, 500);
+  }catch(e){
+    showToast('🎤 Sem acesso ao microfone', 'Permita o uso do microfone no navegador pra gravar áudio.');
+  }
 }
 function iniciarPollingAtendimento(){
   if(atendimentoPollTimer) return;
@@ -5435,6 +5745,7 @@ function loadSmsSettings(){
   const waNotifyEl=document.getElementById('sms-whatsapp-notify'); if(waNotifyEl) waNotifyEl.checked=!!cfg.sms?.notifyWhatsApp;
   loadPromoCustomers();
   loadPushSubsCount();
+  loadPushPresets();
 }
 async function loadPromoCustomers(){
   const res = await apiGet('/api/admin/customers');
@@ -5493,6 +5804,75 @@ async function loadPushSubsCount(){
     const r = await apiGet('/api/admin/push-subscribers');
     el.textContent = `📲 ${r.total} inscrito(s) no total (${r.withPhone} vinculado(s) a uma conta).`;
   }catch(e){ el.textContent=''; }
+}
+// v59: modelos de mensagem pré-determinada — escolhe um modelo salvo e preenche
+// título/mensagem/imagem de uma vez, ou salva o que está escrito agora como um modelo novo.
+let pushPresets = [];
+async function loadPushPresets(){
+  const sel = document.getElementById('push-preset-select');
+  if(!sel) return;
+  try{
+    const r = await apiGet('/api/push/presets');
+    pushPresets = r.presets || [];
+  }catch(e){ pushPresets = []; }
+  sel.innerHTML = '<option value="">— Escolher um modelo salvo —</option>' +
+    pushPresets.map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+}
+function aplicarPushPreset(id){
+  const delBtn = document.getElementById('push-preset-del-btn');
+  if(!id){ if(delBtn) delBtn.style.display='none'; return; }
+  const p = pushPresets.find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('push-title').value = p.titulo||'';
+  document.getElementById('push-message').value = p.mensagem||'';
+  document.getElementById('push-image').value = p.imagem||'';
+  atualizarPreviewPushImagem(p.imagem||'');
+  if(delBtn) delBtn.style.display='inline-block';
+}
+async function salvarPushPreset(){
+  const nome = prompt('Nome desse modelo (ex: "Promoção de terça", "Novidade no cardápio")');
+  if(!nome || !nome.trim()) return;
+  const titulo = document.getElementById('push-title').value.trim();
+  const mensagem = document.getElementById('push-message').value.trim();
+  const imagem = document.getElementById('push-image').value.trim();
+  if(!titulo && !mensagem){ alert('Escreva um título ou mensagem antes de salvar como modelo.'); return; }
+  const res = await apiPost('/api/push/presets', { nome: nome.trim(), titulo, mensagem, imagem });
+  if(!res.ok){ alert(res.data.error||'Não foi possível salvar o modelo.'); return; }
+  pushPresets = res.data.presets || [];
+  await loadPushPresets();
+  const novo = pushPresets.find(p=>p.nome===nome.trim());
+  if(novo) document.getElementById('push-preset-select').value = novo.id;
+  showToast('💾 Modelo salvo', nome.trim());
+}
+async function excluirPushPreset(){
+  const sel = document.getElementById('push-preset-select');
+  const id = sel.value;
+  if(!id) return;
+  if(!confirm('Excluir esse modelo de mensagem?')) return;
+  const res = await apiDelete('/api/push/presets/'+id);
+  if(!res.ok){ alert(res.data.error||'Não foi possível excluir o modelo.'); return; }
+  pushPresets = res.data.presets || [];
+  await loadPushPresets();
+  document.getElementById('push-preset-del-btn').style.display='none';
+}
+// v59: upload de imagem pra Notificações Push (antes só dava pra colar um link) — usa o mesmo
+// helper genérico de compressão + /api/upload já usado no resto do painel.
+async function uploadPushImage(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('push-image-status');
+  if(statusEl) statusEl.textContent = 'Enviando...';
+  const url = await uploadImageAndGetUrl(file);
+  input.value = '';
+  if(!url){ if(statusEl) statusEl.textContent=''; return; }
+  document.getElementById('push-image').value = url;
+  atualizarPreviewPushImagem(url);
+  if(statusEl) statusEl.textContent = '✅ Imagem pronta';
+}
+function atualizarPreviewPushImagem(url){
+  const img = document.getElementById('push-image-preview');
+  if(!img) return;
+  if(url){ img.src = url; img.style.display='block'; } else { img.style.display='none'; img.removeAttribute('src'); }
 }
 async function sendPushCampaign(){
   const sendAll = document.getElementById('push-send-all').checked;
@@ -5721,6 +6101,22 @@ function removeStation(key){
 
 // v40: Entrada + tempo de preparo da estação = Previsão de saída, mostrado na comanda
 // (card interno do painel e via impressa de produção).
+// v59: previsão REAL de entrega/retirada — igual à que já sai impressa na nota (server.js
+// estimateDeliveryWindow / index.html estimateDeliveryWindowClient), agora também visível
+// aqui no card do pedido (Caixa), pra não precisar imprimir só pra saber o horário prometido.
+function calcPrevisaoEntregaReal(o){
+  const timeText = o.mode==='retirada' ? (cfg.timeRetirada||cfg.time) : cfg.time;
+  const nums = String(timeText||'').match(/\d+/g);
+  const created = new Date(o.createdAt);
+  const fmt = d => d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  if(nums && nums.length>=2){
+    const from = new Date(created.getTime()+parseInt(nums[0])*60000);
+    const to = new Date(created.getTime()+parseInt(nums[nums.length-1])*60000);
+    return `${fmt(from)}–${fmt(to)}`;
+  }
+  if(nums && nums.length===1) return `até ${fmt(new Date(created.getTime()+parseInt(nums[0])*60000))}`;
+  return timeText||'—';
+}
 function calcPrevisaoSaida(createdAt, prepMinutes){
   const saida = new Date(new Date(createdAt).getTime() + (Number(prepMinutes)||0)*60000);
   return saida.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});

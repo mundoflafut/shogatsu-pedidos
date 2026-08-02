@@ -2006,6 +2006,10 @@ function renderConversaIa(conversa){
   el.innerHTML = conversa.mensagens.map(m=>{
     if(m.de==='sistema') return `<div style="text-align:center;font-size:11px;color:var(--muted,#999);">${escIa(m.texto)}</div>`;
     const meu = m.de==='cliente';
+    // v59: mensagem de voz enviada pelo atendente (gravada no painel) — toca com o player nativo
+    if(m.tipo==='audio' && m.audioData){
+      return `<div style="align-self:${meu?'flex-end':'flex-start'};background:${meu?'var(--gold,#c9a15a)':'rgba(120,120,120,.18)'};padding:6px 10px;border-radius:14px;max-width:80%;"><audio controls src="${m.audioData}" style="max-width:220px;height:34px;"></audio></div>`;
+    }
     return `<div style="align-self:${meu?'flex-end':'flex-start'};background:${meu?'var(--gold,#c9a15a)':'rgba(120,120,120,.18)'};color:${meu?'#1a1a1a':'inherit'};padding:8px 12px;border-radius:14px;max-width:80%;font-size:13px;white-space:pre-wrap;">${escIa(m.texto)}</div>`;
   }).join('');
   el.scrollTop = el.scrollHeight;
