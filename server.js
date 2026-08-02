@@ -1372,6 +1372,39 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
+  // v59: modelos de mensagem pré-determinada pra Notificações Push — evita ter que redigitar
+  // o mesmo texto de promoção toda vez. Fica salvo em cfg (igual FAQ da IA), não em arquivo à parte.
+  if (pathname === '/api/push/presets' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const { cfg } = readConfig();
+    return sendJSON(res, 200, { presets: cfg.pushPresets || [] });
+  }
+  if (pathname === '/api/push/presets' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const { nome, titulo, mensagem, imagem } = await readBody(req, 5e6);
+      const n = String(nome || '').trim().slice(0, 60);
+      if (!n) return sendJSON(res, 400, { error: 'Dê um nome pro modelo.' });
+      const data = readConfig();
+      if (!Array.isArray(data.cfg.pushPresets)) data.cfg.pushPresets = [];
+      data.cfg.pushPresets.push({
+        id: crypto.randomBytes(6).toString('hex'), nome: n,
+        titulo: String(titulo || '').trim().slice(0, 100),
+        mensagem: String(mensagem || '').trim().slice(0, 500),
+        imagem: String(imagem || '').trim().slice(0, 500)
+      });
+      writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
+      return sendJSON(res, 200, { presets: data.cfg.pushPresets });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  const pushPresetDelMatch = pathname.match(/^\/api\/push\/presets\/([a-f0-9]+)$/);
+  if (pushPresetDelMatch && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const data = readConfig();
+    data.cfg.pushPresets = (data.cfg.pushPresets || []).filter(p => p.id !== pushPresetDelMatch[1]);
+    writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
+    return sendJSON(res, 200, { presets: data.cfg.pushPresets });
+  }
   // POST /api/custos/ler-imagem — lê foto de nota fiscal (custo) ou catálogo (preço de venda) e
   // devolve uma lista pra o admin CONFERIR antes de salvar (não grava nada sozinho).
   if (pathname === '/api/custos/ler-imagem' && req.method === 'POST') {
@@ -1460,19 +1493,33 @@ const server = http.createServer(async (req, res) => {
       .slice(0, 200);
     return sendJSON(res, 200, { conversas: lista });
   }
+  // v59: apagar TODAS as conversas de uma vez (botão "🗑️ Apagar todas as conversas" no painel).
+  // Ação irreversível — o front pede confirmação antes de chamar isso.
+  if (pathname === '/api/admin/atendimento' && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    salvarAtendimentos({});
+    return sendJSON(res, 200, { ok: true });
+  }
   const conversaResponderMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/responder$/);
   if (conversaResponderMatch && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { texto } = await readBody(req);
-      const t = String(texto || '').trim().slice(0, 1000);
-      if (!t) return sendJSON(res, 400, { error: 'Escreva uma resposta.' });
+      // v59: além de texto, aceita uma mensagem de VOZ (áudio gravado no painel, mandado como
+      // data URL base64) — igual o WhatsApp permite responder por áudio. Limite de 8MB cobre
+      // tranquilamente alguns minutos de áudio comprimido (webm/opus).
+      const { texto, audio } = await readBody(req, 8e6);
       const todas = lerAtendimentos();
       const conversa = todas[conversaResponderMatch[1]];
       if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+      if (typeof audio === 'string' && audio.startsWith('data:audio')) {
+        conversa.mensagens.push({ de: 'atendente', tipo: 'audio', audioData: audio, ts: new Date().toISOString() });
+      } else {
+        const t = String(texto || '').trim().slice(0, 1000);
+        if (!t) return sendJSON(res, 400, { error: 'Escreva uma resposta ou grave um áudio.' });
+        conversa.mensagens.push({ de: 'atendente', tipo: 'texto', texto: t, ts: new Date().toISOString() });
+      }
       conversa.modo = 'humano';
       conversa.naoLidaAtendente = false;
-      conversa.mensagens.push({ de: 'atendente', texto: t, ts: new Date().toISOString() });
       conversa.ultimaAtividade = new Date().toISOString();
       salvarAtendimentos(todas);
       return sendJSON(res, 200, { conversa });
@@ -2230,6 +2277,12 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push(HR);
         lines.push(rightAlignRow('Entrada:', entrada));
         lines.push(rightAlignRow('Saida Prevista:', saidaPrevista));
+        // v59: a via de delivery/expedição — a que geralmente vai junto com o motoboy — também
+        // mostra a previsão REAL de entrega prometida ao cliente (Entrada + tempo configurado
+        // em Configurações), separada da "Saída Prevista" (que é só o tempo de preparo da cozinha).
+        if ((st === 'delivery' || st === 'expedicao') && order.mode === 'delivery') {
+          lines.push(rightAlignRow('Previsao cliente:', deliveryWindow));
+        }
         lines.push(HR);
         lines.push(ESC.boldOn + ('ITENS DA ' + (((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase())) + ESC.boldOff);
         lines.push(HR);
@@ -3221,6 +3274,7 @@ function estimateDeliveryWindow(order, cfg) {
     if (!['preparando', 'saiu'].includes(order.status)) {
       return sendJSON(res, 200, { ended: true, status: order.status });
     }
+    const { cfg } = readConfig();
     return sendJSON(res, 200, {
       ended: false,
       id: order.id,
@@ -3230,7 +3284,11 @@ function estimateDeliveryWindow(order, cfg) {
       name: order.name,
       phone: order.phone,
       address: order.address,
-      obs: order.obs || ''
+      obs: order.obs || '',
+      createdAt: order.createdAt,
+      // v59: previsão real de entrega (o horário prometido ao cliente) — pro motoboy saber se
+      // está dentro do prazo, sem precisar voltar pro painel ou perguntar pro caixa.
+      deliveryWindow: estimateDeliveryWindow(order, cfg)
     });
   }
 
