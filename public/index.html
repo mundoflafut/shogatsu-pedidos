@@ -717,7 +717,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
     <button type="button" class="wa-icon-btn" id="ia-anexo-btn" onclick="document.getElementById('ia-anexo-input').click()" title="Anexar foto">📎</button>
     <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:22px;padding:11px 16px;font-size:14.5px;line-height:1.35;box-sizing:border-box;resize:none;min-height:44px;max-height:130px;" oninput="onDigitandoIa()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
     <button type="button" class="wa-icon-btn" id="ia-mic-btn" onclick="toggleGravacaoIa()" title="Gravar áudio">🎤</button>
-    <button class="checkout-btn wa-send-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="border-radius:50%;padding:0;">➤</button>
+    <button type="button" class="wa-send-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()">➤</button>
   </div>
   <div style="text-align:center;padding:6px 0 8px;flex-shrink:0;">
     <span onclick="pedirAtendenteHumano()" style="font-size:11px;color:var(--muted,#999);text-decoration:underline;cursor:pointer;">Falar com atendente</span>
