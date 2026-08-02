@@ -585,6 +585,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="nav-section">Principal</div>
     <button class="nav-item active" data-page="pedidos" onclick="goPage('pedidos')"><span class="ni">📊</span> Pedidos <span class="nb" id="nb-pedidos" style="display:none">0</span></button>
     <button class="nav-item" data-page="reservas" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
+    <button class="nav-item" data-page="mensagens" onclick="goPage('mensagens')"><span class="ni">💬</span> Mensagens <span class="nb" id="nb-mensagens" style="display:none">0</span></button>
     <div class="nav-section" data-min-role="admin">Gestão</div>
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
@@ -737,6 +738,49 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         <button class="btn sm secondary reorder-toggle-btn" onclick="toggleReorderMode('reservas-filterbar','shog_btnorder_reservas_filter', this)" title="Arraste os botões acima pra reorganizar a posição deles">✏️ Editar posição</button>
       </div>
       <div id="reservations-list"></div>
+    </div>
+
+    <!-- ── MENSAGENS (Chat Express) ── -->
+    <div class="page" id="page-mensagens">
+     <div class="settings-card" style="padding-bottom:0;">
+      <div class="settings-card-title" style="display:flex;align-items:center;gap:8px;">
+        <img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:cover;"/>
+        Chat Express
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+        Quando um cliente toca em "Falar com atendente" no chat do cardápio, a conversa aparece
+        aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos. Toca um aviso
+        sonoro quando chega mensagem nova ou quando um cliente pede pra falar com atendente —
+        dá pra silenciar cada conversa individualmente pelo ícone 🔔 no topo do chat.
+      </div>
+      <div class="wa-admin-wrap" id="wa-admin-wrap">
+        <div class="wa-admin-list" id="wa-admin-list"></div>
+        <div class="wa-admin-chat">
+          <div class="wa-admin-chat-empty" id="wa-admin-chat-empty">Selecione uma conversa à esquerda pra ver as mensagens.</div>
+          <div id="wa-admin-chat-active" style="display:none;flex-direction:column;height:100%;">
+            <div class="wa-header">
+              <button class="wa-admin-back" onclick="fecharConversaAdmin()">←</button>
+              <div class="wa-avatar" id="wa-admin-avatar">🧑</div>
+              <div class="wa-header-info">
+                <div class="wa-header-name" id="wa-admin-nome">Cliente</div>
+                <div class="wa-header-status" id="wa-admin-status">—</div>
+              </div>
+              <button type="button" class="wa-icon-btn" id="wa-admin-mute-btn" onclick="toggleMuteConversaAdmin()" title="Silenciar aviso sonoro desta conversa">🔔</button>
+            </div>
+            <div class="wa-messages" id="wa-admin-messages"></div>
+            <div class="wa-footer">
+              <input type="file" id="wa-admin-anexo-input" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="enviarAnexoAdmin(this)"/>
+              <button type="button" class="wa-icon-btn" id="wa-admin-emoji-btn" onclick="toggleEmojiPanelAdmin(event)" title="Emoji">😊</button>
+              <div class="wa-emoji-panel" id="wa-admin-emoji-panel"></div>
+              <button type="button" class="wa-icon-btn" onclick="document.getElementById('wa-admin-anexo-input').click()" title="Anexar foto">📎</button>
+              <textarea id="wa-admin-input" placeholder="Responder..." rows="1" oninput="onDigitandoAdmin()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();responderAtendimentoAtivo();}"></textarea>
+              <button type="button" class="wa-icon-btn" id="wa-admin-mic-btn" onclick="toggleGravacaoAdmin()" title="Gravar áudio">🎤</button>
+              <button class="wa-send-btn" onclick="responderAtendimentoAtivo()">➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+     </div>
     </div>
 
     <!-- ── CARDÁPIO ── -->
@@ -1275,46 +1319,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 
           <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
           <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
-        </div>
-
-        <div class="settings-card" style="grid-column:1/-1;padding-bottom:0;">
-          <div class="settings-card-title" style="display:flex;align-items:center;gap:8px;">
-            <img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:cover;"/>
-            Chat Express
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Quando um cliente toca em "Falar com atendente" no chat do cardápio, a conversa aparece
-            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos. Toca um aviso
-            sonoro quando chega mensagem nova ou quando um cliente pede pra falar com atendente —
-            dá pra silenciar cada conversa individualmente pelo ícone 🔔 no topo do chat.
-          </div>
-          <div class="wa-admin-wrap" id="wa-admin-wrap">
-            <div class="wa-admin-list" id="wa-admin-list"></div>
-            <div class="wa-admin-chat">
-              <div class="wa-admin-chat-empty" id="wa-admin-chat-empty">Selecione uma conversa à esquerda pra ver as mensagens.</div>
-              <div id="wa-admin-chat-active" style="display:none;flex-direction:column;height:100%;">
-                <div class="wa-header">
-                  <button class="wa-admin-back" onclick="fecharConversaAdmin()">←</button>
-                  <div class="wa-avatar" id="wa-admin-avatar">🧑</div>
-                  <div class="wa-header-info">
-                    <div class="wa-header-name" id="wa-admin-nome">Cliente</div>
-                    <div class="wa-header-status" id="wa-admin-status">—</div>
-                  </div>
-                  <button type="button" class="wa-icon-btn" id="wa-admin-mute-btn" onclick="toggleMuteConversaAdmin()" title="Silenciar aviso sonoro desta conversa">🔔</button>
-                </div>
-                <div class="wa-messages" id="wa-admin-messages"></div>
-                <div class="wa-footer">
-                  <input type="file" id="wa-admin-anexo-input" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="enviarAnexoAdmin(this)"/>
-                  <button type="button" class="wa-icon-btn" id="wa-admin-emoji-btn" onclick="toggleEmojiPanelAdmin(event)" title="Emoji">😊</button>
-                  <div class="wa-emoji-panel" id="wa-admin-emoji-panel"></div>
-                  <button type="button" class="wa-icon-btn" onclick="document.getElementById('wa-admin-anexo-input').click()" title="Anexar foto">📎</button>
-                  <textarea id="wa-admin-input" placeholder="Responder..." rows="1" oninput="onDigitandoAdmin()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();responderAtendimentoAtivo();}"></textarea>
-                  <button type="button" class="wa-icon-btn" id="wa-admin-mic-btn" onclick="toggleGravacaoAdmin()" title="Gravar áudio">🎤</button>
-                  <button class="wa-send-btn" onclick="responderAtendimentoAtivo()">➤</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="settings-card" style="grid-column:1/-1;">
@@ -2548,7 +2552,7 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',mensagens:'Mensagens',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
 const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
@@ -5510,6 +5514,9 @@ async function loadAtendimentoConversas(){
     }
     atdSnapshotAnterior[c.id] = { qtdMsg: c.mensagens.length, chamando: chamandoAgora };
   });
+  const aguardando = conversasAdminCache.filter(c=>c.modo==='humano' && c.naoLidaAtendente).length;
+  const nbMsg = document.getElementById('nb-mensagens');
+  if(nbMsg){ nbMsg.style.display = aguardando?'inline-block':'none'; nbMsg.textContent = aguardando; }
   if(!conversasAdminCache.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:14px;">Nenhuma conversa ainda.</div>'; }
   else {
     el.innerHTML = conversasAdminCache.map(c=>{

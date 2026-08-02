@@ -38,9 +38,16 @@ body[data-theme="light"]{
 body[data-theme="light"] .item-card,body[data-theme="light"] .cover-slider,
 body[data-theme="light"] .drawer,body[data-theme="light"] .screen{box-shadow:0 1px 4px rgba(0,0,0,.06);}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html{overflow-x:hidden;width:100%;}
+/* v63 — BUG CORRIGIDO (causa raiz): html/body usavam overflow-x:hidden sem overflow-y definido.
+   Pela spec do CSS, quando um eixo tem overflow diferente de "visible" e o outro fica "visible",
+   o navegador converte esse outro eixo pra "auto" por baixo dos panos — isso faz o <body> (que
+   também tem min-height:100vh) virar um container de rolagem próprio, paralelo ao da página, e
+   é exatamente isso que quebra position:sticky dos elementos filhos (barra de categorias, busca,
+   etc.) de forma inconsistente entre navegadores. overflow-x:clip resolve isso: trava a rolagem
+   horizontal sem nunca criar esse container de rolagem escondido, preservando position:sticky. */
+html{overflow-x:hidden;overflow-x:clip;overflow-y:visible;width:100%;}
 img{max-width:100%;}
-body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;}
+body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;overflow-x:clip;overflow-y:visible;}
 a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
 
@@ -277,6 +284,13 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 @keyframes waTypingBounce{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
 .wa-faq{display:flex;gap:6px;overflow-x:auto;padding:6px 10px 0;flex-shrink:0;}
 .wa-footer{display:flex;align-items:flex-end;gap:4px;padding:8px 10px;border-top:1px solid var(--border);background:var(--card);flex-shrink:0;position:relative;}
+/* v62: BUG CORRIGIDO — a caixa de digitação do chat do cliente não tinha cor de fundo/texto
+   definida, então herdava o texto claro do tema escuro do site sobre o fundo branco padrão do
+   navegador pra textarea, ficando praticamente invisível. Agora fica clara com texto escuro,
+   igual ao balão de digitação do WhatsApp, sempre legível independente do tema (claro/escuro). */
+#ia-pergunta{background:#ffffff;color:#111111;caret-color:#111111;border:1px solid #d8d8d8;}
+#ia-pergunta::placeholder{color:#8a8a8a;}
+#ia-pergunta:focus{outline:none;border:1px solid var(--gold);}
 .wa-icon-btn{background:none;border:none;color:var(--muted);width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:19px;border-radius:50%;transition:background .15s,color .15s;}
 .wa-icon-btn:hover{color:var(--gold);background:rgba(201,168,76,.1);}
 .wa-icon-btn.wa-recording{color:#e05353;background:rgba(224,83,83,.12);}
