@@ -243,6 +243,62 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .drawer-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--white);letter-spacing:2px;}
 .drawer-close{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:16px;display:flex;align-items:center;justify-content:center;}
 .drawer-body{padding:16px 20px;}
+
+/* ═══════════════════════════════════════════════════════════
+   v60 — Chat de Atendimento estilo "WhatsApp Web", responsivo
+   ═══════════════════════════════════════════════════════════ */
+#ia-drawer{padding:0;}
+#ia-drawer .drawer-handle{display:none;}
+.wa-header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0;}
+.wa-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#8a6f2a);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#1a1a1a;}
+.wa-header-info{flex:1;min-width:0;}
+.wa-header-name{font-size:14px;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wa-header-status{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .2s;}
+.wa-header-status.wa-typing{color:var(--gold);}
+.wa-close{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;width:30px;height:30px;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.wa-messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:
+  radial-gradient(circle at 20% 10%, rgba(201,168,76,.04) 0, transparent 40%),
+  radial-gradient(circle at 80% 90%, rgba(201,168,76,.04) 0, transparent 40%);}
+.wa-date-sep{align-self:center;background:var(--card);color:var(--muted);font-size:10.5px;padding:3px 10px;border-radius:10px;margin:8px 0;letter-spacing:.3px;}
+.wa-row{display:flex;margin:2px 4px;max-width:100%;}
+.wa-row.wa-out{justify-content:flex-end;}
+.wa-row.wa-in{justify-content:flex-start;}
+.wa-bubble{max-width:78%;padding:7px 10px 6px;border-radius:12px;font-size:13.5px;line-height:1.38;white-space:pre-wrap;word-break:break-word;position:relative;box-shadow:0 1px 1px rgba(0,0,0,.15);}
+.wa-row.wa-out .wa-bubble{background:var(--gold);color:#1a1a1a;border-bottom-right-radius:3px;}
+.wa-row.wa-in .wa-bubble{background:var(--card);color:var(--white);border:1px solid var(--border);border-bottom-left-radius:3px;}
+.wa-bubble .wa-time{display:block;text-align:right;font-size:9.5px;opacity:.65;margin-top:2px;letter-spacing:.2px;}
+.wa-bubble img.wa-img{max-width:220px;max-height:220px;border-radius:8px;display:block;margin-bottom:3px;object-fit:cover;cursor:pointer;}
+.wa-bubble audio.wa-audio{max-width:220px;height:34px;display:block;margin-bottom:2px;}
+.wa-sys{align-self:center;text-align:center;font-size:10.5px;color:var(--muted);margin:6px auto;max-width:90%;}
+.wa-typing-row{display:flex;align-items:center;gap:4px;padding:7px 12px;background:var(--card);border:1px solid var(--border);border-radius:12px;border-bottom-left-radius:3px;width:fit-content;margin:2px 4px;}
+.wa-typing-row span{width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block;animation:waTypingBounce 1.2s infinite ease-in-out;}
+.wa-typing-row span:nth-child(2){animation-delay:.15s;}
+.wa-typing-row span:nth-child(3){animation-delay:.3s;}
+@keyframes waTypingBounce{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
+.wa-faq{display:flex;gap:6px;overflow-x:auto;padding:6px 10px 0;flex-shrink:0;}
+.wa-footer{display:flex;align-items:flex-end;gap:4px;padding:8px 10px;border-top:1px solid var(--border);background:var(--card);flex-shrink:0;position:relative;}
+.wa-icon-btn{background:none;border:none;color:var(--muted);width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:19px;border-radius:50%;transition:background .15s,color .15s;}
+.wa-icon-btn:hover{color:var(--gold);background:rgba(201,168,76,.1);}
+.wa-icon-btn.wa-recording{color:#e05353;background:rgba(224,83,83,.12);}
+#ia-pergunta{flex:1;border:1px solid var(--border);background:var(--panel);}
+.wa-send-btn{width:38px;height:38px;flex-shrink:0;}
+.wa-emoji-panel{position:absolute;bottom:52px;left:8px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px;display:none;grid-template-columns:repeat(7,1fr);gap:2px;box-shadow:0 4px 16px rgba(0,0,0,.35);z-index:5;max-width:270px;}
+.wa-emoji-panel.open{display:grid;}
+.wa-emoji-panel button{background:none;border:none;font-size:19px;padding:4px;border-radius:6px;line-height:1;}
+.wa-emoji-panel button:hover{background:rgba(201,168,76,.15);}
+.wa-rec-indicator{display:flex;align-items:center;gap:8px;flex:1;font-size:12.5px;color:#e05353;padding:0 6px;}
+.wa-rec-dot{width:9px;height:9px;border-radius:50%;background:#e05353;animation:waRecPulse 1s infinite;}
+@keyframes waRecPulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+/* Tablet/desktop: vira uma janela flutuante (estilo WhatsApp Web), não mais um bottom-sheet
+   ocupando a tela inteira — melhora muito o uso num tablet ou PC/notebook. */
+@media (min-width:700px){
+  #ia-overlay{background:rgba(0,0,0,.35);}
+  #ia-drawer{left:auto;right:24px;bottom:24px;width:380px;max-width:calc(100vw - 48px);height:min(640px,calc(100vh - 48px));max-height:min(640px,calc(100vh - 48px));border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5);border:1px solid var(--border);}
+}
+@media (min-width:1024px){
+  #ia-drawer{width:400px;}
+}
 .cart-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
 .cart-item-name{flex:1;font-size:14px;color:var(--white);}
 .cart-item-price{font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--red-lt);min-width:70px;text-align:right;}
@@ -621,21 +677,27 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 
 <div class="drawer-overlay" id="ia-overlay" onclick="closeIaDuvida()"></div>
 <div class="drawer" id="ia-drawer" style="display:flex;flex-direction:column;max-height:80vh;">
-  <div class="drawer-handle"></div>
-  <div class="drawer-header">
-    <span class="drawer-title" id="ia-drawer-titulo">🤖 Tire sua dúvida</span>
-    <button class="drawer-close" onclick="closeIaDuvida()">✕</button>
+  <div class="wa-header">
+    <div class="wa-avatar" id="ia-avatar">🤖</div>
+    <div class="wa-header-info">
+      <div class="wa-header-name" id="ia-drawer-titulo">Tire sua dúvida</div>
+      <div class="wa-header-status" id="ia-drawer-status">assistente automático</div>
+    </div>
+    <button class="wa-close" onclick="closeIaDuvida()">✕</button>
   </div>
-  <div class="drawer-body" id="ia-body" style="flex:1;display:flex;flex-direction:column;min-height:0;">
-    <div id="ia-mensagens" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px;"></div>
-    <div id="ia-faq-rapida" style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;"></div>
-    <div style="display:flex;gap:6px;align-items:flex-end;padding-top:6px;">
-      <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:18px;padding:10px 14px;font-size:13px;box-sizing:border-box;resize:none;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
-      <button class="checkout-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="border-radius:50%;width:42px;height:42px;padding:0;flex-shrink:0;">➤</button>
-    </div>
-    <div style="text-align:center;padding-top:8px;">
-      <span onclick="pedirAtendenteHumano()" style="font-size:11px;color:var(--muted,#999);text-decoration:underline;cursor:pointer;">Falar com atendente</span>
-    </div>
+  <div class="wa-messages" id="ia-mensagens"></div>
+  <div class="wa-faq" id="ia-faq-rapida"></div>
+  <div class="wa-footer">
+    <input type="file" id="ia-anexo-input" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="enviarAnexoIa(this)"/>
+    <button type="button" class="wa-icon-btn" id="ia-emoji-btn" onclick="toggleEmojiPanelIa(event)" title="Emoji">😊</button>
+    <div class="wa-emoji-panel" id="ia-emoji-panel"></div>
+    <button type="button" class="wa-icon-btn" id="ia-anexo-btn" onclick="document.getElementById('ia-anexo-input').click()" title="Anexar foto">📎</button>
+    <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:18px;padding:9px 14px;font-size:13px;box-sizing:border-box;resize:none;max-height:90px;" oninput="onDigitandoIa()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
+    <button type="button" class="wa-icon-btn" id="ia-mic-btn" onclick="toggleGravacaoIa()" title="Gravar áudio">🎤</button>
+    <button class="checkout-btn wa-send-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="border-radius:50%;padding:0;">➤</button>
+  </div>
+  <div style="text-align:center;padding:6px 0 8px;flex-shrink:0;">
+    <span onclick="pedirAtendenteHumano()" style="font-size:11px;color:var(--muted,#999);text-decoration:underline;cursor:pointer;">Falar com atendente</span>
   </div>
 </div>
 
@@ -1959,12 +2021,26 @@ function closeContactSheet(){
 }
 
 // ═══════════════════════════════════════════
-// ATENDIMENTO — chat com IA e/ou atendente humano (v57)
+// ATENDIMENTO — chat com IA e/ou atendente humano (v57, redesenhado v60)
 // ═══════════════════════════════════════════
 let iaConversaId = null;
 let iaModoAtual = 'ia';
 let iaPollTimer = null;
+let iaUltimoDigitandoEnviado = 0;
+let iaGravador = null, iaGravadorChunks = [], iaGravando = false;
+const IA_EMOJIS = ['😀','😂','😍','👍','🙏','🎉','😢','😮','❤️','🔥','🙌','👏','🤔','😅','🥳','😴','🍣','🍱','🍜','🥢','🚀','⏰','📍','✅'];
 function escIa(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtHoraIa(iso){ try{ const d=new Date(iso); return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+function fmtDataSepIa(iso){
+  try{
+    const d = new Date(iso), hoje = new Date();
+    const mesmodia = d.toDateString()===hoje.toDateString();
+    const ontem = new Date(hoje); ontem.setDate(hoje.getDate()-1);
+    if(mesmodia) return 'Hoje';
+    if(d.toDateString()===ontem.toDateString()) return 'Ontem';
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }catch(e){ return ''; }
+}
 function openIaDuvida(){
   document.getElementById('ia-overlay').classList.add('open');
   document.getElementById('ia-drawer').classList.add('open');
@@ -1974,6 +2050,15 @@ function closeIaDuvida(){
   document.getElementById('ia-overlay').classList.remove('open');
   document.getElementById('ia-drawer').classList.remove('open');
   if(iaPollTimer){ clearInterval(iaPollTimer); iaPollTimer=null; }
+  document.getElementById('ia-emoji-panel').classList.remove('open');
+  if(iaGravando) toggleGravacaoIa(); // não deixa gravando escondido se fechar o chat
+}
+function atualizaHeaderIa(modo, digitando){
+  document.getElementById('ia-avatar').textContent = modo==='humano' ? '🧑‍🍳' : '🤖';
+  document.getElementById('ia-drawer-titulo').textContent = modo==='humano' ? 'Atendente Shogatsu' : 'Assistente Shogatsu';
+  const st = document.getElementById('ia-drawer-status');
+  if(digitando){ st.textContent = 'digitando...'; st.classList.add('wa-typing'); }
+  else { st.textContent = modo==='humano' ? 'atendimento humano' : 'assistente automático'; st.classList.remove('wa-typing'); }
 }
 async function garantirConversaIa(){
   iaConversaId = localStorage.getItem('shogatsu_conversa_ia');
@@ -1995,31 +2080,51 @@ async function garantirConversaIa(){
     iaConversaId = data.conversaId;
     localStorage.setItem('shogatsu_conversa_ia', iaConversaId);
     iaModoAtual = data.modo;
-    document.getElementById('ia-mensagens').innerHTML = '<div style="text-align:center;font-size:12px;color:var(--muted,#999);">Olá! Pergunte algo ou escolha uma das opções abaixo.</div>';
+    // v60 — BUG CORRIGIDO (ícone/título errado na caixa de mensagens): quando a IA está
+    // desligada, o servidor já cria a conversa direto em modo 'humano' (ver v57), mas o
+    // cabeçalho ficava travado no ícone/status padrão porque só era atualizado dentro de
+    // renderConversaIa() — nunca chamada nesse caminho (conversa nova). Agora reflete o modo
+    // real assim que a conversa é criada.
+    atualizaHeaderIa(iaModoAtual, false);
+    document.getElementById('ia-mensagens').innerHTML = `<div class="wa-sys">${iaModoAtual==='humano' ? 'Olá! Escreva sua mensagem que um atendente já vai te responder por aqui.' : 'Olá! Pergunte algo ou escolha uma das opções abaixo.'}</div>`;
     renderFaqRapidaIa();
+    // v60 — BUG CORRIGIDO (mensagem do atendente não chegava sozinha): o polling só era ligado
+    // no caminho de conversa JÁ EXISTENTE — numa conversa nova que já nasce em modo humano, o
+    // cliente só via a resposta se fechasse e reabrisse o chat. Agora liga o polling aqui também.
+    iniciarPollingIaSeNecessario();
   }catch(e){}
+}
+function renderBolhaIa(m){
+  if(m.de==='sistema') return `<div class="wa-sys">${escIa(m.texto)}</div>`;
+  const meu = m.de==='cliente';
+  let corpo = '';
+  if(m.tipo==='imagem') corpo += `<img class="wa-img" src="${escIa(m.url)}" alt="Foto enviada" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'wa-sys',textContent:'⚠️ Não foi possível carregar esta foto.'}))" onclick="window.open('${escIa(m.url)}','_blank')"/>`;
+  else if(m.tipo==='audio') corpo += `<audio class="wa-audio" controls src="${escIa(m.url)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'wa-sys',textContent:'⚠️ Não foi possível carregar este áudio.'}))"></audio>`;
+  if(m.texto) corpo += escIa(m.texto);
+  return `<div class="wa-row ${meu?'wa-out':'wa-in'}"><div class="wa-bubble">${corpo}<span class="wa-time">${fmtHoraIa(m.ts)}</span></div></div>`;
 }
 function renderConversaIa(conversa){
   iaModoAtual = conversa.modo;
-  document.getElementById('ia-drawer-titulo').textContent = conversa.modo==='humano' ? '🧑‍🍳 Falando com atendente' : '🤖 Tire sua dúvida';
+  const digitandoAtendente = conversa.atendenteDigitandoAte && conversa.atendenteDigitandoAte > Date.now();
+  atualizaHeaderIa(conversa.modo, digitandoAtendente);
   const el = document.getElementById('ia-mensagens');
-  el.innerHTML = conversa.mensagens.map(m=>{
-    if(m.de==='sistema') return `<div style="text-align:center;font-size:11px;color:var(--muted,#999);">${escIa(m.texto)}</div>`;
-    const meu = m.de==='cliente';
-    // v59: mensagem de voz enviada pelo atendente (gravada no painel) — toca com o player nativo
-    if(m.tipo==='audio' && m.audioData){
-      return `<div style="align-self:${meu?'flex-end':'flex-start'};background:${meu?'var(--gold,#c9a15a)':'rgba(120,120,120,.18)'};padding:6px 10px;border-radius:14px;max-width:80%;"><audio controls src="${m.audioData}" style="max-width:220px;height:34px;"></audio></div>`;
-    }
-    return `<div style="align-self:${meu?'flex-end':'flex-start'};background:${meu?'var(--gold,#c9a15a)':'rgba(120,120,120,.18)'};color:${meu?'#1a1a1a':'inherit'};padding:8px 12px;border-radius:14px;max-width:80%;font-size:13px;white-space:pre-wrap;">${escIa(m.texto)}</div>`;
-  }).join('');
-  el.scrollTop = el.scrollHeight;
+  const jaEstavaNoFim = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 60);
+  let html = '', ultimoDia = '';
+  (conversa.mensagens||[]).forEach(m=>{
+    const dia = fmtDataSepIa(m.ts);
+    if(dia && dia!==ultimoDia){ html += `<div class="wa-date-sep">${dia}</div>`; ultimoDia = dia; }
+    html += renderBolhaIa(m);
+  });
+  if(digitandoAtendente) html += `<div class="wa-typing-row"><span></span><span></span><span></span></div>`;
+  el.innerHTML = html || '<div class="wa-sys">Olá! Pergunte algo ou escolha uma das opções abaixo.</div>';
+  if(jaEstavaNoFim) el.scrollTop = el.scrollHeight;
 }
 function renderFaqRapidaIa(){
   const el = document.getElementById('ia-faq-rapida');
   if(!el) return;
   const faq = (cfg.ia && cfg.ia.faq) || [];
   if(!faq.length || iaModoAtual==='humano'){ el.innerHTML=''; return; }
-  el.innerHTML = faq.slice(0,6).map((f,i)=>`<button onclick="perguntarFaqRapida(${i})" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--border,#444);background:transparent;color:inherit;cursor:pointer;">${escIa(f.pergunta)}</button>`).join('');
+  el.innerHTML = faq.slice(0,6).map((f,i)=>`<button onclick="perguntarFaqRapida(${i})" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--border,#444);background:transparent;color:inherit;cursor:pointer;flex-shrink:0;">${escIa(f.pergunta)}</button>`).join('');
 }
 function perguntarFaqRapida(i){
   const faq = (cfg.ia && cfg.ia.faq) || [];
@@ -2027,25 +2132,107 @@ function perguntarFaqRapida(i){
   document.getElementById('ia-pergunta').value = faq[i].pergunta;
   enviarDuvidaIa();
 }
+// v60: indicador de "digitando..." — avisa o servidor (no máx. 1x a cada 2s, pra não floodar)
+// enquanto o cliente escreve; quem lê do outro lado (o painel) mostra isso pro atendente.
+function onDigitandoIa(){
+  if(!iaConversaId || iaModoAtual!=='humano') return;
+  const agora = Date.now();
+  if(agora - iaUltimoDigitandoEnviado < 2000) return;
+  iaUltimoDigitandoEnviado = agora;
+  fetch('/api/atendimento/'+iaConversaId+'/digitando', { method:'POST' }).catch(()=>{});
+}
+function toggleEmojiPanelIa(ev){
+  ev && ev.stopPropagation();
+  const panel = document.getElementById('ia-emoji-panel');
+  if(!panel.dataset.pronto){
+    panel.innerHTML = IA_EMOJIS.map(e=>`<button type="button" onclick="inserirEmojiIa('${e}')">${e}</button>`).join('');
+    panel.dataset.pronto = '1';
+  }
+  panel.classList.toggle('open');
+}
+function inserirEmojiIa(emoji){
+  const campo = document.getElementById('ia-pergunta');
+  campo.value += emoji;
+  campo.focus();
+}
+document.addEventListener('click', (ev)=>{
+  const panel = document.getElementById('ia-emoji-panel');
+  if(panel && panel.classList.contains('open') && !panel.contains(ev.target) && ev.target.id!=='ia-emoji-btn') panel.classList.remove('open');
+});
 async function enviarDuvidaIa(){
   const campo = document.getElementById('ia-pergunta');
   const texto = campo.value.trim();
   if(!texto || !iaConversaId) return;
   campo.value='';
+  await enviarMensagemIa({ texto });
+}
+// v60: anexo de foto — sobe pra /api/atendimento/:id/upload (rota pública própria do chat,
+// sem exigir login) e depois manda a mensagem já com a URL da foto.
+async function enviarAnexoIa(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if(!file || !iaConversaId) return;
+  if(file.size > 3*1024*1024){ alert('Foto muito grande (máx. 3MB).'); return; }
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      const up = await fetch('/api/atendimento/'+iaConversaId+'/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dataUrl: reader.result }) });
+      const upData = await up.json();
+      if(!up.ok) throw new Error(upData.error || 'Falha ao enviar foto.');
+      await enviarMensagemIa({ tipo:'imagem', url: upData.url, texto:'' });
+    }catch(e){ alert(e.message || 'Não consegui enviar a foto.'); }
+  };
+  reader.readAsDataURL(file);
+}
+// v60: mensagem de voz — grava com MediaRecorder, sobe o áudio e manda como mensagem tipo 'audio'.
+async function toggleGravacaoIa(){
+  const btn = document.getElementById('ia-mic-btn');
+  if(iaGravando){
+    iaGravador && iaGravador.state!=='inactive' && iaGravador.stop();
+    iaGravando = false; btn.classList.remove('wa-recording');
+    return;
+  }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ alert('Seu navegador não permite gravar áudio aqui.'); return; }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    iaGravadorChunks = [];
+    iaGravador = new MediaRecorder(stream);
+    iaGravador.ondataavailable = e => { if(e.data.size>0) iaGravadorChunks.push(e.data); };
+    iaGravador.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob = new Blob(iaGravadorChunks, { type: iaGravador.mimeType || 'audio/webm' });
+      if(blob.size > 5*1024*1024){ alert('Áudio muito grande — grave uma mensagem mais curta.'); return; }
+      const reader = new FileReader();
+      reader.onload = async ()=>{
+        try{
+          const up = await fetch('/api/atendimento/'+iaConversaId+'/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dataUrl: reader.result }) });
+          const upData = await up.json();
+          if(!up.ok) throw new Error(upData.error || 'Falha ao enviar áudio.');
+          await enviarMensagemIa({ tipo:'audio', url: upData.url, texto:'' });
+        }catch(e){ alert(e.message || 'Não consegui enviar o áudio.'); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    iaGravador.start();
+    iaGravando = true; btn.classList.add('wa-recording');
+  }catch(e){ alert('Não consegui acessar o microfone — verifique a permissão do navegador.'); }
+}
+async function enviarMensagemIa(payload){
+  if(!iaConversaId) return;
   const btn = document.getElementById('ia-perguntar-btn');
   btn.disabled = true;
   const el = document.getElementById('ia-mensagens');
-  el.insertAdjacentHTML('beforeend', `<div style="align-self:flex-end;background:var(--gold,#c9a15a);color:#1a1a1a;padding:8px 12px;border-radius:14px;max-width:80%;font-size:13px;">${escIa(texto)}</div>`);
+  el.insertAdjacentHTML('beforeend', renderBolhaIa({ de:'cliente', ts:new Date().toISOString(), ...payload }));
   el.scrollTop = el.scrollHeight;
   try{
-    const r = await fetch('/api/atendimento/'+iaConversaId+'/mensagem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ texto }) });
+    const r = await fetch('/api/atendimento/'+iaConversaId+'/mensagem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const data = await r.json();
     if(!r.ok) throw new Error(data.error || 'Não consegui enviar.');
     renderConversaIa(data.conversa);
     renderFaqRapidaIa();
     iniciarPollingIaSeNecessario();
   }catch(e){
-    el.insertAdjacentHTML('beforeend', `<div style="text-align:center;font-size:11px;color:#c0392b;">⚠️ ${escIa(e.message || 'Não consegui responder agora, tenta o WhatsApp.')}</div>`);
+    el.insertAdjacentHTML('beforeend', `<div class="wa-sys" style="color:#c0392b;">⚠️ ${escIa(e.message || 'Não consegui enviar agora, tenta o WhatsApp.')}</div>`);
   }finally{
     btn.disabled = false;
   }

@@ -115,7 +115,6 @@ function renderReady(order){
       <div><b>Cliente:</b> ${esc(order.name || '—')}</div>
       ${order.phone ? `<div><b>Telefone:</b> <a href="tel:${esc(order.phone)}">${esc(order.phone)}</a></div>` : ''}
       ${order.address ? `<div><b>Endereço:</b> ${esc(order.address)}</div>` : ''}
-      ${order.deliveryWindow ? `<div><b>${order.mode === 'delivery' ? 'Previsão de entrega' : 'Previsão de retirada'}:</b> <span style="color:#c9a84c;font-weight:700;">${esc(order.deliveryWindow)}</span></div>` : ''}
       ${order.obs ? `<div><b>Obs:</b> ${esc(order.obs)}</div>` : ''}
     </div>
     <button class="btn btn-primary" id="btn-share">📍 Compartilhar minha localização</button>
