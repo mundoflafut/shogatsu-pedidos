@@ -166,25 +166,36 @@ function printStationTicket(printer, order, station, storeName) {
 // v55: agora escolhe AUTOMATICAMENTE qual impressora física usar (USB, Rede 1, Rede 2...)
 // de acordo com qual delas cuida dessa via — cada comanda sai na impressora certa, no
 // local certo, mesmo com várias impressoras diferentes no mesmo agente.
+// v60: avisa o servidor se a impressão dessa via deu certo ou não — é isso que faz o aviso
+// "🖨 Impresso!"/"⚠️ Falhou" aparecer de volta em quem clicou em Imprimir, mesmo de outro
+// aparelho (celular usado como controle remoto pro PC ligado na impressora). Se essa chamada
+// falhar (sem internet, servidor fora do ar), o agente já registrou tudo no log local — não
+// tenta de novo pra não atrasar a próxima impressão.
+async function reportPrintResult(order, station, ok, error) {
+  try {
+    await request('POST', `${cfg.serverUrl}/api/print-ack`, { orderId: order.id, station, ok, error: error || null });
+  } catch (e) { log(`⚠️  Não consegui avisar o servidor sobre o resultado da via "${station}" (${ok ? 'sucesso' : 'falha'}): ${e.message}`); }
+}
+
 async function printSingleStation(order, station) {
   const printerCfg = printerForStation(station);
-  if (!printerCfg) { log(`⚠️  Nenhuma impressora configurada pra via "${station}" — nada impresso (confira "printers" no config.json).`); return false; }
+  if (!printerCfg) { const msg = `Nenhuma impressora configurada pra via "${station}"`; log(`⚠️  ${msg} — nada impresso (confira "printers" no config.json).`); return { ok:false, error: msg }; }
   if (TEST_MODE) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} na via: ${station} (impressora: ${printerCfg.label})`);
-    return true;
+    return { ok:true };
   }
   const printer = buildPrinter(printerCfg);
   try {
     const connected = await printer.isPrinterConnected();
     if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
     const hadItems = printStationTicket(printer, order, station, cfg.storeName);
-    if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return false; }
+    if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return { ok:true, skipped:true }; }
     await printer.execute();
     log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso na impressora "${printerCfg.label}".`);
-    return true;
+    return { ok:true };
   } catch (err) {
     log(`❌ Falha ao imprimir pedido ${order.id} (via "${station}", impressora "${printerCfg.label}"): ${err.message}`);
-    return false;
+    return { ok:false, error: err.message };
   }
 }
 
@@ -199,8 +210,8 @@ async function printOrder(order) {
   }
   let anyPrinted = false;
   for (const station of MY_STATIONS) {
-    const printed = await printSingleStation(order, station);
-    if (printed) anyPrinted = true;
+    const r = await printSingleStation(order, station);
+    if (r.ok && !r.skipped) anyPrinted = true;
   }
   return anyPrinted;
 }
@@ -210,10 +221,14 @@ async function printOrder(order) {
 // servidor só repassa o pedido por SSE e este agente (ligado na impressora física) executa.
 // Só imprime se a via pedida for uma das que ESTE agente cuida (evita duplicar quando tem
 // mais de um agente rodando, cada um numa impressora/estação diferente).
+// v60: agora também avisa o servidor do resultado (sucesso/falha) — é o que fecha o ciclo do
+// "celular como controle remoto": tocou em Imprimir no celular, o PC imprime, e a confirmação
+// (ou o erro) volta pra tela de quem clicou, em tempo real.
 async function printOnDemand(order, station) {
   if (!MY_STATIONS.includes(station)) return;
   log(`🖨️  Impressão sob demanda pedida pra via "${station}" — pedido ${order.id} (${order.name || 'sem nome'}).`);
-  await printSingleStation(order, station);
+  const r = await printSingleStation(order, station);
+  await reportPrintResult(order, station, r.ok, r.error);
 }
 
 // v46: teste de impressão pedido pelo painel ("🖨 Testar" numa via com método Automática) —
