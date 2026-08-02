@@ -2177,17 +2177,20 @@ function toggleTheme(){
 
 async function apiGet(path){
   const r = await fetch(path, { headers: authHeaders() });
-  if(r.status===401){ doLogout(); throw new Error('unauthorized'); }
+  // v66: só desloga/recarrega em resposta a um 401 se já EXISTIA uma sessão (token) — evita
+  // qualquer chamada feita antes do login (por engano, de um polling, etc.) derrubar a tela
+  // de login sozinha. Sem token, é só um "sem permissão" esperado, não uma sessão que expirou.
+  if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
   return r.json();
 }
 async function apiPost(path, body){
   const r = await fetch(path, { method:'POST', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body||{}) });
-  if(r.status===401){ doLogout(); throw new Error('unauthorized'); }
+  if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
   return { ok:r.ok, status:r.status, data: await r.json() };
 }
 async function apiPatch(path, body){
   const r = await fetch(path, { method:'PATCH', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body||{}) });
-  if(r.status===401){ doLogout(); throw new Error('unauthorized'); }
+  if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
   return { ok:r.ok, status:r.status, data: await r.json() };
 }
 
@@ -5509,6 +5512,16 @@ function fmtDataSepAdmin(iso){
 async function loadAtendimentoConversas(){
   const el = document.getElementById('wa-admin-list');
   if(!el) return;
+  // v66 — BUG CORRIGIDO (causa real do "login fica atualizando e apaga tudo"): o elemento
+  // #wa-admin-list já existe no HTML desde o carregamento da página (só fica escondido atrás
+  // da tela de login), então o `if(!el) return;` acima nunca impedia nada. Como
+  // iniciarPollingAtendimento() já começa a rodar sozinho assim que o script carrega — antes
+  // de qualquer login —, a cada 5s essa função tentava buscar as conversas SEM estar logado.
+  // O servidor respondia 401, e apiGet() reage a 401 chamando doLogout(), que faz
+  // location.reload() — recarregando a tela de login (e apagando usuário/senha digitados) a
+  // cada 5 segundos, pra sempre, enquanto ninguém estivesse logado. Agora, sem token salvo,
+  // nem tenta: só busca as conversas depois que existe uma sessão válida.
+  if(!token) return;
   let data;
   try{ data = await apiGet('/api/admin/atendimento'); }catch(e){ return; }
   conversasAdminCache = (data?.conversas || []).slice().sort((a,b)=> new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade));
