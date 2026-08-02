@@ -246,6 +246,11 @@ const DEFAULT_CFG = {
   // ── v47: Splash Screen Premium — sequência de fotos em tela cheia ao abrir o app, com
   // animação suave (zoom/fade/parallax), configurável pelo painel (Configurações → Splash). ──
   splash: { enabled: false, durationSeconds: 3, transition: 'zoom', photos: [] },
+  // ── v67: Fundo do Chat (Chat Express) — igual ao "papel de parede" do WhatsApp, mas pra
+  // conversa do chat de atendimento do cliente. `url` pode ser um upload próprio (/uploads/...)
+  // ou uma das fotos prontas da galeria (/images/chat-backgrounds/...). `overlay` é a opacidade
+  // (0 a 1) do escurecido aplicado por cima da foto pra manter o texto das mensagens legível.
+  chatBackground: { enabled: false, url: '', name: '', size: 0, width: 0, height: 0, date: '', overlay: 0.45 },
   // ── Cardápio do Rodízio Popular (página pública cardapio-rodizio-popular.html) — v39:
   // antes esses dados ficavam fixos dentro do próprio HTML; agora vêm daqui, editáveis pela
   // aba "🔗 QR Code & Links" do painel, sem precisar mexer em nenhum arquivo.
@@ -438,6 +443,39 @@ async function restoreUploadsFromSupabase() {
     if (restauradas) console.log(`   ✓ ${restauradas} foto(s) restaurada(s) do Supabase pra uploads/`);
   } catch (err) { console.error('   ⚠️  Não consegui restaurar fotos do Supabase:', err.message); }
 }
+// v67 — Fundo do Chat: lê largura/altura da imagem direto dos bytes (sem depender de nenhuma
+// biblioteca externa — o projeto é 100% vanilla Node). Cobre PNG, JPEG e WEBP (os 3 formatos
+// aceitos pelo upload). Se não conseguir entender o cabeçalho, devolve 0x0 sem quebrar o upload —
+// largura/altura aqui são só informativas pro painel, não afetam a exibição (que usa cover).
+function getImageDimensions(buffer, ext) {
+  try {
+    if (ext === 'png' && buffer.length >= 24 && buffer.toString('hex', 0, 8) === '89504e470d0a1a0a') {
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+    if ((ext === 'jpg' || ext === 'jpeg') && buffer[0] === 0xFF && buffer[1] === 0xD8) {
+      let i = 2;
+      while (i + 9 < buffer.length) {
+        if (buffer[i] !== 0xFF) { i++; continue; }
+        const marker = buffer[i + 1];
+        // SOF0..SOF15 (exceto DHT/JPG/DAC) carregam as dimensões reais do quadro
+        if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+          return { height: buffer.readUInt16BE(i + 5), width: buffer.readUInt16BE(i + 7) };
+        }
+        if (marker === 0xD8 || marker === 0x01 || (marker >= 0xD0 && marker <= 0xD9)) { i += 2; continue; }
+        const len = buffer.readUInt16BE(i + 2);
+        i += 2 + len;
+      }
+    }
+    if (ext === 'webp' && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+      const fmt = buffer.toString('ascii', 12, 16);
+      if (fmt === 'VP8 ') return { width: buffer.readUInt16LE(26) & 0x3FFF, height: buffer.readUInt16LE(28) & 0x3FFF };
+      if (fmt === 'VP8L') { const b = buffer.readUInt32LE(21); return { width: (b & 0x3FFF) + 1, height: ((b >> 14) & 0x3FFF) + 1 }; }
+      if (fmt === 'VP8X') return { width: buffer.readUIntLE(24, 3) + 1, height: buffer.readUIntLE(27, 3) + 1 };
+    }
+  } catch (e) { /* cabeçalho fora do esperado — segue com 0x0 */ }
+  return { width: 0, height: 0 };
+}
+
 // Usa sempre o horário de Brasília, independente de em qual fuso o servidor
 // esteja rodando de verdade (isso evita o bug clássico de "abriu 3h errado"
 // quando o servidor roda em UTC, como costuma acontecer em hospedagem na nuvem).
@@ -503,7 +541,8 @@ function readConfig() {
     reservations: { ...DEFAULT_CFG.reservations, ...(data.cfg.reservations || {}) },
     scheduling: { ...DEFAULT_CFG.scheduling, ...(data.cfg.scheduling || {}) },
     rodizioPopular: { ...DEFAULT_CFG.rodizioPopular, ...(data.cfg.rodizioPopular || {}) },
-    splash: { ...DEFAULT_CFG.splash, ...(data.cfg.splash || {}), photos: Array.isArray(data.cfg.splash && data.cfg.splash.photos) ? data.cfg.splash.photos : DEFAULT_CFG.splash.photos }
+    splash: { ...DEFAULT_CFG.splash, ...(data.cfg.splash || {}), photos: Array.isArray(data.cfg.splash && data.cfg.splash.photos) ? data.cfg.splash.photos : DEFAULT_CFG.splash.photos },
+    chatBackground: { ...DEFAULT_CFG.chatBackground, ...(data.cfg.chatBackground || {}) }
   };
   // Se a auto-programação de horário estiver ativada, o status aberto/fechado
   // passa a ser calculado sozinho a partir do horário configurado — o toggle
@@ -1194,7 +1233,10 @@ function serveStatic(req, res, pathname) {
     return fs.readFile(uploadPath, (err, data) => {
       if (err) { res.writeHead(404); return res.end('Not found'); }
       const ext = path.extname(uploadPath);
-      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+      // v67: nome do arquivo é um hash aleatório (nunca reaproveitado numa troca de foto — ver
+      // /api/chat/background), então dá pra cachear pesado no navegador sem risco de foto trocada
+      // "grudar" em cache velho — ajuda a manter o fundo do chat rápido/sem recarregar toda hora.
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'public, max-age=31536000, immutable' });
       res.end(data);
     });
   }
@@ -1293,7 +1335,8 @@ const server = http.createServer(async (req, res) => {
             ...current.cfg.splash,
             ...(body.cfg && body.cfg.splash || {}),
             photos: Array.isArray(body.cfg && body.cfg.splash && body.cfg.splash.photos) ? body.cfg.splash.photos : current.cfg.splash.photos
-          }
+          },
+          chatBackground: { ...current.cfg.chatBackground, ...(body.cfg && body.cfg.chatBackground || {}) }
         },
         menu: normalizeMenu(menuBeforeNormalize, validStationKeys, (body.cfg && body.cfg.defaultStation) || current.cfg.defaultStation)
       };
@@ -1787,6 +1830,99 @@ const server = http.createServer(async (req, res) => {
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       if (mImg) syncUploadToSupabase(filename, buffer, ext); // v60: só imagens fazem backup (vídeo é grande demais)
       return sendJSON(res, 200, { url: '/uploads/' + filename });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // v67 — FUNDO DO CHAT (Chat Express): Configurações → Aparência → Fundo do Chat.
+  // Deixa o restaurante colocar uma foto de fundo nas conversas do chat que o cliente vê
+  // (igual ao "papel de parede" do WhatsApp). Guarda tudo dentro de cfg.chatBackground —
+  // sincroniza sozinho em qualquer aparelho porque já viaja junto no GET /api/config normal.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // ── GET /api/chat/background — devolve o fundo atual (não tem segredo nenhum aqui dentro,
+  // então fica público — tanto o painel quanto o cardápio do cliente podem chamar direto). ──
+  if (pathname === '/api/chat/background' && req.method === 'GET') {
+    const { cfg } = readConfig();
+    return sendJSON(res, 200, { chatBackground: cfg.chatBackground });
+  }
+
+  // ── POST /api/chat/background — envia uma foto nova, escolhe uma da galeria pronta, ou só
+  // ativa/desativa e ajusta o escurecido sem trocar a imagem (manda só { enabled } / { overlay }). ──
+  if (pathname === '/api/chat/background' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra alterar o fundo do chat.' });
+    try {
+      const { dataUrl, presetUrl, presetName, enabled, overlay } = await readBody(req, 8e6);
+      const current = readConfig();
+      const prevBg = current.cfg.chatBackground || DEFAULT_CFG.chatBackground;
+      let next = { ...prevBg };
+
+      if (dataUrl) {
+        // Upload de imagem própria — só aceita PNG/JPG/WEBP, até 5MB (igual ao limite do card).
+        const mImg = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl);
+        if (!mImg) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG ou WEBP.' });
+        let ext = mImg[1].toLowerCase();
+        if (ext === 'jpeg') ext = 'jpg';
+        const buffer = Buffer.from(mImg[2], 'base64');
+        if (buffer.length > 5 * 1024 * 1024) return sendJSON(res, 400, { error: 'Imagem muito grande (máx. 5MB).' });
+        const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+        syncUploadToSupabase(filename, buffer, ext);
+        // Se o fundo anterior era um upload nosso (não uma foto da galeria), apaga o arquivo
+        // antigo do disco — senão fica lixo acumulando em uploads/ a cada troca de foto.
+        if (prevBg.url && prevBg.url.startsWith('/uploads/')) {
+          const oldPath = path.join(UPLOADS_DIR, prevBg.url.slice('/uploads/'.length));
+          fs.unlink(oldPath, () => {}); // silencioso — se já não existir, tudo bem
+        }
+        const { width, height } = getImageDimensions(buffer, ext);
+        next = {
+          enabled: true, url: '/uploads/' + filename, name: 'Foto personalizada',
+          size: buffer.length, width, height, date: new Date().toISOString(),
+          overlay: (typeof prevBg.overlay === 'number') ? prevBg.overlay : 0.45
+        };
+      } else if (presetUrl) {
+        // Escolheu uma foto pronta da galeria — não mexe em arquivo nenhum, só troca a URL.
+        if (prevBg.url && prevBg.url.startsWith('/uploads/')) {
+          const oldPath = path.join(UPLOADS_DIR, prevBg.url.slice('/uploads/'.length));
+          fs.unlink(oldPath, () => {});
+        }
+        next = {
+          enabled: true, url: String(presetUrl), name: String(presetName || 'Fundo da galeria'),
+          size: 0, width: 0, height: 0, date: new Date().toISOString(),
+          overlay: (typeof prevBg.overlay === 'number') ? prevBg.overlay : 0.45
+        };
+      }
+
+      // { enabled } e/ou { overlay } podem vir junto (troca de imagem) ou sozinhos (só ligar/
+      // desligar o fundo, ou só ajustar a opacidade do escurecido, sem mexer na foto).
+      if (typeof enabled === 'boolean') next.enabled = enabled;
+      if (typeof overlay === 'number' && overlay >= 0 && overlay <= 1) next.overlay = overlay;
+      if (next.enabled && !next.url) return sendJSON(res, 400, { error: 'Envie uma imagem ou escolha uma da galeria antes de ativar.' });
+
+      const merged = { cfg: { ...current.cfg, chatBackground: next }, menu: current.menu };
+      writeJSON(CONFIG_FILE, merged);
+      broadcast('config-updated', {});
+      publicBroadcast('menu-updated', {}); // reaproveita o mesmo aviso que o cardápio já escuta pra recarregar config
+      return sendJSON(res, 200, { ok: true, chatBackground: next });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── DELETE /api/chat/background — remove a foto e volta pro fundo padrão. ──
+  if (pathname === '/api/chat/background' && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra alterar o fundo do chat.' });
+    try {
+      const current = readConfig();
+      const prevBg = current.cfg.chatBackground || DEFAULT_CFG.chatBackground;
+      if (prevBg.url && prevBg.url.startsWith('/uploads/')) {
+        const oldPath = path.join(UPLOADS_DIR, prevBg.url.slice('/uploads/'.length));
+        fs.unlink(oldPath, () => {});
+      }
+      const reset = { ...DEFAULT_CFG.chatBackground };
+      const merged = { cfg: { ...current.cfg, chatBackground: reset }, menu: current.menu };
+      writeJSON(CONFIG_FILE, merged);
+      broadcast('config-updated', {});
+      publicBroadcast('menu-updated', {});
+      return sendJSON(res, 200, { ok: true, chatBackground: reset });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
