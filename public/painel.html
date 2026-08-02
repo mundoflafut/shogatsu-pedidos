@@ -535,12 +535,17 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
 .wa-typing-row span:nth-child(2){animation-delay:.15s;}
 .wa-typing-row span:nth-child(3){animation-delay:.3s;}
 @keyframes waTypingBounce{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
-.wa-footer{display:flex;align-items:flex-end;gap:4px;padding:8px 10px;border-top:1px solid var(--border);background:var(--panel);flex-shrink:0;position:relative;}
-.wa-icon-btn{background:none;border:none;color:var(--muted);width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;border-radius:50%;cursor:pointer;transition:background .15s,color .15s;}
+.wa-footer{display:flex;align-items:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--panel);flex-shrink:0;position:relative;}
+.wa-icon-btn{background:none;border:none;color:var(--muted);width:38px;height:38px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:19px;border-radius:50%;cursor:pointer;transition:background .15s,color .15s;}
 .wa-icon-btn:hover{color:var(--gold);background:var(--gold-bg,rgba(201,168,76,.1));}
 .wa-icon-btn.wa-recording{color:#e05353;background:rgba(224,83,83,.12);}
-.wa-footer textarea{flex:1;border-radius:18px;padding:8px 14px;font-size:13px;box-sizing:border-box;resize:none;max-height:80px;border:1px solid var(--border);background:var(--card);color:var(--white);font-family:inherit;}
-.wa-send-btn{width:36px;height:36px;flex-shrink:0;border-radius:50%;background:var(--gold);color:#1a1a1a;border:none;font-size:15px;cursor:pointer;}
+.wa-icon-btn.wa-muted{color:#e05353;}
+/* v61 — BUG CORRIGIDO: a caixa de digitar era pequena demais (13px, sem altura mínima), bem
+   menor que a do WhatsApp de verdade. Agora tem altura mínima confortável, fonte maior e
+   cresce até um teto mais generoso, igual ao print que veio de referência. */
+.wa-footer textarea{flex:1;border-radius:22px;padding:11px 16px;font-size:14.5px;line-height:1.35;box-sizing:border-box;resize:none;min-height:44px;max-height:130px;border:1px solid var(--border);background:var(--card);color:var(--white);font-family:inherit;}
+.wa-footer textarea:focus{border-color:var(--gold);outline:none;}
+.wa-send-btn{width:42px;height:42px;flex-shrink:0;border-radius:50%;background:var(--gold);color:#1a1a1a;border:none;font-size:17px;cursor:pointer;}
 .wa-emoji-panel{position:absolute;bottom:50px;left:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;display:none;grid-template-columns:repeat(7,1fr);gap:2px;box-shadow:0 4px 16px rgba(0,0,0,.35);z-index:5;max-width:270px;}
 .wa-emoji-panel.open{display:grid;}
 .wa-emoji-panel button{background:none;border:none;font-size:18px;padding:4px;border-radius:6px;line-height:1;cursor:pointer;}
@@ -1273,10 +1278,15 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
 
         <div class="settings-card" style="grid-column:1/-1;padding-bottom:0;">
-          <div class="settings-card-title">💬 Conversas com Clientes</div>
+          <div class="settings-card-title" style="display:flex;align-items:center;gap:8px;">
+            <img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:cover;"/>
+            Chat Express
+          </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Quando um cliente toca em "Falar com atendente" no chat do cardápio, a conversa aparece
-            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos.
+            aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos. Toca um aviso
+            sonoro quando chega mensagem nova ou quando um cliente pede pra falar com atendente —
+            dá pra silenciar cada conversa individualmente pelo ícone 🔔 no topo do chat.
           </div>
           <div class="wa-admin-wrap" id="wa-admin-wrap">
             <div class="wa-admin-list" id="wa-admin-list"></div>
@@ -1290,6 +1300,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
                     <div class="wa-header-name" id="wa-admin-nome">Cliente</div>
                     <div class="wa-header-status" id="wa-admin-status">—</div>
                   </div>
+                  <button type="button" class="wa-icon-btn" id="wa-admin-mute-btn" onclick="toggleMuteConversaAdmin()" title="Silenciar aviso sonoro desta conversa">🔔</button>
                 </div>
                 <div class="wa-messages" id="wa-admin-messages"></div>
                 <div class="wa-footer">
@@ -5412,6 +5423,62 @@ let conversaAdminAtivaId = null;
 let adminUltimoDigitandoEnviado = 0;
 let adminGravador = null, adminGravadorChunks = [], adminGravando = false;
 const ADMIN_EMOJIS = ['😀','😂','😍','👍','🙏','🎉','😢','😮','❤️','🔥','🙌','👏','🤔','😅','🥳','😴','🍣','🍱','🍜','🥢','🚀','⏰','📍','✅'];
+// v61: ícone oficial do Chat Express, usado no lugar do emoji 🤖 nos avatares de modo automático
+const CHAT_EXPRESS_ICON = '/icons/chat-express-icon.png';
+function waAvatarHTML(modoHumano){
+  return modoHumano ? '🧑' : `<img src="${CHAT_EXPRESS_ICON}" alt="Chat Express" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"/>`;
+}
+// v61: avisos sonoros (enviar / receber / cliente chamando o atendente) — gerados na hora com
+// Web Audio API, sem precisar de nenhum arquivo de áudio externo. Cada conversa pode ser
+// silenciada individualmente (botão 🔔/🔕 no topo do chat), guardado neste navegador.
+let atdMutedIds = [];
+try{ atdMutedIds = JSON.parse(localStorage.getItem('shog_chat_muted')||'[]'); }catch(e){ atdMutedIds = []; }
+function atdIsMuted(id){ return atdMutedIds.includes(id); }
+function toggleMuteConversaAdmin(){
+  if(!conversaAdminAtivaId) return;
+  const id = conversaAdminAtivaId;
+  if(atdIsMuted(id)) atdMutedIds = atdMutedIds.filter(x=>x!==id);
+  else atdMutedIds.push(id);
+  try{ localStorage.setItem('shog_chat_muted', JSON.stringify(atdMutedIds)); }catch(e){}
+  atualizarBotaoMuteAdmin();
+  loadAtendimentoConversas();
+}
+function atualizarBotaoMuteAdmin(){
+  const btn = document.getElementById('wa-admin-mute-btn');
+  if(!btn || !conversaAdminAtivaId) return;
+  const muted = atdIsMuted(conversaAdminAtivaId);
+  btn.textContent = muted ? '🔕' : '🔔';
+  btn.classList.toggle('wa-muted', muted);
+  btn.title = muted ? 'Silenciado — clique pra ouvir avisos desta conversa de novo' : 'Silenciar aviso sonoro desta conversa';
+}
+let audioCtxChatExpress = null;
+function atdBeep(freq, durMs, delayMs, volume){
+  try{
+    if(!audioCtxChatExpress) audioCtxChatExpress = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = audioCtxChatExpress;
+    const t0 = ctx.currentTime + (delayMs||0)/1000;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(volume!=null?volume:0.18, t0+0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0+durMs/1000);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0); osc.stop(t0+durMs/1000+0.02);
+  }catch(e){ /* navegador sem suporte a áudio — ignora silenciosamente */ }
+}
+// v61: três "assinaturas" sonoras diferentes, pra dar pra distinguir de ouvido sem olhar a tela
+function playChatSound(kind, convId){
+  if(convId && atdIsMuted(convId)) return;
+  if(kind==='enviar') atdBeep(880, 0.09, 0);
+  else if(kind==='receber'){ atdBeep(660, 0.10, 0); atdBeep(880, 0.10, 90); }
+  else if(kind==='chamar'){ atdBeep(523, 0.14, 0); atdBeep(659, 0.14, 130); atdBeep(784, 0.18, 260); }
+}
+// guarda o "retrato" da última rodada de polling pra saber o que mudou (mensagem nova, cliente
+// chamando o atendente) e decidir se toca aviso sonoro — sem isso, toda atualização de tela
+// tocaria som de novo, mesmo sem nada de fato ter mudado.
+let atdSnapshotAnterior = {};
 function fmtHoraAdmin(iso){ try{ return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function fmtDataSepAdmin(iso){
   try{
@@ -5427,6 +5494,22 @@ async function loadAtendimentoConversas(){
   let data;
   try{ data = await apiGet('/api/admin/atendimento'); }catch(e){ return; }
   conversasAdminCache = (data?.conversas || []).slice().sort((a,b)=> new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade));
+  // v61: compara com a rodada anterior de polling pra saber se chegou mensagem nova de cliente,
+  // ou se um cliente acabou de pedir pra falar com atendente — só nesses casos toca um aviso
+  // sonoro (senão tocaria a cada 5s à toa, mesmo sem nada de novo).
+  conversasAdminCache.forEach(c=>{
+    const antes = atdSnapshotAnterior[c.id];
+    const qtdMsgAntes = antes ? antes.qtdMsg : c.mensagens.length;
+    const chamandoAntes = antes ? antes.chamando : (c.modo==='humano' && c.naoLidaAtendente);
+    const chamandoAgora = c.modo==='humano' && c.naoLidaAtendente;
+    if(antes){
+      const ultima = c.mensagens[c.mensagens.length-1];
+      const chegouMsgNova = c.mensagens.length > qtdMsgAntes && ultima && ultima.de==='cliente';
+      if(!chamandoAntes && chamandoAgora) playChatSound('chamar', c.id);
+      else if(chegouMsgNova) playChatSound('receber', c.id);
+    }
+    atdSnapshotAnterior[c.id] = { qtdMsg: c.mensagens.length, chamando: chamandoAgora };
+  });
   if(!conversasAdminCache.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:14px;">Nenhuma conversa ainda.</div>'; }
   else {
     el.innerHTML = conversasAdminCache.map(c=>{
@@ -5434,10 +5517,10 @@ async function loadAtendimentoConversas(){
       const precisaResposta = c.modo==='humano' && c.naoLidaAtendente;
       const snippet = ultima ? (ultima.tipo==='imagem' ? '📷 Foto' : ultima.tipo==='audio' ? '🎤 Áudio' : esc(ultima.texto)) : '';
       return `<div class="wa-admin-item ${c.id===conversaAdminAtivaId?'active':''}" onclick="abrirConversaAdmin('${c.id}')">
-        <div class="wa-avatar">${c.modo==='humano'?'🧑':'🤖'}</div>
+        <div class="wa-avatar">${waAvatarHTML(c.modo==='humano')}</div>
         <div class="wa-admin-item-body">
           <div class="wa-admin-item-top">
-            <span class="wa-admin-item-name">${c.nomeCliente ? esc(c.nomeCliente) : 'Cliente '+c.id.slice(0,5)}</span>
+            <span class="wa-admin-item-name">${c.nomeCliente ? esc(c.nomeCliente) : 'Cliente '+c.id.slice(0,5)}${atdIsMuted(c.id)?' 🔕':''}</span>
             <span class="wa-admin-item-time">${new Date(c.ultimaAtividade).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
@@ -5461,6 +5544,7 @@ function abrirConversaAdmin(id){
   document.getElementById('wa-admin-chat-active').style.display = 'flex';
   const c = conversasAdminCache.find(x=>x.id===id);
   if(c){ c.naoLidaAtendente = false; renderConversaAdmin(c); }
+  atualizarBotaoMuteAdmin();
   loadAtendimentoConversas(); // atualiza destaque na lista
   document.getElementById('wa-admin-input').focus();
 }
@@ -5485,8 +5569,14 @@ function renderConversaAdmin(c){
   const st = document.getElementById('wa-admin-status');
   if(digitandoCliente){ st.textContent = 'digitando...'; st.classList.add('wa-typing'); }
   else { st.textContent = c.modo==='humano' ? 'atendimento humano' : 'com o assistente automático'; st.classList.remove('wa-typing'); }
-  document.getElementById('wa-admin-avatar').textContent = c.modo==='humano' ? '🧑' : '🤖';
+  document.getElementById('wa-admin-avatar').innerHTML = waAvatarHTML(c.modo==='humano');
   const el = document.getElementById('wa-admin-messages');
+  // v61 — BUG CORRIGIDO: antes o polling de 5s recriava TODA a lista de mensagens sempre, o que
+  // interrompia um áudio que estivesse tocando no meio da escuta (o player reiniciava sozinho).
+  // Agora, se algum áudio dessa conversa estiver tocando, pula a atualização dessa rodada — a
+  // conversa se atualiza normalmente assim que o áudio terminar ou pausar.
+  const tocandoAudio = [...el.querySelectorAll('audio')].some(a=>!a.paused);
+  if(tocandoAudio) return;
   const jaEstavaNoFim = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 60);
   let html = '', ultimoDia = '';
   (c.mensagens||[]).forEach(m=>{
@@ -5530,21 +5620,21 @@ async function responderAtendimentoAtivo(){
   if(!texto) return;
   input.value='';
   const res = await apiPost('/api/admin/atendimento/'+conversaAdminAtivaId+'/responder', { texto });
-  if(res.ok) renderConversaAdmin(res.data.conversa);
+  if(res.ok){ renderConversaAdmin(res.data.conversa); playChatSound('enviar', conversaAdminAtivaId); }
   loadAtendimentoConversas();
 }
 async function enviarAnexoAdmin(input){
   const file = input.files && input.files[0];
   input.value = '';
   if(!file || !conversaAdminAtivaId) return;
-  if(file.size > 4*1024*1024){ alert('Foto muito grande (máx. 4MB).'); return; }
+  if(file.size > 5*1024*1024){ alert('Foto muito grande (máx. 5MB).'); return; }
   const reader = new FileReader();
   reader.onload = async ()=>{
     try{
       const up = await apiPost('/api/admin/atendimento/'+conversaAdminAtivaId+'/upload', { dataUrl: reader.result });
       if(!up.ok) throw new Error(up.data?.error || 'Falha ao enviar foto.');
       const res = await apiPost('/api/admin/atendimento/'+conversaAdminAtivaId+'/responder', { tipo:'imagem', url: up.data.url, texto:'' });
-      if(res.ok) renderConversaAdmin(res.data.conversa);
+      if(res.ok){ renderConversaAdmin(res.data.conversa); playChatSound('enviar', conversaAdminAtivaId); }
       loadAtendimentoConversas();
     }catch(e){ alert(e.message || 'Não consegui enviar a foto.'); }
   };
@@ -5570,7 +5660,7 @@ async function toggleGravacaoAdmin(){
           const up = await apiPost('/api/admin/atendimento/'+conversaAdminAtivaId+'/upload', { dataUrl: reader.result });
           if(!up.ok) throw new Error(up.data?.error || 'Falha ao enviar áudio.');
           const res = await apiPost('/api/admin/atendimento/'+conversaAdminAtivaId+'/responder', { tipo:'audio', url: up.data.url, texto:'' });
-          if(res.ok) renderConversaAdmin(res.data.conversa);
+          if(res.ok){ renderConversaAdmin(res.data.conversa); playChatSound('enviar', conversaAdminAtivaId); }
           loadAtendimentoConversas();
         }catch(e){ alert(e.message || 'Não consegui enviar o áudio.'); }
       };

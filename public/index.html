@@ -678,9 +678,9 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 <div class="drawer-overlay" id="ia-overlay" onclick="closeIaDuvida()"></div>
 <div class="drawer" id="ia-drawer" style="display:flex;flex-direction:column;max-height:80vh;">
   <div class="wa-header">
-    <div class="wa-avatar" id="ia-avatar">🤖</div>
+    <div class="wa-avatar" id="ia-avatar"><img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"/></div>
     <div class="wa-header-info">
-      <div class="wa-header-name" id="ia-drawer-titulo">Tire sua dúvida</div>
+      <div class="wa-header-name" id="ia-drawer-titulo">Chat Express</div>
       <div class="wa-header-status" id="ia-drawer-status">assistente automático</div>
     </div>
     <button class="wa-close" onclick="closeIaDuvida()">✕</button>
@@ -692,7 +692,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
     <button type="button" class="wa-icon-btn" id="ia-emoji-btn" onclick="toggleEmojiPanelIa(event)" title="Emoji">😊</button>
     <div class="wa-emoji-panel" id="ia-emoji-panel"></div>
     <button type="button" class="wa-icon-btn" id="ia-anexo-btn" onclick="document.getElementById('ia-anexo-input').click()" title="Anexar foto">📎</button>
-    <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:18px;padding:9px 14px;font-size:13px;box-sizing:border-box;resize:none;max-height:90px;" oninput="onDigitandoIa()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
+    <textarea id="ia-pergunta" placeholder="Digite sua mensagem..." rows="1" style="flex:1;border-radius:22px;padding:11px 16px;font-size:14.5px;line-height:1.35;box-sizing:border-box;resize:none;min-height:44px;max-height:130px;" oninput="onDigitandoIa()" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();enviarDuvidaIa();}"></textarea>
     <button type="button" class="wa-icon-btn" id="ia-mic-btn" onclick="toggleGravacaoIa()" title="Gravar áudio">🎤</button>
     <button class="checkout-btn wa-send-btn" id="ia-perguntar-btn" onclick="enviarDuvidaIa()" style="border-radius:50%;padding:0;">➤</button>
   </div>
@@ -2005,7 +2005,7 @@ function openContactSheet(){
   if(whatsDigits) options.push({icon:'💬', name:'WhatsApp', sub:'Resposta mais rápida', href:`https://wa.me/${whatsDigits}?text=${msg}`});
   if(cfg.social && cfg.social.instagram) options.push({icon:'📸', name:'Instagram', sub:'Peça por lá', href:`https://ig.me/m/${String(cfg.social.instagram).replace('@','')}`});
   if(cfg.social && cfg.social.facebook) options.push({icon:'👍', name:'Facebook', sub:'Peça por lá', href:`https://m.me/${cfg.social.facebook}`});
-  if(cfg.ia && cfg.ia.enabled) options.push({icon:'🤖', name:'Tirar uma dúvida', sub:'Resposta automática', onclick:'closeContactSheet();openIaDuvida();'});
+  if(cfg.ia && cfg.ia.enabled) options.push({icon:'🤖', name:'Chat Express', sub:'Resposta automática', onclick:'closeContactSheet();openIaDuvida();'});
   if(cfg.reservations && cfg.reservations.enabled) options.push({icon:'📅', name:'Reservar uma mesa', sub:'Escolha data e horário', onclick:'closeContactSheet();openReservationScreen();'});
   document.getElementById('contact-body').innerHTML = options.map(o=>`
     <a class="contact-opt" ${o.href?`href="${o.href}" target="_blank" rel="noopener"`:`href="javascript:void(0)" onclick="${o.onclick}"`}>
@@ -2054,8 +2054,8 @@ function closeIaDuvida(){
   if(iaGravando) toggleGravacaoIa(); // não deixa gravando escondido se fechar o chat
 }
 function atualizaHeaderIa(modo, digitando){
-  document.getElementById('ia-avatar').textContent = modo==='humano' ? '🧑‍🍳' : '🤖';
-  document.getElementById('ia-drawer-titulo').textContent = modo==='humano' ? 'Atendente Shogatsu' : 'Assistente Shogatsu';
+  document.getElementById('ia-avatar').innerHTML = modo==='humano' ? '🧑\u200d🍳' : '<img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"/>';
+  document.getElementById('ia-drawer-titulo').textContent = modo==='humano' ? 'Chat Express · Atendente' : 'Chat Express';
   const st = document.getElementById('ia-drawer-status');
   if(digitando){ st.textContent = 'digitando...'; st.classList.add('wa-typing'); }
   else { st.textContent = modo==='humano' ? 'atendimento humano' : 'assistente automático'; st.classList.remove('wa-typing'); }
@@ -2172,7 +2172,7 @@ async function enviarAnexoIa(input){
   const file = input.files && input.files[0];
   input.value = '';
   if(!file || !iaConversaId) return;
-  if(file.size > 3*1024*1024){ alert('Foto muito grande (máx. 3MB).'); return; }
+  if(file.size > 5*1024*1024){ alert('Foto muito grande (máx. 5MB).'); return; }
   const reader = new FileReader();
   reader.onload = async ()=>{
     try{
