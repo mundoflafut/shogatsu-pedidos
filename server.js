@@ -1492,8 +1492,10 @@ const server = http.createServer(async (req, res) => {
       let ext = m[1].toLowerCase();
       if (ext === 'jpeg') ext = 'jpg'; else if (ext === 'mpeg') ext = 'mp3';
       const buffer = Buffer.from(m[2], 'base64');
-      const maxBytes = mAudio ? 5 * 1024 * 1024 : 3 * 1024 * 1024;
-      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 5MB, tente uma mensagem mais curta).' : 'Foto muito grande (máx. 3MB).' });
+      // v61: limite de foto subiu de 3MB pra 5MB (pedido explícito), pra reduzir os casos de
+      // "foto grande demais" recusada — o áudio continua em 5MB (já era suficiente).
+      const maxBytes = 5 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 5MB, tente uma mensagem mais curta).' : 'Foto muito grande (máx. 5MB).' });
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       if (mImg) syncUploadToSupabase(filename, buffer, ext);
@@ -1625,8 +1627,9 @@ const server = http.createServer(async (req, res) => {
       let ext = m[1].toLowerCase();
       if (ext === 'jpeg') ext = 'jpg'; else if (ext === 'mpeg') ext = 'mp3';
       const buffer = Buffer.from(m[2], 'base64');
-      const maxBytes = mAudio ? 6 * 1024 * 1024 : 4 * 1024 * 1024;
-      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 6MB).' : 'Foto muito grande (máx. 4MB).' });
+      // v61: limite de foto do painel subiu de 4MB pra 5MB (pedido explícito)
+      const maxBytes = mAudio ? 6 * 1024 * 1024 : 5 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 6MB).' : 'Foto muito grande (máx. 5MB).' });
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
       if (mImg) syncUploadToSupabase(filename, buffer, ext);
