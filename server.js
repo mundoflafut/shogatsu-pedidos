@@ -61,14 +61,35 @@ function computeBuildVersion() {
     const out = execSync('git rev-parse --short=12 HEAD', { cwd: __dirname, timeout: 2000 }).toString().trim();
     if (out) return out;
   } catch (e) { /* sem git disponível (ex: build sem .git) — usa o fallback abaixo */ }
-  return 'boot-' + Date.now();
+  // v63 — BUG CORRIGIDO (causa raiz do "login fica atualizando e apaga tudo"): esse fallback
+  // usava 'boot-' + Date.now(), um valor que muda a CADA reinício do processo — mesmo sem
+  // nenhum deploy novo (o servidor caiu e voltou sozinho, o plano grátis do Render "dormiu" e
+  // acordou de novo, ou há mais de uma instância rodando ao mesmo tempo). A cada reinício, o
+  // front-end (public/version-check.js) achava que existia uma versão nova publicada e
+  // recarregava a página sozinha — às vezes bem no meio da pessoa digitando usuário/senha,
+  // apagando tudo. Agora usa a data de modificação do próprio server.js, que só muda de
+  // verdade quando o código é reescrito por um deploy real — reinícios do processo sem deploy
+  // novo passam a gerar sempre o mesmo valor, e o reload deixa de disparar à toa.
+  try {
+    const stat = fs.statSync(__filename);
+    return 'file-' + Math.floor(stat.mtimeMs).toString(36);
+  } catch (e) { /* ambiente sem acesso ao arquivo — não deveria acontecer em produção */ }
+  return 'sem-versao';
 }
 const BUILD_COMMIT = computeBuildVersion();
 const BUILD_STARTED_AT = new Date().toISOString();
 let PKG_VERSION = '1.0.0';
 try { PKG_VERSION = require('./package.json').version || PKG_VERSION; } catch (e) { /* mantém o padrão acima */ }
-// Formato "AAAA.MM.DD.HHmm-commit" — fácil de ler num log e ainda assim único por deploy.
-const APP_VERSION = new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})(\d{4})$/, '$1.$2.$3.$4') + '-' + BUILD_COMMIT;
+// v63 — BUG CORRIGIDO: antes a versão usada pra comparação (APP_VERSION) incluía o horário
+// exato em que o PROCESSO subiu (new Date().toISOString()), não do deploy em si — ou seja,
+// mudava a cada reinício do servidor mesmo sem nenhum código novo. Cada reinício (queda,
+// cold start do plano grátis, deploy de zero-downtime com duas instâncias sobrepostas por
+// alguns segundos) fazia o front-end pensar que saiu uma atualização e recarregar a tela de
+// todo mundo sozinha — inclusive no meio do login. Agora a versão depende só do código
+// (BUILD_COMMIT/PKG_VERSION), fica idêntica em qualquer processo rodando o mesmo deploy, e só
+// muda quando o código muda de verdade. BUILD_STARTED_AT continua disponível à parte (retornado
+// em /api/version) só como informação, sem entrar na comparação que decide recarregar.
+const APP_VERSION = PKG_VERSION + '-' + BUILD_COMMIT;
 
 // ─── Config / Menu padrão (usados só na primeira execução) ───
 const DEFAULT_CFG = {
