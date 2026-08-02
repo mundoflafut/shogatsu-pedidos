@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rodízio Shogatsu">
+<link rel="manifest" href="manifest-rodizio.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<title>Cardápio do Rodízio</title>
+<style>
+  :root{
+    --bg:#0a0a0a; --card:#151515; --border:#282828;
+    --gold:#c9a84c; --text:#f2f2f2; --muted:#9a9a9a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    padding-bottom:40px;
+  }
+  header{
+    text-align:center; padding:28px 20px 18px; border-bottom:1px solid var(--border);
+  }
+  header .logo{font-size:36px;}
+  header h1{margin:6px 0 2px; font-size:20px; color:var(--gold);}
+  header .sub{font-size:12px; color:var(--muted);}
+
+  .today-banner{
+    margin:18px 16px 0; background:linear-gradient(135deg,#3a2f0d,#241d05);
+    border:1px solid var(--gold); border-radius:14px; padding:16px;
+  }
+  .today-banner .tb-title{font-size:13px; color:var(--gold); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+  .today-item{font-size:14px; padding:6px 0; border-bottom:1px dashed rgba(201,168,76,.25);}
+  .today-item:last-child{border-bottom:none;}
+  .today-item b{color:#fff;}
+  .today-item .desc{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
+  .no-today{font-size:13px; color:var(--muted); font-style:italic;}
+
+  .cat{margin:26px 16px 0; scroll-margin-top:64px;}
+  .cat-head{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .cat-head .icon{font-size:20px;}
+  .cat-head h2{font-size:15px; margin:0; color:var(--gold); font-weight:700;}
+
+  /* v40: navegação rápida por categorias — fixa no topo, rolagem horizontal no celular */
+  .cat-nav{
+    position:sticky; top:0; z-index:5; display:flex; gap:8px; overflow-x:auto;
+    padding:10px 16px; background:rgba(10,10,10,.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); scrollbar-width:none;
+  }
+  .cat-nav::-webkit-scrollbar{display:none;}
+  .cat-nav-btn{
+    flex:0 0 auto; display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600;
+    color:var(--muted); background:var(--card); border:1px solid var(--border); border-radius:20px;
+    padding:7px 13px; white-space:nowrap; cursor:pointer; transition:.15s;
+  }
+  .cat-nav-btn.active{color:var(--bg); background:var(--gold); border-color:var(--gold);}
+
+  .item{
+    background:var(--card); border:1px solid var(--border); border-radius:12px;
+    padding:12px 14px; margin-bottom:8px;
+  }
+  .item.limited{opacity:.55;}
+  .item-name{font-size:14px; font-weight:600; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .item-desc{font-size:12px; color:var(--muted); margin-top:4px; line-height:1.4;}
+  .days-tag{
+    display:inline-block; font-size:10px; background:#241d05; color:var(--gold);
+    border:1px solid var(--gold); border-radius:20px; padding:2px 8px; margin-top:6px;
+  }
+  .fixed-tag{
+    display:inline-block; font-size:10px; background:#0e1f13; color:#5fce85;
+    border:1px solid #2f6b45; border-radius:20px; padding:2px 8px; margin-top:6px;
+  }
+
+  .loading, .error{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🍣</div>
+  <h1 id="store-name">Carregando...</h1>
+  <div class="sub">Cardápio do Rodízio — consulte o que está disponível hoje</div>
+</header>
+
+<div id="today-banner-wrap"></div>
+<div id="cat-nav-wrap"></div>
+<div id="menu-wrap"><div class="loading">Carregando cardápio...</div></div>
+
+<script>
+// v33: Cardápio de rodízio presencial (pra QR code na mesa).
+// Regra simples pra marcar um item como "extra do dia": adicione no item do cardápio
+// (mesmo editor de cardápio do painel, ou direto no JSON) um campo "days" com os dias em
+// que ele está liberado, usando as abreviações: dom, seg, ter, qua, qui, sex, sab. Exemplo:
+//   { "name": "Camarão à Baiana", "days": ["ter","qua","qui"], ... }
+// Itens SEM o campo "days" aparecem sempre, como parte fixa do rodízio.
+const DAY_LABELS = { dom:'Domingo', seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta', sab:'Sábado' };
+const DAY_KEYS = ['dom','seg','ter','qua','qui','sex','sab'];
+const todayKey = DAY_KEYS[new Date().getDay()];
+
+function esc(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function daysLabel(days){
+  if (!days || !days.length) return '';
+  return days.map(d => DAY_LABELS[d] || d).join(', ');
+}
+
+async function init(){
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    const cfg = data.cfg || {};
+    const menu = data.menu || [];
+    document.getElementById('store-name').textContent = cfg.name || 'Cardápio';
+    renderTodayBanner(menu);
+    renderMenu(menu);
+  } catch (e) {
+    document.getElementById('menu-wrap').innerHTML = '<div class="error">⚠️ Não foi possível carregar o cardápio agora. Puxe a tela pra atualizar.</div>';
+  }
+}
+
+function renderTodayBanner(menu){
+  const todayItems = [];
+  menu.forEach(cat => (cat.items || []).forEach(it => {
+    if (it.available !== false && Array.isArray(it.days) && it.days.includes(todayKey)) todayItems.push(it);
+  }));
+  const wrap = document.getElementById('today-banner-wrap');
+  if (!todayItems.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="today-banner">
+      <div class="tb-title">✨ Liberado hoje (${esc(DAY_LABELS[todayKey])})</div>
+      ${todayItems.map(it => `
+        <div class="today-item">
+          <b>${esc(it.name)}</b>
+          ${it.desc ? `<span class="desc">${esc(it.desc)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function slugify(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+
+function renderMenu(menu){
+  const wrap = document.getElementById('menu-wrap');
+  const navWrap = document.getElementById('cat-nav-wrap');
+  const visibleCats = menu.filter(cat => (cat.items || []).some(it => it.available !== false));
+  if (!menu.length) { wrap.innerHTML = '<div class="error">Cardápio ainda não configurado.</div>'; navWrap.innerHTML=''; return; }
+  navWrap.innerHTML = visibleCats.length > 1 ? `<div class="cat-nav" id="cat-nav">` + visibleCats.map((cat,i) => `
+    <button type="button" class="cat-nav-btn ${i===0?'active':''}" data-target="cat-${slugify(cat.title)}"
+      onclick="jumpToCategory('cat-${slugify(cat.title)}')">${esc(cat.icon || '🍽️')} ${esc(cat.title)}</button>
+  `).join('') + `</div>` : '';
+  wrap.innerHTML = visibleCats.map(cat => {
+    const items = (cat.items || []).filter(it => it.available !== false);
+    return `
+      <div class="cat" id="cat-${slugify(cat.title)}">
+        <div class="cat-head"><span class="icon">${esc(cat.icon || '🍽️')}</span><h2>${esc(cat.title)}</h2></div>
+        ${items.map(it => {
+          const hasDays = Array.isArray(it.days) && it.days.length;
+          const isToday = hasDays && it.days.includes(todayKey);
+          const limited = hasDays && !isToday;
+          return `
+            <div class="item ${limited ? 'limited' : ''}">
+              <div class="item-name"><span>${esc(it.name)}</span></div>
+              ${it.desc ? `<div class="item-desc">${esc(it.desc)}</div>` : ''}
+              ${hasDays
+                ? `<span class="days-tag">📅 Só ${esc(daysLabel(it.days))}</span>`
+                : `<span class="fixed-tag">✔️ Sempre disponível</span>`}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+  setupCategoryObserver();
+}
+
+function jumpToCategory(id){
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // destaque imediato ao clicar, sem esperar o IntersectionObserver alcançar a seção
+  document.querySelectorAll('.cat-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
+  centerActiveNavBtn(id);
+}
+
+function centerActiveNavBtn(id){
+  const nav = document.getElementById('cat-nav');
+  const btn = nav && nav.querySelector(`[data-target="${id}"]`);
+  if (nav && btn) nav.scrollTo({ left: btn.offsetLeft - (nav.clientWidth / 2) + (btn.clientWidth / 2), behavior: 'smooth' });
+}
+
+let categoryObserver = null;
+function setupCategoryObserver(){
+  if (categoryObserver) { categoryObserver.disconnect(); categoryObserver = null; }
+  const sections = document.querySelectorAll('.cat[id^="cat-"]');
+  if (!sections.length) return;
+  categoryObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        document.querySelectorAll('.cat-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
+        centerActiveNavBtn(id);
+      }
+    });
+  }, { rootMargin: '-96px 0px -70% 0px', threshold: 0 });
+  sections.forEach(s => categoryObserver.observe(s));
+}
+
+init();
+
+// v54: registra o service worker — deixa essa página instalável (PWA) também.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

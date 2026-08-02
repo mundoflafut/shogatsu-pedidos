@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#0a0705">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Avaliar Shogatsu">
+<link rel="manifest" href="manifest-avaliar-rodizio.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<title>Avalie o Rodízio — Shogatsu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0705; --card:#181310; --border:#332a1f;
+    --gold:#e3bd6a; --gold-soft:#f3dca3; --gold-dk:#8a6d2c;
+    --text:#f5f1ea; --muted:#a89c8a; --green:#3fae5c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:'Poppins',sans-serif; display:flex; justify-content:center; padding:36px 16px;
+  }
+  h1{font-family:'Playfair Display',serif;}
+  .wrap{width:100%; max-width:440px;}
+  .head{text-align:center; margin-bottom:26px;}
+  .head .logo{font-size:38px; margin-bottom:6px;}
+  .head h1{
+    font-size:23px; margin:0 0 6px;
+    background:linear-gradient(135deg,var(--gold-soft),var(--gold) 45%,#a9822f 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:var(--gold);
+  }
+  .head .sub{font-size:13px; color:var(--muted);}
+
+  .card{
+    background:linear-gradient(150deg,var(--card),#100d09); border:1px solid var(--border);
+    border-radius:18px; padding:22px 20px; margin-bottom:14px; box-shadow:0 14px 32px rgba(0,0,0,.35);
+  }
+  .card-label{font-size:13px; font-weight:600; color:var(--gold-soft); margin-bottom:10px;}
+
+  .stars{display:flex; justify-content:center; gap:8px;}
+  .star{font-size:30px; cursor:pointer; filter:grayscale(1) opacity(.35); transition:filter .15s, transform .1s;}
+  .star.on{filter:none; opacity:1;}
+  .star:active{transform:scale(.9);}
+
+  .toggle-row{display:flex; gap:10px;}
+  .toggle-btn{
+    flex:1; padding:12px; border-radius:10px; border:1px solid var(--border); background:#0a0705;
+    color:var(--text); font-size:14px; font-weight:600; cursor:pointer; text-align:center;
+  }
+  .toggle-btn.active{border-color:var(--green); background:rgba(63,174,92,.15); color:var(--green);}
+  .toggle-btn.active.no{border-color:#d3443f; background:rgba(211,68,63,.12); color:#d3443f;}
+
+  input[type=text], textarea{
+    width:100%; background:#0a0705; border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; color:var(--text); font-family:inherit; font-size:14px; resize:vertical;
+  }
+  textarea{min-height:80px;}
+  input[type=text]:focus, textarea:focus{outline:none; border-color:var(--gold-dk);}
+
+  .btn-send{
+    width:100%; padding:16px; border:none; border-radius:12px; font-size:15px; font-weight:700;
+    background:linear-gradient(135deg,var(--gold-soft),var(--gold)); color:#1a1400; cursor:pointer;
+    box-shadow:0 10px 26px rgba(227,189,106,.25);
+  }
+  .btn-send:active{transform:scale(.98);}
+  .btn-send:disabled{background:#3a3a3a; color:#777; box-shadow:none; cursor:default;}
+
+  .thanks{display:none; text-align:center; padding:50px 20px;}
+  .thanks .ic{font-size:46px; margin-bottom:10px;}
+  .thanks h2{font-size:20px; color:var(--gold); margin:0 0 8px;}
+  .thanks p{font-size:13px; color:var(--muted); line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap" id="form-wrap">
+  <div class="head">
+    <div class="logo">🍣</div>
+    <h1>Como foi seu Rodízio?</h1>
+    <div class="sub">Sua opinião ajuda a gente a ficar cada vez melhor.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Nota geral</div>
+    <div class="stars" data-group="geral"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">🍣 Comida</div>
+    <div class="stars" data-group="comida"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">🙋 Atendimento</div>
+    <div class="stars" data-group="atendimento"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">🏮 Ambiente</div>
+    <div class="stars" data-group="ambiente"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Você voltaria ao nosso rodízio?</div>
+    <div class="toggle-row">
+      <div class="toggle-btn" data-voltaria="sim">😍 Com certeza</div>
+      <div class="toggle-btn" data-voltaria="nao">😕 Não</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Conte mais (opcional)</div>
+    <textarea id="comentario" placeholder="O que mais gostou? O que podemos melhorar?"></textarea>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Seu nome (opcional)</div>
+    <input type="text" id="nome" placeholder="Como podemos te chamar?">
+  </div>
+
+  <button class="btn-send" id="btn-send">Enviar Avaliação 💛</button>
+</div>
+
+<div class="thanks" id="thanks">
+  <div class="ic">🙏</div>
+  <h2>Muito obrigado!</h2>
+  <p>Sua avaliação é muito importante pra gente. Esperamos te ver de novo no nosso rodízio!</p>
+</div>
+
+<script>
+// v33: Avaliação específica do rodízio presencial. Como aqui não existe um pedido online
+// pra vincular (é presencial, sem carrinho), a avaliação é enviada formatada pro WhatsApp
+// da loja — simples, sem precisar de nenhuma mudança no servidor.
+const STARS = 5;
+const ratings = { geral: 0, comida: 0, atendimento: 0, ambiente: 0 };
+let voltaria = null;
+
+document.querySelectorAll('.stars').forEach(group => {
+  const key = group.dataset.group;
+  for (let i = 1; i <= STARS; i++) {
+    const s = document.createElement('span');
+    s.className = 'star';
+    s.textContent = '★';
+    s.dataset.value = i;
+    s.addEventListener('click', () => { ratings[key] = i; paint(group, i); });
+    group.appendChild(s);
+  }
+});
+function paint(group, value){
+  [...group.children].forEach((s, idx) => s.classList.toggle('on', idx < value));
+}
+
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    voltaria = btn.dataset.voltaria;
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active', voltaria === 'nao' ? 'no' : '');
+  });
+});
+
+const STARS_LABEL = { 1:'⭐', 2:'⭐⭐', 3:'⭐⭐⭐', 4:'⭐⭐⭐⭐', 5:'⭐⭐⭐⭐⭐' };
+
+document.getElementById('btn-send').addEventListener('click', async () => {
+  const comentario = document.getElementById('comentario').value.trim();
+  const nome = document.getElementById('nome').value.trim();
+
+  let msg = `⭐ *Avaliação do Rodízio*\n\n`;
+  msg += `Geral: ${STARS_LABEL[ratings.geral] || 'não avaliado'}\n`;
+  msg += `Comida: ${STARS_LABEL[ratings.comida] || 'não avaliado'}\n`;
+  msg += `Atendimento: ${STARS_LABEL[ratings.atendimento] || 'não avaliado'}\n`;
+  msg += `Ambiente: ${STARS_LABEL[ratings.ambiente] || 'não avaliado'}\n`;
+  if (voltaria) msg += `Voltaria: ${voltaria === 'sim' ? '😍 Com certeza' : '😕 Não'}\n`;
+  if (comentario) msg += `\nComentário: ${comentario}\n`;
+  if (nome) msg += `\nNome: ${nome}`;
+
+  let whatsNumber = '552227641333';
+  try {
+    const r = await fetch('/api/config');
+    const data = await r.json();
+    if (data.cfg && data.cfg.whats) whatsNumber = data.cfg.whats;
+  } catch (e) { /* usa o número padrão acima se a config não carregar */ }
+
+  window.open(`https://wa.me/${whatsNumber}?text=${encodeURIComponent(msg)}`, '_blank');
+
+  document.getElementById('form-wrap').style.display = 'none';
+  document.getElementById('thanks').style.display = 'block';
+});
+
+// v54: registra o service worker — deixa essa página instalável (PWA) também.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#0a0705">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rodízio Popular">
+<link rel="manifest" href="manifest-rodizio-popular.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<title>Rodízio Popular — Shogatsu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0705; --card:#181310; --border:#332a1f;
+    --gold:#e3bd6a; --gold-soft:#f3dca3; --gold-dk:#8a6d2c; --red:#a5342b;
+    --text:#f5f1ea; --muted:#a89c8a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Poppins',sans-serif;
+    animation:bodyFadeIn .6s ease both;
+  }
+  @keyframes bodyFadeIn{from{opacity:0;}to{opacity:1;}}
+  @keyframes fadeInUp{from{opacity:0; transform:translateY(14px);}to{opacity:1; transform:translateY(0);}}
+  .hero, .pricing, .gallery-section, .menu-section, .info-section{animation:fadeInUp .7s ease both;}
+  .gallery-section{animation-delay:.05s;}
+  .menu-section{animation-delay:.1s;}
+  .info-section{animation-delay:.15s;}
+  h1,h2,h3{font-family:'Playfair Display',serif;}
+
+  .divider-orn{display:flex; align-items:center; gap:10px; max-width:640px; margin:0 auto;}
+  .divider-orn::before, .divider-orn::after{content:''; flex:1; height:1px; background:linear-gradient(90deg,transparent,var(--gold-dk),transparent);}
+  .divider-orn span{color:var(--gold); font-size:11px;}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative; text-align:center; padding:52px 20px 44px; overflow:hidden;
+    background:radial-gradient(ellipse at top, #2e1f0f 0%, #0a0705 72%);
+    border-bottom:1px solid var(--border);
+  }
+  .hero::before{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(227,189,106,.08), transparent 40%),
+      radial-gradient(circle at 85% 15%, rgba(227,189,106,.06), transparent 35%);
+  }
+  .hero .logo{font-size:44px; margin-bottom:8px; filter:drop-shadow(0 2px 10px rgba(227,189,106,.35));}
+  .hero h1{
+    font-size:32px; margin:0 0 8px; letter-spacing:.5px; font-weight:700;
+    background:linear-gradient(135deg, var(--gold-soft), var(--gold) 45%, #a9822f 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:var(--gold);
+    text-shadow:0 2px 24px rgba(227,189,106,.15);
+  }
+  .tagline-rotator{
+    min-height:20px; font-size:13.5px; color:var(--gold-soft); margin-bottom:24px;
+    font-style:italic; letter-spacing:.3px; transition:opacity .5s ease;
+  }
+
+  .hero-photo{
+    width:100%; max-width:520px; margin:0 auto; aspect-ratio:16/9; border-radius:20px;
+    overflow:hidden; border:1px solid var(--border); position:relative; background:#1c1712;
+    box-shadow:0 20px 50px rgba(0,0,0,.5), 0 0 0 1px rgba(227,189,106,.06);
+  }
+  .hero-photo img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-placeholder{
+    width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; color:var(--muted); font-size:12px; border:1px dashed var(--gold-dk);
+  }
+  .photo-placeholder .cam{font-size:26px;}
+
+  /* ---------- PRICING ---------- */
+  .pricing{
+    max-width:640px; margin:-30px auto 0; padding:0 20px; position:relative; z-index:2;
+  }
+  .pricing-card{
+    background:linear-gradient(150deg,#241a0c,#151009); border:1px solid var(--gold-dk);
+    border-radius:20px; padding:24px 20px; box-shadow:0 20px 45px rgba(0,0,0,.5), inset 0 1px 0 rgba(227,189,106,.08);
+  }
+  .pricing-title{
+    text-align:center; color:var(--gold); font-size:13px; font-weight:700; letter-spacing:2px;
+    text-transform:uppercase; margin-bottom:16px;
+  }
+  .day-row{display:flex; gap:10px; margin-bottom:16px;}
+  .day-chip{
+    flex:1; background:#0a0705; border:1px solid var(--border); border-radius:14px;
+    padding:16px 10px; text-align:center; transition:border-color .2s;
+  }
+  .day-chip .d{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px;}
+  .day-chip .row{display:flex; justify-content:center; gap:10px; align-items:baseline;}
+  .day-chip .p{font-size:20px; font-weight:700; color:var(--gold);}
+  .day-chip .p2{font-size:13px; font-weight:600; color:var(--text);}
+  .day-chip .m{font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px;}
+  .price-note{font-size:12px; color:var(--muted); text-align:center; line-height:1.6;}
+  .price-note b{color:var(--gold-soft);}
+  .price-note .divider{margin:10px 0; border-top:1px dashed var(--border);}
+
+  .highlights-row{display:flex; flex-wrap:wrap; gap:8px; justify-content:center;}
+  .highlight-chip{
+    display:flex; align-items:center; gap:6px; background:linear-gradient(135deg,#3d3010,#241d05);
+    border:1px solid var(--gold); border-radius:20px; padding:9px 15px; font-size:12.5px; font-weight:600;
+    box-shadow:0 6px 16px rgba(227,189,106,.08);
+  }
+  .highlight-chip .ic{font-size:15px;}
+
+  /* ---------- GALLERY ---------- */
+  .gallery-section{max-width:640px; margin:40px auto 0; padding:0 20px;}
+  .section-title{
+    font-size:12.5px; color:var(--gold); text-transform:uppercase; letter-spacing:2.5px;
+    font-weight:700; margin-bottom:16px; text-align:center;
+  }
+  .gallery-grid{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+  }
+  .gallery-slot{
+    aspect-ratio:1; border-radius:12px; overflow:hidden; background:#1c1712;
+    border:1px dashed var(--gold-dk); position:relative;
+  }
+  .gallery-slot img{width:100%; height:100%; object-fit:cover; display:block;}
+  .gallery-slot .ph{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:20px;
+  }
+
+  /* ---------- MENU ---------- */
+  .menu-section{max-width:640px; margin:42px auto 0; padding:0 20px;}
+  .cat-grid{display:grid; grid-template-columns:1fr; gap:18px;}
+  @media(min-width:560px){ .cat-grid{grid-template-columns:1fr 1fr;} }
+  .cat{
+    background:linear-gradient(160deg,var(--card),#121009); border:1px solid var(--border); border-radius:18px; padding:19px 20px;
+    box-shadow:0 10px 24px rgba(0,0,0,.28); transition:transform .18s, border-color .18s;
+  }
+  .cat-head{display:flex; align-items:center; gap:8px; margin-bottom:11px; padding-bottom:9px; border-bottom:1px solid var(--border);}
+  .cat-head .icon{font-size:19px;}
+  .cat-head h3{margin:0; font-size:15px; color:var(--gold); font-weight:700; letter-spacing:.2px;}
+  .cat ul{list-style:none; margin:0; padding:0;}
+  .cat li{
+    font-size:13.5px; padding:5px 0; color:var(--text); border-bottom:1px dotted rgba(255,255,255,.06);
+  }
+  .cat li:last-child{border-bottom:none;}
+  .cat li .sub{display:block; font-size:11px; color:var(--muted); margin-top:1px;}
+
+  /* ---------- INFO ---------- */
+  .info-section{max-width:640px; margin:42px auto 0; padding:0 20px 54px;}
+  .info-card{
+    background:linear-gradient(150deg,#1c1712,#0a0705); border:1px solid var(--border);
+    border-radius:18px; padding:24px; box-shadow:0 16px 36px rgba(0,0,0,.35);
+  }
+  .info-card .addr{font-size:13px; color:var(--gold); font-weight:600; line-height:1.6; text-align:center; margin-bottom:14px; letter-spacing:.2px;}
+  .info-links{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:16px;}
+  .info-links a{
+    font-size:12px; color:var(--text); text-decoration:none; background:#221a10; border:1px solid var(--border);
+    border-radius:20px; padding:7px 15px; transition:border-color .15s;
+  }
+  .info-links a:hover{border-color:var(--gold);}
+  .waste-note{
+    font-size:11px; color:var(--muted); text-align:center; line-height:1.6; padding-top:14px;
+    border-top:1px dashed var(--border);
+  }
+  .waste-note b{color:var(--red);}
+  .delivery-hint{
+
+    text-align:center; margin-top:16px; font-size:12px;
+  }
+  .delivery-hint a{color:var(--gold); font-weight:600; text-decoration:none;}
+
+  .edit-hint{
+    max-width:640px; margin:0 auto 24px; padding:0 20px; font-size:11px; color:var(--muted); text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     COMO EDITAR ESTE CARDÁPIO
+     Tudo o que aparece na página (preços, itens, textos, fotos) vem
+     do objeto DATA logo no início do <script>, lá embaixo. Pra mudar
+     qualquer coisa, edite só ali — não precisa mexer no resto do HTML.
+
+     Fotos: troque as strings vazias "" dentro de heroPhoto e gallery
+     pelo caminho da foto real depois de fazer upload (ex:
+     "/fotos/rodizio-mesa.jpg"). Enquanto estiver "", aparece um
+     quadradinho de "adicionar foto" no lugar — não quebra nada.
+     ================================================================ -->
+
+<div class="hero">
+  <div class="logo">🍣</div>
+  <h1>Rodízio Popular</h1>
+  <div class="tagline-rotator" id="tagline-rotator"></div>
+  <div class="hero-photo" id="hero-photo"></div>
+</div>
+
+<div class="pricing">
+  <div class="pricing-card">
+    <div class="pricing-title">Valor do Rodízio Popular</div>
+    <div class="day-row" id="day-row"></div>
+    <div class="price-note" id="price-note"></div>
+  </div>
+</div>
+
+<div class="gallery-section" style="margin-top:22px;">
+  <div class="section-title">Destaques de Hoje</div>
+  <div class="highlights-row" id="highlights-row"></div>
+</div>
+
+<div class="gallery-section">
+  <div class="section-title">Fotos do Rodízio</div>
+  <div class="gallery-grid" id="gallery-grid"></div>
+</div>
+
+<div class="menu-section">
+  <div class="section-title">O que tem no rodízio</div>
+  <div class="cat-grid" id="cat-grid"></div>
+</div>
+
+<div class="info-section">
+  <div class="info-card">
+    <div class="addr" id="info-addr"></div>
+    <div class="info-links" id="info-links"></div>
+    <div class="delivery-hint" id="delivery-hint"></div>
+    <div class="waste-note" id="waste-note"></div>
+  </div>
+</div>
+
+<div class="edit-hint">Cardápio sujeito a alterações sem aviso prévio.</div>
+
+<script>
+// ============================================================================
+// TODO O CONTEÚDO DO CARDÁPIO FICA AQUI. Edite os valores abaixo à vontade —
+// a página se redesenha sozinha a partir daqui, não precisa tocar em mais nada.
+// ============================================================================
+const DATA = {
+
+  // Frases chamativas que giram embaixo do título — pode adicionar/remover/reordenar à vontade.
+  phrases: [
+    "Sushi à vontade. Sabor sem limites.",
+    "Aqui o rodízio é show — e o camarão é liberado.",
+    "Cada peça, uma experiência. Cada mesa, um banquete.",
+    "Temaki, sashimi, grelhados... e o refri é por nossa conta.",
+    "Sabor japonês de verdade, no seu ritmo, sem pressa.",
+  ],
+
+  // Foto grande do topo. Deixe "" pra mostrar o espaço reservado de "adicionar foto".
+  heroPhoto: "",
+
+  // Preço por grupo de dias — cada grupo tem o valor no dinheiro e no cartão/pix.
+  priceGroups: [
+    { label: "Terça, Quarta e Quinta", cash: "R$ 59,99", card: "R$ 79,99" },
+    { label: "Sexta, Sábado e Domingo", cash: "R$ 64,99", card: "R$ 84,99" },
+  ],
+  priceNote: `Valores válidos a partir das <b>18:30</b>.`,
+
+  // Destaques do rodízio — itens liberados/incluídos que merecem chamar atenção
+  // separado do resto do cardápio. Adicione/remova à vontade.
+  highlights: [
+    { icon: "🥤", label: "Refrigerante Liberado" },
+    { icon: "🥢", label: "Temaki" },
+    { icon: "🍤", label: "Camarão ao Alho e Óleo" },
+    { icon: "🍄", label: "Shimeji" },
+  ],
+
+  // Galeria de fotos — adicione/remova quantos quiser. Deixe photo:"" pra ficar como
+  // espaço reservado até vocês tirarem fotos reais dos pratos/ambiente.
+  gallery: [
+    { photo: "" },
+    { photo: "" },
+    { photo: "" },
+    { photo: "" },
+    { photo: "" },
+    { photo: "" },
+  ],
+
+  // Categorias do cardápio. Cada "items" pode ter só o nome, ou {name, sub} se quiser
+  // uma linha pequena de descrição embaixo (ex: preço sob consulta).
+  categories: [
+    { icon: "🍙", title: "Hossomaki", items: [
+      "Haddock Maki", "Filadélfia", "Kani Maki", "Salmão Maki", "Tartare Skin",
+      "Tekka Maki", "Tartare de Salmão", "Goiabada com Fruta do Dia",
+      "Camarão Grelhado", "Tilápia com Geleia"
+    ]},
+    { icon: "🍱", title: "Uramakis", items: [
+      "Salmão", "Filadélfia Roll", "Skin Roll", "Atum", "Califórnia", "Haddock", "Joy Salmão"
+    ]},
+    { icon: "🍣", title: "Sushis Diversos", items: [
+      "Sushi Salmão", "Sushi de Peixe Branco", "Sushi Skin"
+    ]},
+    { icon: "🥢", title: "Temakis Tradicionais", items: [
+      "Temaki Filadélfia", "Temaki Hot Filadélfia"
+    ]},
+    { icon: "✨", title: "Especiais", items: [
+      "Ceviche do Dia", "Sunomono com Kani", "Skin de Salmão com Cebolinha"
+    ]},
+    { icon: "🍤", title: "Fritos — Empanados", items: [
+      "Peixe do Dia na Crosta de Ervas", "Lula Milanesa (Dorê)", "Frango Milanesa",
+      "Bolinho de Salmão", { name: "Salmão Especial", sub: "sob consulta" },
+      "Frango Recheado Especial", "Harumaki de Camarão", "Harumaki de Frango",
+      "Harumaki de Legumes", "Harumaki de Queijo e Presunto"
+    ]},
+    { icon: "🔥", title: "Grelhados", items: [
+      "Lula ao Alho e Óleo", "Camarão ao Alho e Óleo", "Yakisoba Misto (Filé Mignon e Frango)",
+      { name: "Shimeji na Manteiga", sub: "sob consulta" }, "Filé Mignon Suíno Agridoce"
+    ]},
+    { icon: "🍰", title: "Sobremesas", items: [
+      "Harumaki Romeu e Julieta", "Harumaki Doce de Leite com Ameixa",
+      "Harumaki de Chocolate com Banana", "Banana Empanada com Chocolate"
+    ]},
+  ],
+
+  // Rodapé com endereço/contato — mesmos dados do cardápio impresso original.
+  address: "Av. Gov. Roberto Silveira, 109 — Costa Azul, Rio das Ostras",
+  whatsapp: "552227641333",
+  instagram: "shogatsurestaurante",
+  deliveryUrl: "/",
+  wasteNote: "Taxa de desperdício: valor da peça do cardápio. Evite desperdício pra podermos manter nossa promoção e sempre atender melhor!",
+};
+
+// ============================================================================
+// A partir daqui é só o motor que desenha a página com os dados acima —
+// normalmente não precisa mexer nisso.
+// ============================================================================
+function esc(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function photoBox(url, size){
+  if (url) return `<img src="${esc(url)}" alt="">`;
+  return `<div class="${size === 'gallery' ? 'ph' : 'photo-placeholder'}">
+    <span class="cam">📷</span>${size === 'gallery' ? '' : '<span>Adicionar foto</span>'}
+  </div>`;
+}
+
+// v44: os dados dessa página agora podem vir de cfg.rodizioPopular (editável pelo painel,
+// aba "🔗 QR Code & Links" > "✏️ Editar Cardápio Popular"). O objeto DATA acima continua
+// funcionando como conteúdo padrão/fallback — se o servidor não responder (offline) ou o
+// admin nunca tiver editado nada, a página mostra exatamente o que já mostrava antes.
+async function loadRodizioPopularData(){
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return DATA;
+    const body = await res.json();
+    const saved = body && body.cfg && body.cfg.rodizioPopular;
+    if (!saved) return DATA;
+    // só sobrescreve os campos que existem salvos — o resto continua no padrão.
+    return { ...DATA, ...saved };
+  } catch (e) { return DATA; }
+}
+
+(async function renderPage(){
+  const DATA = await loadRodizioPopularData();
+
+// v51: aplica fontes/cor/tamanho escolhidos em Editar Cardápio Popular → 🎨 Aparência, sem
+// precisar mexer em CSS nenhum — troca só as variáveis, o resto do layout continua igual.
+(function applyTheme(){
+  const theme = DATA.theme || {};
+  const FONT_STACKS = {
+    serif: "'Playfair Display', serif",
+    'sans-serif': "'Poppins', sans-serif",
+    rounded: "'Poppins', system-ui, sans-serif"
+  };
+  const root = document.documentElement.style;
+  if (theme.accentColor) {
+    root.setProperty('--gold', theme.accentColor);
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+    h1,h2,h3{ font-family:${FONT_STACKS[theme.headingFont] || FONT_STACKS.serif}; }
+    body{ font-family:${FONT_STACKS[theme.bodyFont] || FONT_STACKS['sans-serif']}; font-size:${(theme.fontScale||1)}em; }
+  `;
+  document.head.appendChild(style);
+})();
+
+document.getElementById('hero-photo').innerHTML = photoBox(DATA.heroPhoto, 'hero');
+
+// Frases chamativas girando embaixo do título, com fade suave.
+(function rotateTagline(){
+  const el = document.getElementById('tagline-rotator');
+  if (!DATA.phrases || !DATA.phrases.length) return;
+  let i = 0;
+  function show(){
+    el.style.opacity = 0;
+    setTimeout(() => { el.textContent = DATA.phrases[i]; el.style.opacity = 1; }, 300);
+    i = (i + 1) % DATA.phrases.length;
+  }
+  show();
+  setInterval(show, 4200);
+})();
+
+document.getElementById('day-row').innerHTML = DATA.priceGroups.map(g => `
+  <div class="day-chip">
+    <div class="d">${esc(g.label)}</div>
+    <div class="row">
+      <span class="p">${esc(g.cash)}</span>
+      <span class="m">dinheiro</span>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <span class="p2">${esc(g.card)}</span>
+      <span class="m">cartão/pix</span>
+    </div>
+  </div>
+`).join('');
+
+document.getElementById('price-note').innerHTML = DATA.priceNote;
+
+document.getElementById('highlights-row').innerHTML = DATA.highlights.map(h => `
+  <div class="highlight-chip"><span class="ic">${h.icon}</span>${esc(h.label)}</div>
+`).join('');
+
+document.getElementById('gallery-grid').innerHTML = DATA.gallery.map(g => `
+  <div class="gallery-slot">${photoBox(g.photo, 'gallery')}</div>
+`).join('');
+
+document.getElementById('cat-grid').innerHTML = DATA.categories.map(cat => `
+  <div class="cat">
+    <div class="cat-head"><span class="icon">${cat.icon}</span><h3>${esc(cat.title)}</h3></div>
+    <ul>
+      ${cat.items.map(it => {
+        const name = typeof it === 'string' ? it : it.name;
+        const sub = typeof it === 'string' ? '' : it.sub;
+        return `<li>${esc(name)}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</li>`;
+      }).join('')}
+    </ul>
+  </div>
+`).join('');
+
+document.getElementById('info-addr').textContent = DATA.address;
+
+const links = [];
+if (DATA.whatsapp) links.push(`<a href="https://wa.me/${DATA.whatsapp}" target="_blank" rel="noopener">💬 WhatsApp</a>`);
+if (DATA.instagram) links.push(`<a href="https://instagram.com/${DATA.instagram}" target="_blank" rel="noopener">📷 @${DATA.instagram}</a>`);
+document.getElementById('info-links').innerHTML = links.join('');
+
+document.getElementById('delivery-hint').innerHTML = (DATA.deliveryUrl
+  ? `Prefere delivery? <a href="${esc(DATA.deliveryUrl)}">Peça online aqui</a><br>` : '')
+  + `<a href="/avaliar-rodizio.html">⭐ Já veio comer com a gente? Deixe sua avaliação</a>`;
+
+document.getElementById('waste-note').innerHTML = esc(DATA.wasteNote).replace('Taxa de desperdício', '<b>Taxa de desperdício</b>');
+
+})();
+
+// v54: registra o service worker — deixa essa página instalável (PWA) também.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
