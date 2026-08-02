@@ -33,6 +33,15 @@ const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const CONTATOS_IMPORTADOS_FILE = path.join(DATA_DIR, 'contatos-importados.json'); // v56: contatos importados de CSV/vCard/txt, separado dos clientes reais (que vêm de pedidos)
 const ATENDIMENTO_FILE = path.join(DATA_DIR, 'atendimento.json'); // v57: conversas do chat (IA e/ou atendente humano)
+// v60: sessões de login persistidas em disco (+ Supabase, ver FILE_TO_KEY) — antes viviam só em
+// memória (Map), e como o disco do Render é apagado a cada deploy e o processo reinicia, TODO
+// login válido virava inválido de uma hora pra outra; o painel então recebia 401 na primeira
+// chamada de API e disparava doLogout() sozinho, que apaga o usuário/senha salvos no navegador —
+// dava a impressão de "login e senha apagados" mesmo sem o usuário ter feito nada de errado.
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+// v60: log de falhas de impressão (impressão remota/automática) — fica em disco pra dar pra
+// conferir depois o que falhou e por quê, além do aviso mostrado na hora pra quem clicou em imprimir.
+const PRINT_LOG_FILE = path.join(DATA_DIR, 'print-log.json');
 const webpush = require('./webpush');
 
 // ═══════════════════════════════════════════════════════════
@@ -281,6 +290,8 @@ if (!fs.existsSync(CUSTOS_CONFIG_FILE)) fs.writeFileSync(CUSTOS_CONFIG_FILE, JSO
 if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
 if (!fs.existsSync(CONTATOS_IMPORTADOS_FILE)) fs.writeFileSync(CONTATOS_IMPORTADOS_FILE, '[]');
 if (!fs.existsSync(ATENDIMENTO_FILE)) fs.writeFileSync(ATENDIMENTO_FILE, '{}');
+if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '{}');
+if (!fs.existsSync(PRINT_LOG_FILE)) fs.writeFileSync(PRINT_LOG_FILE, '[]');
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -317,7 +328,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -375,7 +386,37 @@ async function restoreFromSupabase() {
   }));
 }
 
-// Confere se o horário atual está dentro da janela configurada (ex: 18:00–23:00).
+// v60 — BUG REAL INVESTIGADO ("fotos que não carregam/desaparecem"): a causa raiz é a mesma dos
+// comentários acima — public/uploads/ mora no MESMO disco que o Render apaga a cada deploy (a
+// menos que UPLOADS_DIR aponte pra um Disco Persistente configurado à parte). Diferente de
+// orders/config/customers, as fotos NUNCA tinham backup nenhum — o registro (ex: foto do prato no
+// cardápio) sobrevivia via Supabase, mas o ARQUIVO da foto em si sumia, e a imagem ficava
+// quebrada/sumida no cardápio, no cadastro de motoboy, etc. Agora, se o Supabase estiver
+// configurado, toda foto enviada por POST /api/upload também é guardada lá (em base64) e
+// restaurada pra UPLOADS_DIR automaticamente ao ligar o servidor — sem precisar de Disco
+// Persistente pago pra não perder fotos. Vídeos (Live Photo) ficam de fora desse backup (arquivo
+// grande demais pra guardar como texto no banco com folga de sobra) — pra esses, o Disco
+// Persistente do Render continua sendo a única forma garantida de não perder o arquivo.
+function syncUploadToSupabase(filename, buffer, ext) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  const key = 'upload_' + filename;
+  supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: { ext, b64: buffer.toString('base64') }, updated_at: new Date().toISOString() })
+    .catch(err => console.error(`⚠️  Falha ao fazer backup da foto "${filename}" no Supabase:`, err.message));
+}
+async function restoreUploadsFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  try {
+    const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key,value`);
+    let restauradas = 0;
+    for (const row of (rows || [])) {
+      const filename = String(row.key || '').replace(/^upload_/, '');
+      const dest = path.join(UPLOADS_DIR, filename);
+      if (!filename || fs.existsSync(dest) || !row.value || !row.value.b64) continue; // já existe local — não sobrescreve
+      try { fs.writeFileSync(dest, Buffer.from(row.value.b64, 'base64')); restauradas++; } catch (e) { /* ignora essa e segue as outras */ }
+    }
+    if (restauradas) console.log(`   ✓ ${restauradas} foto(s) restaurada(s) do Supabase pra uploads/`);
+  } catch (err) { console.error('   ⚠️  Não consegui restaurar fotos do Supabase:', err.message); }
+}
 // Usa sempre o horário de Brasília, independente de em qual fuso o servidor
 // esteja rodando de verdade (isso evita o bug clássico de "abriu 3h errado"
 // quando o servidor roda em UTC, como costuma acontecer em hospedagem na nuvem).
@@ -452,17 +493,38 @@ function readConfig() {
   return { cfg, menu: normalizeMenu(data.menu, Object.keys(cfg.stations), cfg.defaultStation) };
 }
 
-// ─── Sessões admin (em memória) ───
+// ─── Sessões admin (em memória, espelhadas em disco + Supabase — v60) ───
 const sessions = new Map(); // token -> { expiresAt, role, username }
+function persistSessions() {
+  // v60: grava o Map inteiro (só sessões ainda válidas) em disco a cada mudança, pra um
+  // restart do processo (comum no Render) não derrubar quem já estava logado.
+  const obj = {};
+  for (const [tok, s] of sessions) { if (s.expiresAt >= Date.now()) obj[tok] = s; }
+  try { writeJSON(SESSIONS_FILE, obj); } catch (e) { console.error('⚠️  Não consegui salvar sessions.json:', e.message); }
+}
+function loadSessionsFromDisk() {
+  try {
+    const obj = readJSON(SESSIONS_FILE);
+    let restauradas = 0;
+    for (const [tok, s] of Object.entries(obj || {})) {
+      if (s && s.expiresAt > Date.now()) { sessions.set(tok, s); restauradas++; }
+    }
+    if (restauradas) console.log(`   ✓ ${restauradas} sessão(ões) de login restaurada(s) — ninguém precisa logar de novo à toa.`);
+  } catch (e) { /* arquivo pode não existir ainda na primeira execução — tudo bem */ }
+}
 function newSession(role, username) {
   const token = crypto.randomBytes(24).toString('hex');
   sessions.set(token, { expiresAt: Date.now() + 1000 * 60 * 60 * 12, role: role || 'admin', username: username || 'admin' }); // 12h
+  persistSessions();
   return token;
 }
 function getSession(token) {
   if (!token) return null;
   const s = sessions.get(token);
-  if (!s || s.expiresAt < Date.now()) { sessions.delete(token); return null; }
+  if (!s || s.expiresAt < Date.now()) {
+    if (s) { sessions.delete(token); persistSessions(); }
+    return null;
+  }
   return s;
 }
 function checkAuth(token) { return !!getSession(token); }
@@ -1372,39 +1434,6 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
-  // v59: modelos de mensagem pré-determinada pra Notificações Push — evita ter que redigitar
-  // o mesmo texto de promoção toda vez. Fica salvo em cfg (igual FAQ da IA), não em arquivo à parte.
-  if (pathname === '/api/push/presets' && req.method === 'GET') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    const { cfg } = readConfig();
-    return sendJSON(res, 200, { presets: cfg.pushPresets || [] });
-  }
-  if (pathname === '/api/push/presets' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    try {
-      const { nome, titulo, mensagem, imagem } = await readBody(req, 5e6);
-      const n = String(nome || '').trim().slice(0, 60);
-      if (!n) return sendJSON(res, 400, { error: 'Dê um nome pro modelo.' });
-      const data = readConfig();
-      if (!Array.isArray(data.cfg.pushPresets)) data.cfg.pushPresets = [];
-      data.cfg.pushPresets.push({
-        id: crypto.randomBytes(6).toString('hex'), nome: n,
-        titulo: String(titulo || '').trim().slice(0, 100),
-        mensagem: String(mensagem || '').trim().slice(0, 500),
-        imagem: String(imagem || '').trim().slice(0, 500)
-      });
-      writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
-      return sendJSON(res, 200, { presets: data.cfg.pushPresets });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-  const pushPresetDelMatch = pathname.match(/^\/api\/push\/presets\/([a-f0-9]+)$/);
-  if (pushPresetDelMatch && req.method === 'DELETE') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    const data = readConfig();
-    data.cfg.pushPresets = (data.cfg.pushPresets || []).filter(p => p.id !== pushPresetDelMatch[1]);
-    writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
-    return sendJSON(res, 200, { presets: data.cfg.pushPresets });
-  }
   // POST /api/custos/ler-imagem — lê foto de nota fiscal (custo) ou catálogo (preço de venda) e
   // devolve uma lista pra o admin CONFERIR antes de salvar (não grava nada sozinho).
   if (pathname === '/api/custos/ler-imagem' && req.method === 'POST') {
@@ -1443,18 +1472,58 @@ const server = http.createServer(async (req, res) => {
     if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
     return sendJSON(res, 200, { conversa });
   }
+  // ── POST /api/atendimento/:id/upload — anexo (foto ou áudio) do CHAT DO CLIENTE (v60) ──
+  // Rota própria e pública (sem checkAuth) porque quem manda é o cliente, sem login — diferente
+  // de /api/upload (exige admin, usado no cardápio/ingredientes/etc). Só aceita se a conversa
+  // já existir de verdade (mesma proteção fraca que as outras rotas públicas de atendimento já
+  // usam, baseada em conhecer o id aleatório de 20 caracteres da conversa) e com limites de
+  // tamanho menores, pra reduzir o risco de abuso por não exigir login.
+  const conversaUploadMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/upload$/);
+  if (conversaUploadMatch && req.method === 'POST') {
+    try {
+      const todas = lerAtendimentos();
+      const conversa = todas[conversaUploadMatch[1]];
+      if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+      const { dataUrl } = await readBody(req, 8e6);
+      const mImg = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+      const mAudio = /^data:audio\/(webm|ogg|mpeg|mp3|mp4|m4a)(?:;codecs=[a-z0-9.]+)?;base64,(.+)$/i.exec(dataUrl || '');
+      if (!mImg && !mAudio) return sendJSON(res, 400, { error: 'Formato inválido. Use foto (PNG/JPG/WEBP) ou áudio.' });
+      const m = mImg || mAudio;
+      let ext = m[1].toLowerCase();
+      if (ext === 'jpeg') ext = 'jpg'; else if (ext === 'mpeg') ext = 'mp3';
+      const buffer = Buffer.from(m[2], 'base64');
+      const maxBytes = mAudio ? 5 * 1024 * 1024 : 3 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 5MB, tente uma mensagem mais curta).' : 'Foto muito grande (máx. 3MB).' });
+      const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
+      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+      if (mImg) syncUploadToSupabase(filename, buffer, ext);
+      return sendJSON(res, 200, { url: '/uploads/' + filename, tipo: mImg ? 'imagem' : 'audio' });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
   const conversaMsgMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/mensagem$/);
   if (conversaMsgMatch && req.method === 'POST') {
     try {
-      const { texto } = await readBody(req);
+      const { texto, tipo, url } = await readBody(req);
+      // v60: mensagens agora podem ser foto/áudio, não só texto — 'tipo' vem de POST .../upload
+      // (feito antes, pra já ter a URL do arquivo em mãos na hora de mandar a mensagem).
+      const tipoFinal = (tipo === 'imagem' || tipo === 'audio') ? tipo : 'texto';
       const t = String(texto || '').trim().slice(0, 500);
-      if (!t) return sendJSON(res, 400, { error: 'Escreva uma mensagem.' });
+      if (tipoFinal === 'texto' && !t) return sendJSON(res, 400, { error: 'Escreva uma mensagem.' });
+      if (tipoFinal !== 'texto' && !url) return sendJSON(res, 400, { error: 'Anexo sem URL.' });
       const todas = lerAtendimentos();
       const conversa = todas[conversaMsgMatch[1]];
       if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
-      conversa.mensagens.push({ de: 'cliente', texto: t, ts: new Date().toISOString() });
+      const msg = { de: 'cliente', texto: t, ts: new Date().toISOString() };
+      if (tipoFinal !== 'texto') { msg.tipo = tipoFinal; msg.url = String(url).slice(0, 300); }
+      conversa.mensagens.push(msg);
       conversa.ultimaAtividade = new Date().toISOString();
-      if (conversa.modo === 'humano') {
+      conversa.clienteDigitandoAte = 0; // já mandou — encerra o indicador de "digitando" na hora
+      // v60: foto/áudio a IA não consegue interpretar — pula direto pro atendente humano em vez
+      // de tentar responder chutando às cegas ou fingir que entendeu o anexo.
+      if (conversa.modo === 'humano' || tipoFinal !== 'texto') {
+        if (tipoFinal !== 'texto' && conversa.modo === 'ia') {
+          conversa.mensagens.push({ de: 'sistema', texto: 'Anexo recebido — chamando um atendente pra ver.', ts: new Date().toISOString() });
+        }
         conversa.naoLidaAtendente = true;
         salvarAtendimentos(todas);
         return sendJSON(res, 200, { conversa });
@@ -1470,6 +1539,19 @@ const server = http.createServer(async (req, res) => {
       salvarAtendimentos(todas);
       return sendJSON(res, 200, { conversa });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/atendimento/:id/digitando — indicador de "digitando..." (v60) ──
+  // Chamado pelo navegador do cliente enquanto ele digita (com um intervalo mínimo entre
+  // chamadas, ver index.html) — só marca um timestamp; quem lê (o painel, no polling que já
+  // existia) considera "digitando" só se esse timestamp for de poucos segundos atrás.
+  const conversaDigitandoMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/digitando$/);
+  if (conversaDigitandoMatch && req.method === 'POST') {
+    const todas = lerAtendimentos();
+    const conversa = todas[conversaDigitandoMatch[1]];
+    if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+    conversa.clienteDigitandoAte = Date.now() + 4000;
+    salvarAtendimentos(todas);
+    return sendJSON(res, 200, { ok: true });
   }
   const conversaHumanoMatch = pathname.match(/^\/api\/atendimento\/([a-f0-9]+)\/humano$/);
   if (conversaHumanoMatch && req.method === 'POST') {
@@ -1493,36 +1575,62 @@ const server = http.createServer(async (req, res) => {
       .slice(0, 200);
     return sendJSON(res, 200, { conversas: lista });
   }
-  // v59: apagar TODAS as conversas de uma vez (botão "🗑️ Apagar todas as conversas" no painel).
-  // Ação irreversível — o front pede confirmação antes de chamar isso.
-  if (pathname === '/api/admin/atendimento' && req.method === 'DELETE') {
-    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    salvarAtendimentos({});
-    return sendJSON(res, 200, { ok: true });
-  }
   const conversaResponderMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/responder$/);
   if (conversaResponderMatch && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      // v59: além de texto, aceita uma mensagem de VOZ (áudio gravado no painel, mandado como
-      // data URL base64) — igual o WhatsApp permite responder por áudio. Limite de 8MB cobre
-      // tranquilamente alguns minutos de áudio comprimido (webm/opus).
-      const { texto, audio } = await readBody(req, 8e6);
+      const { texto, tipo, url } = await readBody(req);
+      const tipoFinal = (tipo === 'imagem' || tipo === 'audio') ? tipo : 'texto';
+      const t = String(texto || '').trim().slice(0, 1000);
+      if (tipoFinal === 'texto' && !t) return sendJSON(res, 400, { error: 'Escreva uma resposta.' });
       const todas = lerAtendimentos();
       const conversa = todas[conversaResponderMatch[1]];
       if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
-      if (typeof audio === 'string' && audio.startsWith('data:audio')) {
-        conversa.mensagens.push({ de: 'atendente', tipo: 'audio', audioData: audio, ts: new Date().toISOString() });
-      } else {
-        const t = String(texto || '').trim().slice(0, 1000);
-        if (!t) return sendJSON(res, 400, { error: 'Escreva uma resposta ou grave um áudio.' });
-        conversa.mensagens.push({ de: 'atendente', tipo: 'texto', texto: t, ts: new Date().toISOString() });
-      }
       conversa.modo = 'humano';
       conversa.naoLidaAtendente = false;
+      conversa.atendenteDigitandoAte = 0;
+      const msg = { de: 'atendente', texto: t, ts: new Date().toISOString() };
+      if (tipoFinal !== 'texto') { msg.tipo = tipoFinal; msg.url = String(url || '').slice(0, 300); }
+      conversa.mensagens.push(msg);
       conversa.ultimaAtividade = new Date().toISOString();
       salvarAtendimentos(todas);
       return sendJSON(res, 200, { conversa });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/admin/atendimento/:id/digitando — indicador de "digitando..." do lado do
+  // atendente (v60), espelho da rota pública equivalente do cliente. ──
+  const conversaAdminDigitandoMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/digitando$/);
+  if (conversaAdminDigitandoMatch && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const todas = lerAtendimentos();
+    const conversa = todas[conversaAdminDigitandoMatch[1]];
+    if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+    conversa.atendenteDigitandoAte = Date.now() + 4000;
+    salvarAtendimentos(todas);
+    return sendJSON(res, 200, { ok: true });
+  }
+  // ── POST /api/admin/atendimento/:id/upload — anexo (foto/áudio) do atendente, do painel (v60) ──
+  const conversaAdminUploadMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/upload$/);
+  if (conversaAdminUploadMatch && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const todas = lerAtendimentos();
+      const conversa = todas[conversaAdminUploadMatch[1]];
+      if (!conversa) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+      const { dataUrl } = await readBody(req, 8e6);
+      const mImg = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
+      const mAudio = /^data:audio\/(webm|ogg|mpeg|mp3|mp4|m4a)(?:;codecs=[a-z0-9.]+)?;base64,(.+)$/i.exec(dataUrl || '');
+      if (!mImg && !mAudio) return sendJSON(res, 400, { error: 'Formato inválido. Use foto (PNG/JPG/WEBP) ou áudio.' });
+      const m = mImg || mAudio;
+      let ext = m[1].toLowerCase();
+      if (ext === 'jpeg') ext = 'jpg'; else if (ext === 'mpeg') ext = 'mp3';
+      const buffer = Buffer.from(m[2], 'base64');
+      const maxBytes = mAudio ? 6 * 1024 * 1024 : 4 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mAudio ? 'Áudio muito grande (máx. 6MB).' : 'Foto muito grande (máx. 4MB).' });
+      const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
+      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+      if (mImg) syncUploadToSupabase(filename, buffer, ext);
+      return sendJSON(res, 200, { url: '/uploads/' + filename, tipo: mImg ? 'imagem' : 'audio' });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
@@ -1639,16 +1747,21 @@ const server = http.createServer(async (req, res) => {
       // porque pesa naturalmente mais que uma foto comprimida.
       const mImg = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(dataUrl || '');
       const mVideo = /^data:video\/(mp4|webm|quicktime);base64,(.+)$/i.exec(dataUrl || '');
-      if (!mImg && !mVideo) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG, WEBP (foto) ou MP4/WEBM/MOV (Live Photo).' });
-      const m = mImg || mVideo;
+      // v60: também aceita áudio — usado pelas mensagens de voz do módulo de Atendimento
+      // (gravadas no navegador via MediaRecorder, formato webm/ogg/mp4 na maioria dos aparelhos).
+      const mAudio = /^data:audio\/(webm|ogg|mpeg|mp3|mp4|m4a)(?:;codecs=[a-z0-9.]+)?;base64,(.+)$/i.exec(dataUrl || '');
+      if (!mImg && !mVideo && !mAudio) return sendJSON(res, 400, { error: 'Formato inválido. Use PNG, JPG, WEBP (foto), MP4/WEBM/MOV (Live Photo) ou áudio (mensagem de voz).' });
+      const m = mImg || mVideo || mAudio;
       let ext = m[1].toLowerCase();
       if (ext === 'jpeg') ext = 'jpg';
       else if (ext === 'quicktime') ext = 'mov';
+      else if (ext === 'mpeg') ext = 'mp3';
       const buffer = Buffer.from(m[2], 'base64');
-      const maxBytes = mVideo ? 15 * 1024 * 1024 : 4 * 1024 * 1024;
-      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mVideo ? 'Vídeo muito grande (máx. 15MB).' : 'Imagem muito grande (máx. 4MB).' });
+      const maxBytes = mVideo ? 15 * 1024 * 1024 : mAudio ? 6 * 1024 * 1024 : 4 * 1024 * 1024;
+      if (buffer.length > maxBytes) return sendJSON(res, 400, { error: mVideo ? 'Vídeo muito grande (máx. 15MB).' : mAudio ? 'Áudio muito grande (máx. 6MB).' : 'Imagem muito grande (máx. 4MB).' });
       const filename = crypto.randomBytes(8).toString('hex') + '.' + ext;
       fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer);
+      if (mImg) syncUploadToSupabase(filename, buffer, ext); // v60: só imagens fazem backup (vídeo é grande demais)
       return sendJSON(res, 200, { url: '/uploads/' + filename });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
@@ -2124,6 +2237,36 @@ function estimateDeliveryWindow(order, cfg) {
   return timeText || '—';
 }
 
+  // ── POST /api/print-ack — o Agente Local avisa se uma via imprimiu ou falhou (v60) ──
+  // Fecha o ciclo do "celular como controle remoto": o clique em Imprimir pode ter partido de
+  // qualquer aparelho logado; aqui a gente repassa o resultado de volta pra TODOS os painéis
+  // conectados (broadcast), e cada um decide se estava esperando essa confirmação específica
+  // (ver pendingPrintAcks/evento 'print-result' em painel.html). Falhas também ficam guardadas
+  // em disco (print-log.json) pra dar pra conferir depois, mesmo sem estar com o painel aberto
+  // no momento em que a impressora falhou.
+  if (pathname === '/api/print-ack' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { orderId, station, ok, error } = await readBody(req);
+      if (!orderId || !station) return sendJSON(res, 400, { error: 'orderId e station são obrigatórios.' });
+      if (!ok) {
+        try {
+          const log = readJSON(PRINT_LOG_FILE);
+          log.unshift({ orderId, station, error: String(error || 'Falha desconhecida').slice(0, 500), ts: new Date().toISOString() });
+          fs.writeFileSync(PRINT_LOG_FILE, JSON.stringify(log.slice(0, 500), null, 2)); // guarda só os 500 mais recentes
+        } catch (e) { console.error('⚠️  Não consegui gravar print-log.json:', e.message); }
+      }
+      broadcast('print-result', { orderId, station, ok: !!ok, error: error || null });
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── GET /api/print-log — últimas falhas de impressão registradas (v60) ──
+  if (pathname === '/api/print-log' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try { return sendJSON(res, 200, { log: readJSON(PRINT_LOG_FILE) }); }
+    catch (e) { return sendJSON(res, 200, { log: [] }); }
+  }
+
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
   if (pathname === '/api/print' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
@@ -2277,12 +2420,6 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push(HR);
         lines.push(rightAlignRow('Entrada:', entrada));
         lines.push(rightAlignRow('Saida Prevista:', saidaPrevista));
-        // v59: a via de delivery/expedição — a que geralmente vai junto com o motoboy — também
-        // mostra a previsão REAL de entrega prometida ao cliente (Entrada + tempo configurado
-        // em Configurações), separada da "Saída Prevista" (que é só o tempo de preparo da cozinha).
-        if ((st === 'delivery' || st === 'expedicao') && order.mode === 'delivery') {
-          lines.push(rightAlignRow('Previsao cliente:', deliveryWindow));
-        }
         lines.push(HR);
         lines.push(ESC.boldOn + ('ITENS DA ' + (((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase())) + ESC.boldOff);
         lines.push(HR);
@@ -3274,7 +3411,6 @@ function estimateDeliveryWindow(order, cfg) {
     if (!['preparando', 'saiu'].includes(order.status)) {
       return sendJSON(res, 200, { ended: true, status: order.status });
     }
-    const { cfg } = readConfig();
     return sendJSON(res, 200, {
       ended: false,
       id: order.id,
@@ -3284,11 +3420,7 @@ function estimateDeliveryWindow(order, cfg) {
       name: order.name,
       phone: order.phone,
       address: order.address,
-      obs: order.obs || '',
-      createdAt: order.createdAt,
-      // v59: previsão real de entrega (o horário prometido ao cliente) — pro motoboy saber se
-      // está dentro do prazo, sem precisar voltar pro painel ou perguntar pro caixa.
-      deliveryWindow: estimateDeliveryWindow(order, cfg)
+      obs: order.obs || ''
     });
   }
 
@@ -3405,8 +3537,14 @@ function estimateDeliveryWindow(order, cfg) {
 });
 
 restoreFromSupabase().finally(() => {
-  server.listen(PORT, () => {
-    console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
-    console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+  loadSessionsFromDisk(); // v60: depois de restaurar do Supabase (se configurado), carrega sessões válidas pra memória
+  restoreUploadsFromSupabase().finally(() => {
+    server.listen(PORT, () => {
+      console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
+      console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
+      if (!process.env.UPLOADS_DIR && !SUPABASE_URL) {
+        console.log('⚠️  ATENÇÃO: UPLOADS_DIR não configurado e Supabase não configurado — fotos enviadas podem se perder no próximo deploy. Configure um Disco Persistente (UPLOADS_DIR) ou SUPABASE_URL/SUPABASE_SERVICE_KEY. Veja o README.md.');
+      }
+    });
   });
 });
