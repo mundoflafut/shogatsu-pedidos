@@ -1475,6 +1475,39 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
       </div>
 
+      <div class="settings-section-title">🏷️ Logo da Marca</div>
+      <div class="settings-grid">
+        <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">Logo exibida no topo do cardápio e no Chat Express</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Essa imagem aparece no cabeçalho do cardápio e como foto de perfil do Chat Express.
+            Envie em PNG, JPG ou WEBP — a imagem inteira sempre aparece, sem cortar (nunca fica
+            "vazando" da moldura, mesmo em formato redondo ou quadrado).
+          </div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+            <div id="logo-preview" style="width:90px;height:90px;border-radius:50%;border:1px solid var(--border);background:#0b0d11;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;"></div>
+            <div style="flex:1;min-width:220px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="logo-file-input" style="display:none;" onchange="uploadLogo(this)"/>
+              <button type="button" class="btn primary sm" onclick="document.getElementById('logo-file-input').click()">📤 Enviar logo</button>
+              <button type="button" class="btn secondary sm" onclick="removeLogo()">🗑 Remover (usar texto)</button>
+              <div class="field" style="margin-top:12px;max-width:260px;">
+                <label>Formato</label>
+                <select id="logo-shape" onchange="saveLogoSettings()">
+                  <option value="redondo">Redondo</option>
+                  <option value="quadrado">Quadrado</option>
+                  <option value="retangular">Retangular (sem moldura)</option>
+                </select>
+              </div>
+              <div class="field" style="margin-top:8px;max-width:260px;">
+                <label>Altura (px)</label>
+                <input type="number" id="logo-size" min="24" max="120" step="2" onchange="saveLogoSettings()"/>
+              </div>
+              <div id="logo-status" style="font-size:12px;margin-top:8px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-section-title">🖼️ Fundo do Chat (Chat Express)</div>
       <div class="settings-grid">
         <div class="settings-card" style="grid-column:1/-1;">
@@ -3256,6 +3289,62 @@ async function saveSplashConfig(){
   if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
   cfg.splash = splash;
   statusEl.innerHTML = '<span style="color:var(--green);">✅ Salvo! Já vale na próxima vez que o cardápio for aberto.</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+
+// ═══════════════════════════════════════════
+// v68: LOGO DA MARCA — cabeçalho do cardápio + avatar do Chat Express usam a mesma imagem
+// (cfg.logoUrl). Cada ação já salva sozinha (igual ao Fundo do Chat), sem botão "Salvar" à parte.
+// ═══════════════════════════════════════════
+function renderLogoEditor(){
+  if(!document.getElementById('logo-preview')) return;
+  document.getElementById('logo-shape').value = cfg.logoShape || 'redondo';
+  document.getElementById('logo-size').value = cfg.logoSize || 44;
+  renderLogoPreview();
+}
+function renderLogoPreview(){
+  const el = document.getElementById('logo-preview');
+  if(cfg.logoUrl) el.innerHTML = `<img src="${cfg.logoUrl}" alt="Logo" style="width:100%;height:100%;object-fit:contain;">`;
+  else el.innerHTML = `<span style="font-size:10px;color:var(--muted);text-align:center;padding:4px;">Sem logo — usando texto</span>`;
+}
+async function uploadLogo(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('logo-status');
+  if(file.size > 4*1024*1024){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Imagem muito grande (máx. 4MB).</span>'; input.value=''; return; }
+  statusEl.textContent = 'Enviando...';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const up = await fetch('/api/upload', { method:'POST', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ dataUrl: reader.result }) });
+    const upData = await up.json();
+    input.value = '';
+    if(!up.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(upData.error||'Erro ao enviar.')+'</span>'; return; }
+    cfg.logoUrl = upData.url;
+    const res = await apiPost('/api/config', { cfg: { logoUrl: cfg.logoUrl }, menu });
+    if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+    renderLogoPreview();
+    statusEl.innerHTML = '<span style="color:var(--green);">✅ Logo atualizada!</span>';
+    setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+  };
+  reader.readAsDataURL(file);
+}
+async function saveLogoSettings(){
+  const statusEl = document.getElementById('logo-status');
+  cfg.logoShape = document.getElementById('logo-shape').value;
+  cfg.logoSize = Number(document.getElementById('logo-size').value) || 44;
+  const res = await apiPost('/api/config', { cfg: { logoShape: cfg.logoShape, logoSize: cfg.logoSize }, menu });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  statusEl.innerHTML = '<span style="color:var(--green);">✅ Salvo!</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 3000);
+}
+async function removeLogo(){
+  if(!confirm('Remover a logo e voltar a mostrar o nome em texto no cabeçalho?')) return;
+  const statusEl = document.getElementById('logo-status');
+  cfg.logoUrl = '';
+  const res = await apiPost('/api/config', { cfg: { logoUrl: '' }, menu });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  renderLogoPreview();
+  statusEl.innerHTML = 'Logo removida — voltou pro texto padrão.';
   setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
 }
 
@@ -5501,6 +5590,7 @@ function loadSettings(){
   document.getElementById('cfg-name').value=cfg.name||'Shogatsu Culinária Oriental';
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
   renderWeekScheduleEditor();
+  renderLogoEditor();
   renderSplashEditor();
   renderChatBgEditor();
   // v33: aparência do cardápio (foto do prato e fonte)
