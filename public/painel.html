@@ -405,18 +405,48 @@ table{max-width:100%;}
 /* ── SETTINGS ── */
 .settings-section-title{font-size:15px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin:28px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
 .settings-section-title:first-child{margin-top:0;}
+/* v69: grade responsiva de verdade — 3 colunas em telas grandes, 2 no notebook/tablet, 1 no
+   celular (antes era fixo em 2 colunas em qualquer tamanho de tela, espremendo os cards no
+   celular). */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media (min-width:1200px){ .settings-grid{grid-template-columns:1fr 1fr 1fr;} }
+@media (max-width:620px){ .settings-grid{grid-template-columns:1fr;} }
 .save-all-bar{position:sticky;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);padding:14px 20px;margin:24px -20px -20px;display:flex;align-items:center;justify-content:flex-end;gap:14px;box-shadow:0 -4px 20px rgba(0,0,0,.25);}
 .settings-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
 .card-ctrl-btn{background:none;border:none;cursor:pointer;opacity:.55;font-size:13px;padding:2px 4px;border-radius:4px;transition:opacity .15s,background .15s;}
 .card-ctrl-btn:hover{opacity:1;background:rgba(255,255,255,.08);}
 .card-minimized{padding-bottom:20px;}
 .card-pinned{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
+.card-favorited{border-color:var(--gold);}
 .conn-status{font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.06);white-space:nowrap;transition:background .2s,color .2s;}
 .conn-connected{color:#4ade80;}
 .conn-connecting{color:#facc15;}
 .conn-lost{color:#f87171;background:rgba(248,113,113,.12);cursor:pointer;}
 .settings-card-title{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--white);display:flex;align-items:center;gap:8px;}
+
+/* ── v69: BUSCA + ACORDEÃO + FAVORITOS (página de Configurações) ── */
+.settings-topbar{position:sticky;top:0;z-index:20;background:var(--bg,#12141a);padding:10px 0 12px;margin-bottom:10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;}
+.settings-search-wrap{flex:1;position:relative;display:flex;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:0 12px;transition:border-color .15s ease;}
+.settings-search-wrap:focus-within{border-color:var(--gold);}
+.settings-search-icon{font-size:13px;opacity:.6;margin-right:8px;flex-shrink:0;}
+.settings-search-wrap input{flex:1;background:none;border:none;color:var(--white);font-size:13px;padding:11px 0;font-family:inherit;}
+.settings-search-wrap input:focus{outline:none;}
+.settings-search-wrap input::placeholder{color:var(--muted);}
+.settings-search-clear{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;flex-shrink:0;}
+.settings-search-clear:hover{color:var(--red-lt);}
+.settings-accordion{border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden;background:var(--panel);}
+.settings-accordion-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;cursor:pointer;user-select:none;transition:background .15s ease;}
+.settings-accordion-header:hover{background:rgba(255,255,255,.03);}
+.settings-accordion-header .acc-title{font-size:15px;font-weight:700;color:var(--gold);letter-spacing:.3px;}
+.settings-accordion-header .acc-chevron{font-size:13px;color:var(--muted);transition:transform .2s ease;flex-shrink:0;}
+.settings-accordion.open .acc-chevron{transform:rotate(180deg);}
+.settings-accordion-body{max-height:0;overflow:hidden;transition:max-height .25s ease;}
+.settings-accordion.open .settings-accordion-body{max-height:none;overflow:visible;}
+.settings-accordion-body > .settings-grid{padding:0 20px 20px;}
+.fav-accordion{border-color:var(--gold);}
+.fav-accordion .acc-title{color:var(--gold);}
+.settings-card.search-hidden,.settings-accordion.search-hidden{display:none !important;}
+.settings-card.search-match{box-shadow:0 0 0 2px var(--gold);}
 
 /* ── REPORTS ── */
 .report-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
@@ -1094,55 +1124,37 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <!-- ── CONFIGURAÇÕES ── -->
     <div class="page" id="page-configuracoes">
 
-      <div style="position:sticky;top:0;z-index:20;background:var(--bg,#12141a);padding:10px 0 12px;margin-bottom:6px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">
-        <button type="button" class="btn secondary sm" onclick="document.getElementById('settings-printer-card').scrollIntoView({behavior:'smooth',block:'start'})" title="Ir direto pra configuração de impressoras">
-          🖨 Escolher Impressora
+      <div class="settings-topbar">
+        <div class="settings-search-wrap">
+          <span class="settings-search-icon">🔎</span>
+          <input type="text" id="settings-search" placeholder="Pesquisar configuração... (ex: PIX, fonte, horário, impressora)" oninput="filterSettingsSearch(this.value)" autocomplete="off"/>
+          <button type="button" id="settings-search-clear" class="settings-search-clear" onclick="clearSettingsSearch()" style="display:none;" title="Limpar pesquisa">✕</button>
+        </div>
+        <button type="button" class="btn secondary sm" onclick="jumpToSettingsCard('impressoras','settings-printer-card')" title="Ir direto pra configuração de impressoras">
+          🖨 Impressoras
         </button>
       </div>
+      <div id="settings-search-empty" style="display:none;padding:30px 10px;text-align:center;color:var(--muted);font-size:13px;">
+        Nada encontrado pra essa pesquisa. Tente outro termo.
+      </div>
 
-      <div class="settings-section-title">🏪 Restaurante</div>
-      <div class="settings-grid">
-        <div class="settings-card">
-          <div class="settings-card-title">🎨 Aparência do Cardápio</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ajusta como o cardápio aparece pro cliente — dá pra testar e ver o resultado ao vivo abrindo o site em outra aba.</div>
-          <div class="field">
-            <label style="display:flex;align-items:center;justify-content:space-between;">
-              <span>Tamanho da foto do prato</span>
-              <span id="cfg-dishphoto-val" style="color:var(--red-lt);font-weight:600;">80px</span>
-            </label>
-            <input type="range" id="cfg-dishphotosize" min="56" max="140" step="2" oninput="document.getElementById('cfg-dishphoto-val').textContent=this.value+'px'"/>
-          </div>
-          <div class="field">
-            <label>Tamanho da fonte do cardápio</label>
-            <select id="cfg-menufontscale">
-              <option value="0.85">Pequena</option>
-              <option value="1">Normal</option>
-              <option value="1.15">Grande</option>
-              <option value="1.3">Extra Grande</option>
-            </select>
-          </div>
+      <div class="settings-accordion fav-accordion" id="settings-fav-accordion" style="display:none;">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('favoritos')">
+          <span class="acc-title">⭐ Favoritos</span>
+          <span class="acc-chevron" id="acc-chevron-favoritos">▾</span>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">🔗 Links Úteis</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Duas páginas novas, prontas pra usar — não precisam de nenhuma configuração extra.</div>
-          <div class="field" style="margin-bottom:14px;">
-            <label>📲 Link único (bio do Instagram/Facebook)</label>
-            <div style="display:flex;gap:8px;">
-              <input id="link-pedir-agora" readonly onclick="this.select()" style="font-size:11px;"/>
-              <button class="btn secondary sm" onclick="copyLinkField('link-pedir-agora')">📋</button>
-            </div>
-          </div>
-          <div class="field">
-            <label>🍽️ Cardápio do Rodízio (QR code da mesa)</label>
-            <div style="display:flex;gap:8px;margin-bottom:10px;">
-              <input id="link-rodizio" readonly onclick="this.select()" style="font-size:11px;"/>
-              <button class="btn secondary sm" onclick="copyLinkField('link-rodizio')">📋</button>
-            </div>
-            <img id="qr-rodizio" style="width:140px;height:140px;border-radius:8px;background:#fff;padding:6px;" alt="QR Code do cardápio de rodízio"/>
-            <div style="font-size:10px;color:var(--muted);margin-top:6px;">Imprime esse QR e cola na mesa — o cliente escaneia e vê o cardápio do rodízio na hora.</div>
-          </div>
+        <div class="settings-accordion-body" id="acc-body-favoritos">
+          <div class="settings-grid" id="settings-fav-grid"></div>
         </div>
-        <div class="settings-card">
+      </div>
+      <div class="settings-accordion" data-accordion-key="restaurante">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('restaurante')">
+          <span class="acc-title">🏪 Restaurante</span>
+          <span class="acc-chevron" id="acc-chevron-restaurante">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-restaurante">
+          <div class="settings-grid">
+<div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
           <div class="field"><label>Endereço Completo</label><input id="cfg-addr" placeholder="Av. Gov. Roberto Silveira, 109"/></div>
@@ -1166,7 +1178,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div id="review-phrases-list" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
           </div>
         </div>
-        <div class="settings-card">
+<div class="settings-card">
           <div class="settings-card-title">📱 Contato e Pedido Mínimo</div>
           <div class="field"><label>WhatsApp (com DDI)</label><input id="cfg-whats" placeholder="5522988683755"/></div>
           <div class="field"><label>Telefone (ligar/SMS, com DDD)</label><input id="cfg-storePhone" placeholder="(22) 98868-3755"/></div>
@@ -1198,7 +1210,171 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <input id="cfg-timeretirada" placeholder="20–30 min"/>
           </div>
         </div>
-        <div class="settings-card">
+<div class="settings-card">
+          <div class="settings-card-title">🔗 Links Úteis</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Duas páginas novas, prontas pra usar — não precisam de nenhuma configuração extra.</div>
+          <div class="field" style="margin-bottom:14px;">
+            <label>📲 Link único (bio do Instagram/Facebook)</label>
+            <div style="display:flex;gap:8px;">
+              <input id="link-pedir-agora" readonly onclick="this.select()" style="font-size:11px;"/>
+              <button class="btn secondary sm" onclick="copyLinkField('link-pedir-agora')">📋</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>🍽️ Cardápio do Rodízio (QR code da mesa)</label>
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <input id="link-rodizio" readonly onclick="this.select()" style="font-size:11px;"/>
+              <button class="btn secondary sm" onclick="copyLinkField('link-rodizio')">📋</button>
+            </div>
+            <img id="qr-rodizio" style="width:140px;height:140px;border-radius:8px;background:#fff;padding:6px;" alt="QR Code do cardápio de rodízio"/>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">Imprime esse QR e cola na mesa — o cliente escaneia e vê o cardápio do rodízio na hora.</div>
+          </div>
+        </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="aparencia">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('aparencia')">
+          <span class="acc-title">🎨 Aparência</span>
+          <span class="acc-chevron" id="acc-chevron-aparencia">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-aparencia">
+          <div class="settings-grid">
+<div class="settings-card">
+          <div class="settings-card-title">🎨 Aparência do Cardápio</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Ajusta como o cardápio aparece pro cliente — dá pra testar e ver o resultado ao vivo abrindo o site em outra aba.</div>
+          <div class="field">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Tamanho da foto do prato</span>
+              <span id="cfg-dishphoto-val" style="color:var(--red-lt);font-weight:600;">80px</span>
+            </label>
+            <input type="range" id="cfg-dishphotosize" min="56" max="140" step="2" oninput="document.getElementById('cfg-dishphoto-val').textContent=this.value+'px'"/>
+          </div>
+          <div class="field">
+            <label>Tamanho da fonte do cardápio</label>
+            <select id="cfg-menufontscale">
+              <option value="0.85">Pequena</option>
+              <option value="1">Normal</option>
+              <option value="1.15">Grande</option>
+              <option value="1.3">Extra Grande</option>
+            </select>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">Logo exibida no topo do cardápio e no Chat Express</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Essa imagem aparece no cabeçalho do cardápio e como foto de perfil do Chat Express.
+            Envie em PNG, JPG ou WEBP — a imagem inteira sempre aparece, sem cortar (nunca fica
+            "vazando" da moldura, mesmo em formato redondo ou quadrado).
+          </div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+            <div id="logo-preview" style="width:90px;height:90px;border-radius:50%;border:1px solid var(--border);background:#0b0d11;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;"></div>
+            <div style="flex:1;min-width:220px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="logo-file-input" style="display:none;" onchange="uploadLogo(this)"/>
+              <button type="button" class="btn primary sm" onclick="document.getElementById('logo-file-input').click()">📤 Enviar logo</button>
+              <button type="button" class="btn secondary sm" onclick="removeLogo()">🗑 Remover (usar texto)</button>
+              <div class="field" style="margin-top:12px;max-width:260px;">
+                <label>Formato</label>
+                <select id="logo-shape" onchange="saveLogoSettings()">
+                  <option value="redondo">Redondo</option>
+                  <option value="quadrado">Quadrado</option>
+                  <option value="retangular">Retangular (sem moldura)</option>
+                </select>
+              </div>
+              <div class="field" style="margin-top:8px;max-width:260px;">
+                <label>Altura (px)</label>
+                <input type="number" id="logo-size" min="24" max="120" step="2" onchange="saveLogoSettings()"/>
+              </div>
+              <div id="logo-status" style="font-size:12px;margin-top:8px;"></div>
+            </div>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📷 Personalizar fundo do chat</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Escolha uma imagem para usar como fundo nas conversas do Chat Express — igual ao papel
+            de parede do WhatsApp. A foto aparece pro cliente no celular, tablet e computador, com
+            um escurecido automático por cima pra manter as mensagens sempre legíveis.
+          </div>
+
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
+            <input type="checkbox" id="chatbg-enabled" onchange="toggleChatBgEnabled(this.checked)"/> Ativar fundo personalizado
+          </label>
+
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;">
+            <div style="flex:0 0 auto;">
+              <label style="display:block;margin-bottom:6px;">Pré-visualização</label>
+              <div id="chatbg-preview" style="width:160px;height:230px;border-radius:14px;border:1px solid var(--border);background:#0F1115;background-size:cover;background-position:center;display:flex;align-items:flex-end;padding:8px;overflow:hidden;">
+                <div style="background:#D32F2F;color:#fff;font-size:10px;padding:5px 8px;border-radius:10px;border-bottom-right-radius:3px;">Prévia da mensagem</div>
+              </div>
+              <div id="chatbg-info" style="font-size:10px;color:var(--muted);margin-top:6px;max-width:160px;"></div>
+            </div>
+
+            <div style="flex:1;min-width:220px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="chatbg-file-input" style="display:none;" onchange="uploadChatBgPhoto(this)"/>
+              <button type="button" class="btn primary sm" onclick="document.getElementById('chatbg-file-input').click()">📤 Enviar imagem</button>
+              <button type="button" class="btn secondary sm" onclick="removeChatBg()">🗑 Remover fundo</button>
+              <div style="font-size:10px;color:var(--muted);margin-top:6px;">PNG, JPG ou WEBP — máximo 5MB.</div>
+
+              <div class="field" style="margin-top:14px;max-width:280px;">
+                <label>Escurecido sobre a foto (legibilidade)</label>
+                <input type="range" id="chatbg-overlay" min="0" max="0.8" step="0.05" value="0.45" oninput="document.getElementById('chatbg-overlay-val').textContent = Math.round(this.value*100)+'%'; renderChatBgPreview();" onchange="saveChatBgOverlay(this.value)"/>
+                <div style="font-size:10px;color:var(--muted);">Atual: <span id="chatbg-overlay-val">45%</span></div>
+              </div>
+
+              <div id="chatbg-status" style="font-size:12px;margin-top:10px;"></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Galeria de fundos prontos</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Clique numa foto para usar direto — ou envie a sua própria acima.</div>
+            <div id="chatbg-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;"></div>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">✨ Sequência de fotos ao abrir o app</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Mostra fotos em tela cheia (pratos, ambiente, promoções) com animação suave por
+            alguns segundos antes de abrir o cardápio — estilo iFood/Uber Eats/Airbnb.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="splash-enabled"/> Ativar Splash Screen
+          </label>
+          <div class="field-row">
+            <div class="field">
+              <label>Duração total (2 a 15 segundos)</label>
+              <input type="number" id="splash-duration" min="2" max="15" step="0.5" value="3"/>
+            </div>
+            <div class="field">
+              <label>Efeito de transição</label>
+              <select id="splash-transition">
+                <option value="zoom">Zoom lento (Ken Burns)</option>
+                <option value="parallax">Parallax (zoom + deslocamento)</option>
+                <option value="fade">Fade simples</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:6px;">
+            <label>Fotos</label>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Envie fotos do seu dispositivo (📤) ou cole o link de uma foto já publicada. Ordem aqui é a ordem de exibição.</div>
+            <div id="splash-photos-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
+            <button type="button" class="btn secondary sm" onclick="splashAddPhoto()">+ Foto</button>
+          </div>
+          <button type="button" class="btn primary" style="margin-top:14px;" onclick="saveSplashConfig()">💾 Salvar Splash Screen</button>
+          <div id="splash-save-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="funcionamento">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('funcionamento')">
+          <span class="acc-title">🕒 Funcionamento</span>
+          <span class="acc-chevron" id="acc-chevron-funcionamento">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-funcionamento">
+          <div class="settings-grid">
+<div class="settings-card">
           <div class="settings-card-title">⏰ Auto-Abertura / Fechamento</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Se ativado, o restaurante abre e fecha sozinho no horário configurado — o botão manual
@@ -1215,11 +1391,74 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div style="font-size:10px;color:var(--muted);">Exemplo: 18:00 até 23:00 — abre 18h, fecha 23h, todo dia. Funciona mesmo passando da meia-noite (ex: 18:00 até 02:00).</div>
         </div>
+          </div>
+        </div>
       </div>
-
-      <div class="settings-section-title">🛵 Entrega e Cupons</div>
-      <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
+      <div class="settings-accordion" data-accordion-key="delivery">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('delivery')">
+          <span class="acc-title">🚚 Delivery</span>
+          <span class="acc-chevron" id="acc-chevron-delivery">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-delivery">
+          <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">💰 Taxa de Entrega</div>
+          <div class="field"><label>Como calcular a taxa de entrega?</label>
+            <select id="fee-mode" onchange="renderFeeModeUI()">
+              <option value="fixo">💰 Taxa fixa (mesmo valor pra todo mundo)</option>
+              <option value="cep">📮 Por faixa de CEP</option>
+              <option value="bairro">📍 Por bairro</option>
+              <option value="distancia">📏 Por distância (km até o cliente)</option>
+            </select>
+          </div>
+          <div class="field"><label>Taxa Fixa / Padrão R$ <span style="font-weight:400;color:var(--muted);">(usada no modo fixo, e como reserva nos outros modos)</span></label><input id="cfg-fee" type="number" placeholder="8"/></div>
+          <div id="fee-mode-body"></div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🎟️ Cupons de Desconto</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            O cliente digita o código no checkout do site. Tipos: porcentagem, valor fixo em R$, ou frete grátis.
+          </div>
+          <div id="coupons-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addCoupon()">+ Novo Cupom</button>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">⭐ Fidelidade (Pontos)</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Cliente ganha pontos a cada pedido <b>entregue</b> e troca por desconto no próximo pedido.
+            Calculado automaticamente — não precisa mexer em nada além destes números.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="cfg-loyalty-enabled"/> Programa de fidelidade ativo
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="field"><label>Pontos por R$1 gasto</label><input id="cfg-loyalty-rate" type="number" step="0.1" placeholder="1"/></div>
+            <div class="field"><label>Pedido mínimo p/ resgatar (R$, 0=sem mínimo)</label><input id="cfg-loyalty-minorder" type="number" step="0.01" placeholder="0"/></div>
+            <div class="field"><label>Pontos por bloco de resgate</label><input id="cfg-loyalty-redeempoints" type="number" placeholder="100"/></div>
+            <div class="field"><label>Valor do bloco (R$ de desconto)</label><input id="cfg-loyalty-redeemvalue" type="number" step="0.01" placeholder="10"/></div>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📣 Anúncios no Cardápio</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Aparecem como banner pra <b>qualquer pessoa</b> que abrir o cardápio, mesmo sem conta —
+            diferente do SMS, que só alcança quem já é cliente cadastrado. Bom pra avisar promoções,
+            novidades do cardápio, horário especial, etc.
+          </div>
+          <div id="announcements-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
+        </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="pagamentos">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('pagamentos')">
+          <span class="acc-title">💳 Pagamentos</span>
+          <span class="acc-chevron" id="acc-chevron-pagamentos">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-pagamentos">
+          <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">💠 PIX</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Sem a chave PIX preenchida aqui, o cliente não consegue gerar QR Code/copia-e-cola no
@@ -1243,99 +1482,86 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label style="font-size:10px;">Access Token (produção) do Mercado Pago</label><input id="cfg-pixgw-token" type="password" placeholder="APP_USR-••••••••••"/></div>
           </div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">💰 Taxa de Entrega</div>
-          <div class="field"><label>Como calcular a taxa de entrega?</label>
-            <select id="fee-mode" onchange="renderFeeModeUI()">
-              <option value="fixo">💰 Taxa fixa (mesmo valor pra todo mundo)</option>
-              <option value="cep">📮 Por faixa de CEP</option>
-              <option value="bairro">📍 Por bairro</option>
-              <option value="distancia">📏 Por distância (km até o cliente)</option>
-            </select>
           </div>
-          <div class="field"><label>Taxa Fixa / Padrão R$ <span style="font-weight:400;color:var(--muted);">(usada no modo fixo, e como reserva nos outros modos)</span></label><input id="cfg-fee" type="number" placeholder="8"/></div>
-          <div id="fee-mode-body"></div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🎟️ Cupons de Desconto</div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="impressoras">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('impressoras')">
+          <span class="acc-title">🖨 Impressoras</span>
+          <span class="acc-chevron" id="acc-chevron-impressoras">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-impressoras">
+          <div class="settings-grid">
+<div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📠 Impressoras por Estação</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            O cliente digita o código no checkout do site. Tipos: porcentagem, valor fixo em R$, ou frete grátis.
+            Renomeie cada via como preferir e escolha como ela imprime: pela janela do
+            navegador (mais simples, não precisa configurar nada), por impressora de
+            rede (IP) ou por impressora USB ligada nesse computador.
           </div>
-          <div id="coupons-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addCoupon()">+ Novo Cupom</button>
+          <div id="stations-list" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">⭐ Fidelidade (Pontos)</div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🔤 Fonte de Impressão</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Cliente ganha pontos a cada pedido <b>entregue</b> e troca por desconto no próximo pedido.
-            Calculado automaticamente — não precisa mexer em nada além destes números.
+            Vale pra vias que imprimem pelo navegador (a fonte é aplicada de verdade).
+            Em impressoras térmicas de rede/USB o hardware só suporta letra maior ou
+            normal — tamanho 18 ou mais já sai em modo grande automaticamente.
           </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
-            <input type="checkbox" id="cfg-loyalty-enabled"/> Programa de fidelidade ativo
-          </label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div class="field"><label>Pontos por R$1 gasto</label><input id="cfg-loyalty-rate" type="number" step="0.1" placeholder="1"/></div>
-            <div class="field"><label>Pedido mínimo p/ resgatar (R$, 0=sem mínimo)</label><input id="cfg-loyalty-minorder" type="number" step="0.01" placeholder="0"/></div>
-            <div class="field"><label>Pontos por bloco de resgate</label><input id="cfg-loyalty-redeempoints" type="number" placeholder="100"/></div>
-            <div class="field"><label>Valor do bloco (R$ de desconto)</label><input id="cfg-loyalty-redeemvalue" type="number" step="0.01" placeholder="10"/></div>
-          </div>
-        </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📣 Anúncios no Cardápio</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Aparecem como banner pra <b>qualquer pessoa</b> que abrir o cardápio, mesmo sem conta —
-            diferente do SMS, que só alcança quem já é cliente cadastrado. Bom pra avisar promoções,
-            novidades do cardápio, horário especial, etc.
-          </div>
-          <div id="announcements-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
-        </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
-            tem tal prato etc.). Escolha um provedor <b>gratuito</b> (Groq, OpenRouter, Hugging
-            Face ou Google Gemini) ou a Anthropic (paga). Sem chave cadastrada ou desativado, o
-            botão de dúvidas simplesmente não aparece pro cliente, sem quebrar nada. O cliente
-            sempre pode tocar em "Falar com atendente" pra um humano assumir a conversa.
-          </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
-            <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
-          </label>
           <div class="field-row">
-            <div class="field">
-              <label style="font-size:10px;">Provedor</label>
-              <select id="ia-provider" onchange="atualizarDicaProvedorIa()">
-                <option value="groq">Groq — grátis</option>
-                <option value="openrouter">OpenRouter — grátis</option>
-                <option value="huggingface">Hugging Face — grátis</option>
-                <option value="gemini">Google Gemini — grátis</option>
-                <option value="anthropic">Anthropic (Claude) — pago</option>
+            <div class="field"><label style="font-size:10px;">Modelo da fonte</label>
+              <select id="print-font" onchange="updatePrintFontPreview()">
+                <option value="monospace">Monoespaçada (estilo recibo clássico)</option>
+                <option value="sans-serif">Sem serifa (mais moderna)</option>
+                <option value="serif">Serifada</option>
+                <option value='"Courier New", monospace'>Datilografada (Courier New)</option>
+                <option value='Georgia, "Times New Roman", serif'>Elegante (Georgia)</option>
+                <option value='"Arial Narrow", Arial, sans-serif'>Condensada (economiza papel)</option>
+                <option value='Verdana, sans-serif'>Clean (Verdana)</option>
+                <option value='"Trebuchet MS", sans-serif'>Arredondada (Trebuchet)</option>
               </select>
             </div>
-            <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
-          </div>
-          <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
-          <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
-
-          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
-            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
-            <div id="ia-faq-lista"></div>
-            <div class="field-row" style="margin-top:8px;">
-              <div class="field"><label style="font-size:10px;">Pergunta</label><input id="ia-faq-pergunta" placeholder="Ex: Vocês têm opção vegetariana?"/></div>
-              <div class="field"><label style="font-size:10px;">Resposta</label><input id="ia-faq-resposta" placeholder="Ex: Temos sim! Veja a categoria Vegetarianos."/></div>
+            <div class="field"><label style="font-size:10px;">Tamanho (px)</label><input type="number" id="print-size" min="10" max="28" oninput="updatePrintFontPreview()"/></div>
+            <div class="field" style="flex:0 0 100%;"><label style="font-size:10px;">Pré-visualização</label>
+              <div id="print-font-preview" style="background:#fff;color:#000;padding:10px 14px;border-radius:6px;font-size:14px;">SHOGATSU — Pedido #AB12CD · R$ 45,00</div>
             </div>
-            <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
+            <div class="field"><label style="font-size:10px;">Cor do texto</label><input type="color" id="print-color" style="height:34px;padding:2px;" oninput="updatePrintFontPreview()"/></div>
           </div>
-
-          <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
-          <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
-
-        <div class="settings-card" style="grid-column:1/-1;">
+<div class="settings-card">
+          <div class="settings-card-title">🔔 Impressão Automática</div>
+          <div class="field"><label>Imprimir ao Receber Pedido</label>
+            <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
+          </div>
+        </div>
+<div class="settings-card">
+          <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Som que toca no app do cliente sempre que ele recebe qualquer aviso (pedido confirmado,
+            status mudou, etc). Escolha um estilo e clique em Testar pra ouvir.
+          </div>
+          <div class="field"><label style="font-size:10px;">Estilo do som</label>
+            <select id="cfg-customer-alert-sound">
+              <option value="classico">🔔 Clássico (0,4s)</option>
+              <option value="suave">💧 Suave (0,3s)</option>
+              <option value="dupla">🎵 Nota Dupla (0,4s)</option>
+              <option value="sino">⏰ Sino (1,5s)</option>
+              <option value="oriental">🎋 Oriental — Sino Zen (4s)</option>
+            </select>
+          </div>
+          <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
+        </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="whatsapp">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('whatsapp')">
+          <span class="acc-title">📱 WhatsApp & Atendimento</span>
+          <span class="acc-chevron" id="acc-chevron-whatsapp">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-whatsapp">
+          <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Se preenchido, o cardápio mostra um botão que abre a conversa direto no Instagram ou
@@ -1347,7 +1573,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📥 Importar Contatos Externos</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Importa uma lista de contatos externa (CSV do Google Contatos, CSV do Outlook, vCard
@@ -1363,7 +1589,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="contatos-import-status" style="font-size:12px;margin-bottom:10px;"></div>
           <div id="contatos-por-ddd" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;">Nenhum contato importado ainda.</div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📢 SMS para Clientes</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Manda promoções por SMS pros clientes cadastrados. Precisa de uma conta própria na
@@ -1409,7 +1635,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div id="sms-send-status" style="font-size:12px;margin-top:8px;"></div>
           </div>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">🔔 Notificações Push</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Manda a notificação direto no navegador do cliente (celular ou computador), mesmo com o
@@ -1437,190 +1663,71 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <button class="btn success" style="margin-top:10px;" onclick="sendPushCampaign()">📤 Enviar Notificação Push</button>
           <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
-      </div>
-
-      <div class="settings-section-title">🎬 Splash Screen (Tela de Abertura)</div>
-      <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">✨ Sequência de fotos ao abrir o app</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Mostra fotos em tela cheia (pratos, ambiente, promoções) com animação suave por
-            alguns segundos antes de abrir o cardápio — estilo iFood/Uber Eats/Airbnb.
           </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
-            <input type="checkbox" id="splash-enabled"/> Ativar Splash Screen
+        </div>
+      </div>
+      <div class="settings-accordion" data-accordion-key="ia">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('ia')">
+          <span class="acc-title">🤖 Inteligência Artificial</span>
+          <span class="acc-chevron" id="acc-chevron-ia">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-ia">
+          <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
+            tem tal prato etc.). Escolha um provedor <b>gratuito</b> (Groq, OpenRouter, Hugging
+            Face ou Google Gemini) ou a Anthropic (paga). Sem chave cadastrada ou desativado, o
+            botão de dúvidas simplesmente não aparece pro cliente, sem quebrar nada. O cliente
+            sempre pode tocar em "Falar com atendente" pra um humano assumir a conversa.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
           </label>
           <div class="field-row">
             <div class="field">
-              <label>Duração total (2 a 15 segundos)</label>
-              <input type="number" id="splash-duration" min="2" max="15" step="0.5" value="3"/>
-            </div>
-            <div class="field">
-              <label>Efeito de transição</label>
-              <select id="splash-transition">
-                <option value="zoom">Zoom lento (Ken Burns)</option>
-                <option value="parallax">Parallax (zoom + deslocamento)</option>
-                <option value="fade">Fade simples</option>
+              <label style="font-size:10px;">Provedor</label>
+              <select id="ia-provider" onchange="atualizarDicaProvedorIa()">
+                <option value="groq">Groq — grátis</option>
+                <option value="openrouter">OpenRouter — grátis</option>
+                <option value="huggingface">Hugging Face — grátis</option>
+                <option value="gemini">Google Gemini — grátis</option>
+                <option value="anthropic">Anthropic (Claude) — pago</option>
               </select>
             </div>
-          </div>
-          <div class="field" style="margin-top:6px;">
-            <label>Fotos</label>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Envie fotos do seu dispositivo (📤) ou cole o link de uma foto já publicada. Ordem aqui é a ordem de exibição.</div>
-            <div id="splash-photos-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
-            <button type="button" class="btn secondary sm" onclick="splashAddPhoto()">+ Foto</button>
-          </div>
-          <button type="button" class="btn primary" style="margin-top:14px;" onclick="saveSplashConfig()">💾 Salvar Splash Screen</button>
-          <div id="splash-save-status" style="font-size:12px;margin-top:8px;"></div>
-        </div>
-      </div>
-
-      <div class="settings-section-title">🏷️ Logo da Marca</div>
-      <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">Logo exibida no topo do cardápio e no Chat Express</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
-            Essa imagem aparece no cabeçalho do cardápio e como foto de perfil do Chat Express.
-            Envie em PNG, JPG ou WEBP — a imagem inteira sempre aparece, sem cortar (nunca fica
-            "vazando" da moldura, mesmo em formato redondo ou quadrado).
-          </div>
-          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
-            <div id="logo-preview" style="width:90px;height:90px;border-radius:50%;border:1px solid var(--border);background:#0b0d11;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;"></div>
-            <div style="flex:1;min-width:220px;">
-              <input type="file" accept="image/png,image/jpeg,image/webp" id="logo-file-input" style="display:none;" onchange="uploadLogo(this)"/>
-              <button type="button" class="btn primary sm" onclick="document.getElementById('logo-file-input').click()">📤 Enviar logo</button>
-              <button type="button" class="btn secondary sm" onclick="removeLogo()">🗑 Remover (usar texto)</button>
-              <div class="field" style="margin-top:12px;max-width:260px;">
-                <label>Formato</label>
-                <select id="logo-shape" onchange="saveLogoSettings()">
-                  <option value="redondo">Redondo</option>
-                  <option value="quadrado">Quadrado</option>
-                  <option value="retangular">Retangular (sem moldura)</option>
-                </select>
-              </div>
-              <div class="field" style="margin-top:8px;max-width:260px;">
-                <label>Altura (px)</label>
-                <input type="number" id="logo-size" min="24" max="120" step="2" onchange="saveLogoSettings()"/>
-              </div>
-              <div id="logo-status" style="font-size:12px;margin-top:8px;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-section-title">🖼️ Fundo do Chat (Chat Express)</div>
-      <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📷 Personalizar fundo do chat</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
-            Escolha uma imagem para usar como fundo nas conversas do Chat Express — igual ao papel
-            de parede do WhatsApp. A foto aparece pro cliente no celular, tablet e computador, com
-            um escurecido automático por cima pra manter as mensagens sempre legíveis.
-          </div>
-
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
-            <input type="checkbox" id="chatbg-enabled" onchange="toggleChatBgEnabled(this.checked)"/> Ativar fundo personalizado
-          </label>
-
-          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;">
-            <div style="flex:0 0 auto;">
-              <label style="display:block;margin-bottom:6px;">Pré-visualização</label>
-              <div id="chatbg-preview" style="width:160px;height:230px;border-radius:14px;border:1px solid var(--border);background:#0F1115;background-size:cover;background-position:center;display:flex;align-items:flex-end;padding:8px;overflow:hidden;">
-                <div style="background:#D32F2F;color:#fff;font-size:10px;padding:5px 8px;border-radius:10px;border-bottom-right-radius:3px;">Prévia da mensagem</div>
-              </div>
-              <div id="chatbg-info" style="font-size:10px;color:var(--muted);margin-top:6px;max-width:160px;"></div>
-            </div>
-
-            <div style="flex:1;min-width:220px;">
-              <input type="file" accept="image/png,image/jpeg,image/webp" id="chatbg-file-input" style="display:none;" onchange="uploadChatBgPhoto(this)"/>
-              <button type="button" class="btn primary sm" onclick="document.getElementById('chatbg-file-input').click()">📤 Enviar imagem</button>
-              <button type="button" class="btn secondary sm" onclick="removeChatBg()">🗑 Remover fundo</button>
-              <div style="font-size:10px;color:var(--muted);margin-top:6px;">PNG, JPG ou WEBP — máximo 5MB.</div>
-
-              <div class="field" style="margin-top:14px;max-width:280px;">
-                <label>Escurecido sobre a foto (legibilidade)</label>
-                <input type="range" id="chatbg-overlay" min="0" max="0.8" step="0.05" value="0.45" oninput="document.getElementById('chatbg-overlay-val').textContent = Math.round(this.value*100)+'%'; renderChatBgPreview();" onchange="saveChatBgOverlay(this.value)"/>
-                <div style="font-size:10px;color:var(--muted);">Atual: <span id="chatbg-overlay-val">45%</span></div>
-              </div>
-
-              <div id="chatbg-status" style="font-size:12px;margin-top:10px;"></div>
-            </div>
-          </div>
-
-          <div class="field">
-            <label>Galeria de fundos prontos</label>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">Clique numa foto para usar direto — ou envie a sua própria acima.</div>
-            <div id="chatbg-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-section-title">🖨 Impressão</div>
-      <div class="settings-grid">
-        <div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📠 Impressoras por Estação</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Renomeie cada via como preferir e escolha como ela imprime: pela janela do
-            navegador (mais simples, não precisa configurar nada), por impressora de
-            rede (IP) ou por impressora USB ligada nesse computador.
-          </div>
-          <div id="stations-list" style="display:flex;flex-direction:column;gap:12px;"></div>
-        </div>
-        <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🔤 Fonte de Impressão</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Vale pra vias que imprimem pelo navegador (a fonte é aplicada de verdade).
-            Em impressoras térmicas de rede/USB o hardware só suporta letra maior ou
-            normal — tamanho 18 ou mais já sai em modo grande automaticamente.
+            <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
           </div>
           <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo da fonte</label>
-              <select id="print-font" onchange="updatePrintFontPreview()">
-                <option value="monospace">Monoespaçada (estilo recibo clássico)</option>
-                <option value="sans-serif">Sem serifa (mais moderna)</option>
-                <option value="serif">Serifada</option>
-                <option value='"Courier New", monospace'>Datilografada (Courier New)</option>
-                <option value='Georgia, "Times New Roman", serif'>Elegante (Georgia)</option>
-                <option value='"Arial Narrow", Arial, sans-serif'>Condensada (economiza papel)</option>
-                <option value='Verdana, sans-serif'>Clean (Verdana)</option>
-                <option value='"Trebuchet MS", sans-serif'>Arredondada (Trebuchet)</option>
-              </select>
+            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
+          </div>
+          <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
+          <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
+
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
+            <div id="ia-faq-lista"></div>
+            <div class="field-row" style="margin-top:8px;">
+              <div class="field"><label style="font-size:10px;">Pergunta</label><input id="ia-faq-pergunta" placeholder="Ex: Vocês têm opção vegetariana?"/></div>
+              <div class="field"><label style="font-size:10px;">Resposta</label><input id="ia-faq-resposta" placeholder="Ex: Temos sim! Veja a categoria Vegetarianos."/></div>
             </div>
-            <div class="field"><label style="font-size:10px;">Tamanho (px)</label><input type="number" id="print-size" min="10" max="28" oninput="updatePrintFontPreview()"/></div>
-            <div class="field" style="flex:0 0 100%;"><label style="font-size:10px;">Pré-visualização</label>
-              <div id="print-font-preview" style="background:#fff;color:#000;padding:10px 14px;border-radius:6px;font-size:14px;">SHOGATSU — Pedido #AB12CD · R$ 45,00</div>
-            </div>
-            <div class="field"><label style="font-size:10px;">Cor do texto</label><input type="color" id="print-color" style="height:34px;padding:2px;" oninput="updatePrintFontPreview()"/></div>
+            <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
           </div>
+
+          <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
+          <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">🔔 Impressão Automática</div>
-          <div class="field"><label>Imprimir ao Receber Pedido</label>
-            <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
           </div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Som que toca no app do cliente sempre que ele recebe qualquer aviso (pedido confirmado,
-            status mudou, etc). Escolha um estilo e clique em Testar pra ouvir.
-          </div>
-          <div class="field"><label style="font-size:10px;">Estilo do som</label>
-            <select id="cfg-customer-alert-sound">
-              <option value="classico">🔔 Clássico (0,4s)</option>
-              <option value="suave">💧 Suave (0,3s)</option>
-              <option value="dupla">🎵 Nota Dupla (0,4s)</option>
-              <option value="sino">⏰ Sino (1,5s)</option>
-              <option value="oriental">🎋 Oriental — Sino Zen (4s)</option>
-            </select>
-          </div>
-          <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
         </div>
       </div>
-
-      <div class="settings-section-title">🎨 Painel e Fluxo de Trabalho</div>
-      <div class="settings-grid">
-        <div class="settings-card" style="grid-column:1/-1;">
+      <div class="settings-accordion" data-accordion-key="sistema">
+        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('sistema')">
+          <span class="acc-title">⚙️ Sistema</span>
+          <span class="acc-chevron" id="acc-chevron-sistema">▾</span>
+        </div>
+        <div class="settings-accordion-body" id="acc-body-sistema">
+          <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">✏️ Textos de Status e Botões</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Personalize como os status e botões de ação aparecem no painel (Kanban e lista de pedidos).
@@ -1645,20 +1752,20 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label style="font-size:10px;">Botão de imprimir</label><input id="lb-btnPrint"/></div>
           </div>
         </div>
-        <div class="settings-card">
+<div class="settings-card">
           <div class="settings-card-title">🔊 Alertas</div>
           <div class="field"><label>Alerta Sonoro (pedido novo)</label>
             <select id="cfg-sound"><option value="1">✅ Ativado</option><option value="0">❌ Desativado</option></select>
           </div>
         </div>
-        <div class="settings-card">
+<div class="settings-card">
           <div class="settings-card-title">🔐 Segurança</div>
           <div class="field"><label>Senha do Painel</label><input type="password" id="cfg-pass" placeholder="••••••"/></div>
           <div class="field"><label>Nova Senha</label><input type="password" id="cfg-pass-new" placeholder="Digite nova senha"/></div>
           <div class="field"><label>Confirmar Nova Senha</label><input type="password" id="cfg-pass-confirm" placeholder="Confirme nova senha"/></div>
           <button class="btn primary" onclick="changePass()">Alterar Senha</button>
         </div>
-        <div class="settings-card" style="grid-column:1/-1;">
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">💾 Backup e Exportação de Dados</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Baixe seus dados regularmente — especialmente se o servidor não tiver
@@ -1681,11 +1788,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="settings-section-title" data-min-role="master">⚠️ Zona de Perigo</div>
-      <div class="settings-grid" data-min-role="master">
-        <div class="settings-card" style="grid-column:1/-1;border-color:var(--red-dk);">
+<div class="settings-card" data-min-role="master" style="grid-column:1/-1;border-color:var(--red-dk);">
           <div class="settings-card-title" style="color:var(--red-lt);">⚠️ Excluir Dados</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
             Apaga dados do sistema permanentemente. Só pra quem está logado como <b>master</b> —
@@ -1694,8 +1797,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <button class="btn danger sm" onclick="openDeleteDataModal()">🗑️ Excluir Dados...</button>
         </div>
+          </div>
+        </div>
       </div>
-
       <div class="save-all-bar">
         <span id="save-all-status" style="font-size:12px;color:var(--muted);"></span>
         <button class="btn secondary sm" onclick="restoreAllCards()" title="Traz de volta todos os cards que foram minimizados, ocultados ou fechados">↺ Restaurar Cards</button>
@@ -2318,6 +2422,7 @@ async function boot(){
   loadReservations();
   setInterval(loadReservations, 30000);
   setupCardControls();
+  initSettingsAccordions();
   restoreAllButtonOrders();
 }
 const ROLE_RANK_CLIENT = { vendas:1, admin:2, master:3 };
@@ -2432,6 +2537,9 @@ function setupCardControls(){
     const label = titleEl.textContent.trim().replace(/[^\w\sÀ-ÿ]/g,'');
     const cardId = card.dataset.cardId || (slugifyMenuId(label) || `card-${idx}`);
     card.dataset.cardId = cardId;
+    // v69: guarda onde o card mora originalmente (accordion + posição), antes de qualquer
+    // movimentação pro "⭐ Favoritos" — é pra onde ele volta quando desfavoritado.
+    if (!card._homeParent) { card._homeParent = card.parentElement; card._homeNext = card.nextSibling; }
 
     if (!titleEl.querySelector('.card-controls')) {
       const textSpan = document.createElement('span');
@@ -2444,8 +2552,9 @@ function setupCardControls(){
       controls.className = 'card-controls';
       controls.style.cssText = 'display:flex;gap:4px;';
       controls.innerHTML =
+        '<button type="button" class="card-ctrl-btn" data-act="fav" title="Favoritar (aparece em ⭐ Favoritos, no topo)">⭐</button>' +
         '<button type="button" class="card-ctrl-btn" data-act="min" title="Minimizar">➖</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="pin" title="Fixar no topo">📌</button>' +
+        '<button type="button" class="card-ctrl-btn" data-act="pin" title="Fixar no topo do grupo">📌</button>' +
         '<button type="button" class="card-ctrl-btn" data-act="cfg" title="Ir para o primeiro campo">⚙️</button>' +
         '<button type="button" class="card-ctrl-btn" data-act="hide" title="Ocultar/Mostrar conteúdo">👁️</button>' +
         '<button type="button" class="card-ctrl-btn" data-act="close" title="Fechar este card">✖</button>';
@@ -2460,6 +2569,117 @@ function setupCardControls(){
     if (state.closed) { card.style.display = 'none'; return; }
     applyCardState(card, state);
   });
+  updateFavSectionVisibility();
+}
+
+// v69: mostra/esconde a seção "⭐ Favoritos" dependendo se tem algum card favoritado
+function updateFavSectionVisibility(){
+  const favGrid = document.getElementById('settings-fav-grid');
+  const favAccordion = document.getElementById('settings-fav-accordion');
+  if (!favGrid || !favAccordion) return;
+  favAccordion.style.display = favGrid.children.length ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════
+// v69: ACORDEÃO da página de Configurações — cada grupo (🏪 Restaurante, 🎨 Aparência, etc.)
+// abre/fecha independente, e lembra o que o usuário deixou aberto entre uma visita e outra
+// (fica salvo no navegador, não mexe em nada do servidor).
+// ═══════════════════════════════════════════
+const SETTINGS_ACC_KEY = 'shogatsu_settings_accordion_open';
+function loadSettingsAccOpen(){
+  try { return JSON.parse(localStorage.getItem(SETTINGS_ACC_KEY) || 'null') || ['restaurante']; }
+  catch(e){ return ['restaurante']; }
+}
+function saveSettingsAccOpen(list){ localStorage.setItem(SETTINGS_ACC_KEY, JSON.stringify(list)); }
+function initSettingsAccordions(){
+  const open = loadSettingsAccOpen();
+  document.querySelectorAll('.settings-accordion[data-accordion-key]').forEach(acc => {
+    const key = acc.dataset.accordionKey;
+    acc.classList.toggle('open', open.includes(key));
+  });
+  // "⭐ Favoritos" abre sozinho sempre que tiver pelo menos 1 favorito
+  const favAcc = document.getElementById('settings-fav-accordion');
+  if (favAcc) favAcc.classList.add('open');
+}
+function toggleSettingsAccordion(key){
+  const acc = key === 'favoritos'
+    ? document.getElementById('settings-fav-accordion')
+    : document.querySelector(`.settings-accordion[data-accordion-key="${key}"]`);
+  if (!acc) return;
+  const opening = !acc.classList.contains('open');
+  acc.classList.toggle('open', opening);
+  if (key !== 'favoritos') {
+    const list = loadSettingsAccOpen();
+    const i = list.indexOf(key);
+    if (opening && i === -1) list.push(key);
+    else if (!opening && i !== -1) list.splice(i, 1);
+    saveSettingsAccOpen(list);
+  }
+}
+// Atalho "🖨 Impressoras" da barra de pesquisa — abre o grupo certo antes de rolar até o card
+function jumpToSettingsCard(accordionKey, cardId){
+  const acc = document.querySelector(`.settings-accordion[data-accordion-key="${accordionKey}"]`);
+  if (acc && !acc.classList.contains('open')) toggleSettingsAccordion(accordionKey);
+  setTimeout(() => {
+    const el = document.getElementById(cardId);
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 80); // pequeno atraso pra esperar o acordeão abrir antes de rolar
+}
+
+// ═══════════════════════════════════════════
+// v69: PESQUISA INTELIGENTE — digitar "PIX" abre Pagamentos, "fonte" abre Impressoras/Aparência,
+// etc. Procura no título do card e em todo o texto visível dentro dele (labels dos campos).
+// ═══════════════════════════════════════════
+let settingsSearchPrevOpen = null;
+function filterSettingsSearch(query){
+  const q = query.trim().toLowerCase();
+  const clearBtn = document.getElementById('settings-search-clear');
+  const emptyMsg = document.getElementById('settings-search-empty');
+  if (clearBtn) clearBtn.style.display = q ? '' : 'none';
+
+  if (!q) { clearSettingsSearch(); return; }
+
+  if (settingsSearchPrevOpen === null) settingsSearchPrevOpen = loadSettingsAccOpen();
+
+  let anyMatch = false;
+  document.querySelectorAll('.settings-accordion[data-accordion-key]').forEach(acc => {
+    let groupHasMatch = false;
+    acc.querySelectorAll('.settings-card').forEach(card => {
+      const hit = card.textContent.toLowerCase().includes(q);
+      card.classList.toggle('search-hidden', !hit);
+      card.classList.toggle('search-match', hit);
+      if (hit) groupHasMatch = true;
+    });
+    acc.classList.toggle('search-hidden', !groupHasMatch);
+    if (groupHasMatch) { acc.classList.add('open'); anyMatch = true; }
+  });
+  // favoritos também entra na busca, se estiver com algum card
+  const favAcc = document.getElementById('settings-fav-accordion');
+  if (favAcc && favAcc.style.display !== 'none') {
+    let favHasMatch = false;
+    favAcc.querySelectorAll('.settings-card').forEach(card => {
+      const hit = card.textContent.toLowerCase().includes(q);
+      card.classList.toggle('search-match', hit);
+      if (hit) favHasMatch = true;
+    });
+    if (favHasMatch) anyMatch = true;
+  }
+  if (emptyMsg) emptyMsg.style.display = anyMatch ? 'none' : '';
+}
+function clearSettingsSearch(){
+  const input = document.getElementById('settings-search');
+  if (input) input.value = '';
+  const clearBtn = document.getElementById('settings-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  const emptyMsg = document.getElementById('settings-search-empty');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+  document.querySelectorAll('.settings-card').forEach(card => card.classList.remove('search-hidden','search-match'));
+  document.querySelectorAll('.settings-accordion[data-accordion-key]').forEach(acc => {
+    acc.classList.remove('search-hidden');
+    const key = acc.dataset.accordionKey;
+    acc.classList.toggle('open', settingsSearchPrevOpen ? settingsSearchPrevOpen.includes(key) : false);
+  });
+  settingsSearchPrevOpen = null;
 }
 
 function applyCardState(card, state){
@@ -2469,6 +2689,15 @@ function applyCardState(card, state){
   });
   card.classList.toggle('card-minimized', !!state.minimized);
   card.classList.toggle('card-pinned', !!state.pinned);
+  card.classList.toggle('card-favorited', !!state.favorite);
+  const favGrid = document.getElementById('settings-fav-grid');
+  if (state.favorite && favGrid) {
+    if (card.parentElement !== favGrid) favGrid.appendChild(card);
+  } else if (card._homeParent && card.parentElement === favGrid) {
+    // volta pro grupo original — antes do card que já estava lá antes dele (se ainda existir)
+    if (card._homeNext && card._homeNext.parentElement === card._homeParent) card._homeParent.insertBefore(card, card._homeNext);
+    else card._homeParent.appendChild(card);
+  }
   if (state.pinned && card.parentElement) card.parentElement.prepend(card);
   card.style.opacity = state.hidden ? '.35' : '';
   card.style.pointerEvents = state.hidden ? 'none' : '';
@@ -2485,6 +2714,7 @@ function handleCardControlClick(card, cardId, act){
   if (act === 'min') state.minimized = !state.minimized;
   else if (act === 'pin') state.pinned = !state.pinned;
   else if (act === 'hide') state.hidden = !state.hidden;
+  else if (act === 'fav') state.favorite = !state.favorite;
   else if (act === 'close') {
     if (!confirm('Fechar este card? Use o botão "↺ Restaurar Cards", no rodapé desta página, pra trazer de volta.')) return;
     state.closed = true;
@@ -2493,6 +2723,7 @@ function handleCardControlClick(card, cardId, act){
   saveCardStates(states);
   if (state.closed) card.style.display = 'none';
   else applyCardState(card, state);
+  updateFavSectionVisibility();
 }
 
 function restoreAllCards(){
@@ -2501,11 +2732,17 @@ function restoreAllCards(){
     card.style.display = '';
     card.style.opacity = '';
     card.style.pointerEvents = '';
-    card.classList.remove('card-minimized','card-pinned');
+    card.classList.remove('card-minimized','card-pinned','card-favorited');
+    if (card._homeParent && card.parentElement !== card._homeParent) {
+      if (card._homeNext && card._homeNext.parentElement === card._homeParent) card._homeParent.insertBefore(card, card._homeNext);
+      else card._homeParent.appendChild(card);
+    }
     [...card.children].forEach(el => { el.style.display = ''; });
   });
+  updateFavSectionVisibility();
   showToast('↺ Cards restaurados', 'Todos os cards voltaram a aparecer normalmente.');
 }
+
 
 function hasRole(minRole){ return (ROLE_RANK_CLIENT[userRole]||0) >= (ROLE_RANK_CLIENT[minRole]||99); }
 function applyRoleUI(){
