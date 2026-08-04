@@ -208,10 +208,12 @@ async function printOrder(order) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
     return true;
   }
+  const results = await Promise.allSettled(
+    MY_STATIONS.map(station => printSingleStation(order, station))
+  );
   let anyPrinted = false;
-  for (const station of MY_STATIONS) {
-    const r = await printSingleStation(order, station);
-    if (r.ok && !r.skipped) anyPrinted = true;
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value.ok && !result.value.skipped) anyPrinted = true;
   }
   return anyPrinted;
 }
