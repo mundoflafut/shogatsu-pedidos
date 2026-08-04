@@ -1597,6 +1597,47 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
         </div>
 <div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📲 Popup de Instalação do App</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Popup premium que aparece pro cliente instalar o app (tela cheia, fundo escuro), oferecendo
+            um benefício no primeiro pedido. Aparece 2s após a primeira visita e some por 15 dias se o
+            cliente não instalar — some pra sempre assim que ele instalar.
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label style="font-size:10px;">Exibir popup?</label>
+              <select id="cfg-installpromo-enabled">
+                <option value="1">Ativado</option>
+                <option value="0">Desativado</option>
+              </select>
+            </div>
+            <div class="field">
+              <label style="font-size:10px;">Tipo de benefício</label>
+              <select id="cfg-installpromo-type" onchange="toggleInstallPromoFields()">
+                <option value="cupom">Cupom de desconto</option>
+                <option value="bonus">Bônus em reais (só exibido no popup)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field" id="cfg-installpromo-cupom-wrap">
+              <label style="font-size:10px;">Código do cupom (precisa existir em 🎟️ Cupons pra funcionar no checkout)</label>
+              <input id="cfg-installpromo-cupomcode" placeholder="ex: PRIMEIRO10" style="text-transform:uppercase;"/>
+            </div>
+            <div class="field" id="cfg-installpromo-bonus-wrap" style="display:none;">
+              <label style="font-size:10px;">Valor do bônus (R$)</label>
+              <input id="cfg-installpromo-bonusvalue" placeholder="ex: 10,00"/>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label style="font-size:10px;">Código do benefício exibido/copiado (opcional — se vazio, usa o código do cupom acima)</label>
+              <input id="cfg-installpromo-benefitcode" placeholder="ex: PRIMEIRO10"/>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">📥 Importar Contatos Externos</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
             Importa uma lista de contatos externa (CSV do Google Contatos, CSV do Outlook, vCard
@@ -2638,6 +2679,14 @@ function toggleSettingsAccordion(key){
     else if (!opening && i !== -1) list.splice(i, 1);
     saveSettingsAccOpen(list);
   }
+}
+// v71: mostra só o campo relevante (cupom OU bônus) no card do Popup de Instalação do App
+function toggleInstallPromoFields(){
+  const type = document.getElementById('cfg-installpromo-type')?.value || 'cupom';
+  const cupomWrap = document.getElementById('cfg-installpromo-cupom-wrap');
+  const bonusWrap = document.getElementById('cfg-installpromo-bonus-wrap');
+  if (cupomWrap) cupomWrap.style.display = type === 'cupom' ? '' : 'none';
+  if (bonusWrap) bonusWrap.style.display = type === 'bonus' ? '' : 'none';
 }
 // Atalho "🖨 Impressoras" da barra de pesquisa — abre o grupo certo antes de rolar até o card
 function jumpToSettingsCard(accordionKey, cardId){
@@ -5946,6 +5995,13 @@ function loadSettings(){
   loadCoupons();
   const socialInstaEl=document.getElementById('cfg-social-instagram'); if(socialInstaEl) socialInstaEl.value=cfg.social?.instagram||'';
   const socialFbEl=document.getElementById('cfg-social-facebook'); if(socialFbEl) socialFbEl.value=cfg.social?.facebook||'';
+  const ip = cfg.installPromo || {};
+  const ipEnabledEl=document.getElementById('cfg-installpromo-enabled'); if(ipEnabledEl) ipEnabledEl.value = ip.enabled===false ? '0' : '1';
+  const ipTypeEl=document.getElementById('cfg-installpromo-type'); if(ipTypeEl) ipTypeEl.value = ip.type||'cupom';
+  const ipCupomEl=document.getElementById('cfg-installpromo-cupomcode'); if(ipCupomEl) ipCupomEl.value = ip.cupomCode||'';
+  const ipBonusEl=document.getElementById('cfg-installpromo-bonusvalue'); if(ipBonusEl) ipBonusEl.value = ip.bonusValue||'';
+  const ipBenefitEl=document.getElementById('cfg-installpromo-benefitcode'); if(ipBenefitEl) ipBenefitEl.value = ip.benefitCode||'';
+  toggleInstallPromoFields();
   loadSmsSettings();
   loadAnnouncements();
   loadIaSettings();
@@ -7023,6 +7079,15 @@ async function saveAllSettings(){
   cfg.social = {
     instagram: document.getElementById('cfg-social-instagram')?.value.trim() || '',
     facebook: document.getElementById('cfg-social-facebook')?.value.trim() || ''
+  };
+
+  // Popup premium de instalação do PWA (v71)
+  cfg.installPromo = {
+    enabled: document.getElementById('cfg-installpromo-enabled')?.value !== '0',
+    type: document.getElementById('cfg-installpromo-type')?.value || 'cupom',
+    cupomCode: (document.getElementById('cfg-installpromo-cupomcode')?.value || '').trim().toUpperCase(),
+    bonusValue: (document.getElementById('cfg-installpromo-bonusvalue')?.value || '').trim(),
+    benefitCode: (document.getElementById('cfg-installpromo-benefitcode')?.value || '').trim()
   };
 
   // Fonte de impressão (impressoras em si já ficam salvas em cfg.stations, atualizado ao digitar)

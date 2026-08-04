@@ -4027,79 +4027,11 @@ updatePushButtonState();
 
 </script>
 
-<!-- v35: banner "instalar como app" — Android/Chrome usa o prompt nativo; iOS mostra o passo a passo -->
-<div id="install-banner" style="
-  display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:9999;
-  background:#161616; border:1px solid #2a2a2a; border-radius:14px; padding:14px 16px;
-  box-shadow:0 8px 24px rgba(0,0,0,.4); align-items:center; gap:12px;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#f2f2f2;
-">
-  <span style="font-size:26px;">📲</span>
-  <div style="flex:1; font-size:13px; line-height:1.4;">
-    <b style="color:#c9a84c;">Instalar o app do Shogatsu</b><br>
-    <span id="install-banner-text" style="color:#9a9a9a;">Peça mais rápido, direto da tela inicial do celular.</span>
-  </div>
-  <button id="install-banner-btn" style="
-    background:#c9a84c; color:#1a1400; border:none; border-radius:8px; padding:8px 14px;
-    font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;
-  ">Instalar</button>
-  <button id="install-banner-close" style="
-    background:none; border:none; color:#9a9a9a; font-size:18px; cursor:pointer; padding:4px;
-  ">✕</button>
-</div>
-
-<script>
-(function(){
-  // v44: alerta "instalar app" virou CONTÍNUO — antes, um clique em "✕" escondia o banner
-  // pra sempre (guardava um "sim" fixo no localStorage). Agora "✕" só adia por alguns dias;
-  // o banner volta a aparecer depois, até o cliente realmente instalar o app ou continuar
-  // fechando. Assim que o app é instalado de verdade (evento appinstalled, ou detectamos que
-  // já roda em modo standalone), o alerta some de vez — nunca incomoda quem já instalou.
-  const KEY = 'shogatsu_install_dismissed_at';
-  const SNOOZE_DAYS = 3;
-  const dismissedAt = Number(localStorage.getItem(KEY) || 0);
-  const snoozedRecently = dismissedAt && (Date.now() - dismissedAt) < SNOOZE_DAYS * 24 * 60 * 60 * 1000;
-  if (snoozedRecently) return; // fechou faz pouco tempo — não insiste agora, volta depois
-  // já está instalado (rodando como app)? não mostra, nunca mais precisa perguntar.
-  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
-
-  const banner = document.getElementById('install-banner');
-  const btn = document.getElementById('install-banner-btn');
-  const closeBtn = document.getElementById('install-banner-close');
-  const textEl = document.getElementById('install-banner-text');
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
-  let deferredPrompt = null;
-
-  function showBanner(){ banner.style.display = 'flex'; }
-  function snooze(){ banner.style.display = 'none'; localStorage.setItem(KEY, String(Date.now())); }
-  function dismissForever(){ banner.style.display = 'none'; localStorage.setItem(KEY, String(Date.now() * 10)); } // data bem no futuro = não volta
-
-  closeBtn.addEventListener('click', snooze);
-
-  if (isIOS) {
-    // Safari não tem instalação em 1 toque — mostra o passo a passo e não precisa esperar evento nenhum
-    textEl.textContent = 'Toque em Compartilhar (⬆️) e depois em "Adicionar à Tela de Início".';
-    btn.textContent = 'Entendi';
-    btn.addEventListener('click', snooze);
-    setTimeout(showBanner, 4000);
-  } else {
-    // Chrome/Android/Edge: espera o navegador avisar que dá pra instalar
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      setTimeout(showBanner, 4000);
-    });
-    btn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      dismissForever();
-    });
-    window.addEventListener('appinstalled', dismissForever);
-  }
-})();
-</script>
+<!-- v71: popup premium de instalação do PWA — substitui o banner simples antigo.
+     Componente auto-contido em /install-prompt.js (lê o benefício configurado no painel
+     em Configurações → Popup de Instalação e cuida de todo o fluxo Android/iPhone). -->
+<link rel="stylesheet" href="/install-prompt.css">
+<script src="/install-prompt.js" defer></script>
 <script src="/version-check.js"></script>
 </body>
 </html>

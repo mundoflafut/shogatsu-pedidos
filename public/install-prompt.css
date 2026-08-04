@@ -1,0 +1,248 @@
+/* ═══════════════════════════════════════════════════════════════
+   install-prompt.css — Popup premium de instalação do PWA (v71)
+   Shogatsu Culinária Oriental
+   ═══════════════════════════════════════════════════════════════ */
+
+:root{
+  --ip-bg:#0B0B0B;
+  --ip-card:#141414;
+  --ip-border:#262626;
+  --ip-red:#E53935;
+  --ip-red-dark:#b71f1c;
+  --ip-gold:#D4AF37;
+  --ip-gold-light:#f0d878;
+  --ip-text:#ffffff;
+  --ip-muted:#a8a8a8;
+}
+
+#shogatsu-install-overlay{
+  position:fixed; inset:0; z-index:99999;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+  opacity:0; visibility:hidden;
+  transition:opacity .35s ease, visibility .35s ease;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+}
+#shogatsu-install-overlay.ip-open{ opacity:1; visibility:visible; }
+
+#shogatsu-install-modal{
+  position:relative;
+  width:100%; max-width:420px;
+  max-height:92vh; overflow-y:auto;
+  background:
+    radial-gradient(140% 100% at 0% 0%, rgba(229,57,53,.16), transparent 55%),
+    radial-gradient(140% 100% at 100% 0%, rgba(212,175,55,.14), transparent 55%),
+    var(--ip-bg);
+  border:1px solid #2a2422;
+  border-radius:24px;
+  box-shadow:0 30px 80px rgba(0,0,0,.65), 0 0 0 1px rgba(212,175,55,.08);
+  color:var(--ip-text);
+  padding:28px 24px 24px;
+  transform:scale(.88) translateY(18px);
+  opacity:0;
+  transition:transform .4s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
+}
+#shogatsu-install-overlay.ip-open #shogatsu-install-modal{
+  transform:scale(1) translateY(0);
+  opacity:1;
+}
+
+#shogatsu-install-modal::-webkit-scrollbar{ width:6px; }
+#shogatsu-install-modal::-webkit-scrollbar-thumb{ background:#333; border-radius:6px; }
+
+.ip-close{
+  position:absolute; top:14px; right:14px;
+  width:32px; height:32px; border-radius:50%;
+  background:#1c1c1c; border:1px solid var(--ip-border);
+  color:var(--ip-muted); font-size:16px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:background .15s, color .15s, transform .15s;
+}
+.ip-close:hover{ background:#262626; color:#fff; transform:rotate(90deg); }
+
+.ip-icon-wrap{
+  width:72px; height:72px; margin:0 auto 16px;
+  border-radius:20px;
+  background:linear-gradient(145deg, var(--ip-red), var(--ip-red-dark));
+  display:flex; align-items:center; justify-content:center;
+  font-size:34px;
+  box-shadow:0 10px 26px rgba(229,57,53,.4), inset 0 1px 0 rgba(255,255,255,.15);
+  animation:ip-float 3s ease-in-out infinite;
+}
+@keyframes ip-float{
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-6px); }
+}
+
+.ip-title{
+  text-align:center;
+  font-size:21px; font-weight:800;
+  margin:0 0 6px;
+  letter-spacing:.2px;
+}
+.ip-subtitle{
+  text-align:center;
+  font-size:13.5px; line-height:1.5;
+  color:var(--ip-muted);
+  margin:0 0 20px;
+  padding:0 4px;
+}
+
+.ip-benefits{
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-bottom:18px;
+}
+.ip-benefit{
+  display:flex; align-items:center; gap:8px;
+  background:var(--ip-card);
+  border:1px solid var(--ip-border);
+  border-radius:14px;
+  padding:10px 12px;
+  font-size:12.5px; font-weight:600;
+  color:#e8e8e8;
+}
+.ip-benefit .ip-benefit-ico{ font-size:17px; flex-shrink:0; }
+
+.ip-highlight{
+  position:relative;
+  background:linear-gradient(135deg, var(--ip-red) 0%, var(--ip-red-dark) 100%);
+  border-radius:16px;
+  padding:14px 16px;
+  margin-bottom:10px;
+  text-align:center;
+  font-weight:700;
+  font-size:13.5px;
+  line-height:1.4;
+  box-shadow:0 8px 22px rgba(229,57,53,.35);
+  overflow:hidden;
+}
+.ip-highlight::after{
+  content:'';
+  position:absolute; top:0; left:-60%;
+  width:40%; height:100%;
+  background:linear-gradient(115deg, transparent, rgba(255,255,255,.25), transparent);
+  animation:ip-shine 2.6s ease-in-out infinite;
+}
+@keyframes ip-shine{
+  0%{ left:-60%; }
+  50%{ left:130%; }
+  100%{ left:130%; }
+}
+
+.ip-benefit-msg{
+  text-align:center;
+  font-size:12.5px;
+  color:var(--ip-gold-light);
+  font-weight:600;
+  margin:0 0 6px;
+  padding:0 6px;
+}
+
+.ip-code-box{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  margin:0 0 18px;
+  padding:9px 14px;
+  border:1px dashed var(--ip-gold);
+  border-radius:12px;
+  background:rgba(212,175,55,.08);
+  color:var(--ip-gold-light);
+  font-weight:700;
+  font-size:13px;
+  letter-spacing:1px;
+}
+.ip-code-box .ip-code-ico{ font-size:14px; letter-spacing:0; }
+
+.ip-ios-steps{
+  background:var(--ip-card);
+  border:1px solid var(--ip-border);
+  border-radius:16px;
+  padding:14px 16px;
+  margin-bottom:18px;
+}
+.ip-ios-steps-title{
+  font-size:12.5px; font-weight:700; color:var(--ip-gold-light);
+  margin:0 0 10px; text-align:center;
+}
+.ip-ios-step{
+  display:flex; align-items:center; gap:10px;
+  font-size:12.5px; color:#dcdcdc;
+  padding:6px 0;
+}
+.ip-ios-step .ip-step-num{
+  flex-shrink:0; width:22px; height:22px; border-radius:50%;
+  background:var(--ip-red); color:#fff; font-size:11px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.ip-ios-step .ip-step-ico{ font-size:15px; }
+
+.ip-actions{ display:flex; flex-direction:column; gap:10px; }
+
+.ip-btn-primary{
+  position:relative;
+  width:100%; border:none; cursor:pointer;
+  border-radius:14px;
+  padding:15px 18px;
+  font-size:15px; font-weight:800;
+  color:#fff;
+  background:linear-gradient(135deg, var(--ip-red) 0%, var(--ip-red-dark) 100%);
+  box-shadow:0 10px 26px rgba(229,57,53,.4);
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  transition:transform .15s ease, box-shadow .15s ease;
+  overflow:hidden;
+}
+.ip-btn-primary::before{
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(115deg, transparent 40%, rgba(255,255,255,.35) 50%, transparent 60%);
+  transform:translateX(-100%);
+  transition:transform .6s ease;
+}
+.ip-btn-primary:hover{ transform:translateY(-2px); box-shadow:0 14px 32px rgba(229,57,53,.5); }
+.ip-btn-primary:hover::before{ transform:translateX(100%); }
+.ip-btn-primary:active{ transform:translateY(0) scale(.98); }
+
+.ip-btn-secondary{
+  width:100%; border:1px solid var(--ip-border); cursor:pointer;
+  border-radius:14px;
+  padding:13px 18px;
+  font-size:13.5px; font-weight:600;
+  color:var(--ip-muted);
+  background:transparent;
+  transition:background .15s, color .15s, border-color .15s;
+}
+.ip-btn-secondary:hover{ background:#181818; color:#ddd; border-color:#3a3a3a; }
+
+.ip-success{
+  display:flex; align-items:center; gap:10px;
+  background:linear-gradient(135deg, rgba(46,160,67,.18), rgba(46,160,67,.06));
+  border:1px solid rgba(46,160,67,.4);
+  border-radius:14px;
+  padding:13px 15px;
+  font-size:13px; font-weight:600;
+  color:#8ee8a0;
+  margin-top:12px;
+  animation:ip-pop .35s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes ip-pop{
+  0%{ transform:scale(.9); opacity:0; }
+  100%{ transform:scale(1); opacity:1; }
+}
+
+.ip-footnote{
+  text-align:center; font-size:10.5px; color:#666;
+  margin-top:14px;
+}
+
+@media (min-width:480px){
+  #shogatsu-install-modal{ padding:34px 32px 28px; }
+}
+
+/* Reduz movimento pra quem prefere (acessibilidade) */
+@media (prefers-reduced-motion: reduce){
+  .ip-icon-wrap{ animation:none; }
+  .ip-highlight::after{ animation:none; }
+  #shogatsu-install-modal, #shogatsu-install-overlay{ transition:none; }
+}
