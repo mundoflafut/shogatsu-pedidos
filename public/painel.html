@@ -788,7 +788,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="page" id="page-mensagens">
      <div class="settings-card" style="padding-bottom:0;">
       <div class="settings-card-title" style="display:flex;align-items:center;gap:8px;">
-        <img src="/icons/chat-express-icon.png" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:cover;"/>
+        <img src="/icons/chat-express-icon.png" id="mensagens-header-icon" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:contain;background:#0b0d11;" onerror="this.onerror=null;this.src='/icons/chat-express-icon.png';"/>
         Chat Express
       </div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
@@ -796,6 +796,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         aqui pra você responder na hora. Atualiza sozinho a cada poucos segundos. Toca um aviso
         sonoro quando chega mensagem nova ou quando um cliente pede pra falar com atendente —
         dá pra silenciar cada conversa individualmente pelo ícone 🔔 no topo do chat.
+      </div>
+      <div style="padding:0 0 10px;">
+        <button type="button" class="btn secondary sm" onclick="abrirBuscaClienteAtendimento()">🔍 Nova conversa com cliente cadastrado</button>
       </div>
       <div class="wa-admin-wrap" id="wa-admin-wrap">
         <div class="wa-admin-list" id="wa-admin-list"></div>
@@ -810,6 +813,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
                 <div class="wa-header-status" id="wa-admin-status">—</div>
               </div>
               <button type="button" class="wa-icon-btn" id="wa-admin-mute-btn" onclick="toggleMuteConversaAdmin()" title="Silenciar aviso sonoro desta conversa">🔔</button>
+              <button type="button" class="wa-icon-btn" onclick="excluirHistoricoConversaAdmin()" title="Excluir histórico desta conversa">🗑️</button>
             </div>
             <div class="wa-messages" id="wa-admin-messages"></div>
             <div class="wa-footer">
@@ -1261,9 +1265,10 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
         </div>
 <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">Logo exibida no topo do cardápio e no Chat Express</div>
+          <div class="settings-card-title">Logo exibida no topo do cardápio</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
-            Essa imagem aparece no cabeçalho do cardápio e como foto de perfil do Chat Express.
+            Essa imagem aparece no cabeçalho do cardápio. Também é usada como foto de perfil do
+            Chat Express enquanto ele não tiver um avatar próprio definido (veja o card ao lado).
             Envie em PNG, JPG ou WEBP — a imagem inteira sempre aparece, sem cortar (nunca fica
             "vazando" da moldura, mesmo em formato redondo ou quadrado).
           </div>
@@ -1286,6 +1291,24 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
                 <input type="number" id="logo-size" min="24" max="120" step="2" onchange="saveLogoSettings()"/>
               </div>
               <div id="logo-status" style="font-size:12px;margin-top:8px;"></div>
+            </div>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 Avatar do Chat Express</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">
+            Foto de perfil exclusiva do chat de atendimento — pode ser diferente da logo do
+            cabeçalho (por exemplo, um mascote). Se remover, o Chat Express volta a usar a logo
+            da marca acima.
+          </div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+            <div id="chatavatar-preview" style="width:90px;height:90px;border-radius:50%;border:1px solid var(--border);background:#0b0d11;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;"></div>
+            <div style="flex:1;min-width:220px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="chatavatar-file-input" style="display:none;" onchange="uploadChatAvatar(this)"/>
+              <button type="button" class="btn primary sm" onclick="document.getElementById('chatavatar-file-input').click()">📤 Enviar avatar</button>
+              <button type="button" class="btn secondary sm" onclick="removeChatAvatar()">🗑 Remover (usar logo)</button>
+              <div style="font-size:10px;color:var(--muted);margin-top:6px;">PNG, JPG ou WEBP — máximo 4MB.</div>
+              <div id="chatavatar-status" style="font-size:12px;margin-top:8px;"></div>
             </div>
           </div>
         </div>
@@ -3586,6 +3609,52 @@ async function removeLogo(){
 }
 
 // ═══════════════════════════════════════════
+// v70: AVATAR DO CHAT EXPRESS — separado da Logo da Marca acima, pra loja poder usar um mascote
+// diferente no chat sem mexer na logo do cabeçalho do cardápio.
+// ═══════════════════════════════════════════
+function renderChatAvatarEditor(){
+  if(!document.getElementById('chatavatar-preview')) return;
+  renderChatAvatarPreview();
+}
+function renderChatAvatarPreview(){
+  const el = document.getElementById('chatavatar-preview');
+  const src = cfg.chatAvatarUrl || cfg.logoUrl;
+  if(src) el.innerHTML = `<img src="${src}" alt="Avatar do Chat Express" style="width:100%;height:100%;object-fit:contain;" onerror="this.style.display='none';">`;
+  else el.innerHTML = `<span style="font-size:9px;color:var(--muted);text-align:center;padding:4px;">Usando ícone padrão</span>`;
+}
+async function uploadChatAvatar(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('chatavatar-status');
+  if(file.size > 4*1024*1024){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Imagem muito grande (máx. 4MB).</span>'; input.value=''; return; }
+  statusEl.textContent = 'Enviando...';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const up = await fetch('/api/upload', { method:'POST', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify({ dataUrl: reader.result }) });
+    const upData = await up.json();
+    input.value = '';
+    if(!up.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(upData.error||'Erro ao enviar.')+'</span>'; return; }
+    cfg.chatAvatarUrl = upData.url;
+    const res = await apiPost('/api/config', { cfg: { chatAvatarUrl: cfg.chatAvatarUrl }, menu });
+    if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+    renderChatAvatarPreview();
+    statusEl.innerHTML = '<span style="color:var(--green);">✅ Avatar atualizado!</span>';
+    setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+  };
+  reader.readAsDataURL(file);
+}
+async function removeChatAvatar(){
+  if(!confirm('Remover o avatar do Chat Express e voltar a usar a logo da marca?')) return;
+  const statusEl = document.getElementById('chatavatar-status');
+  cfg.chatAvatarUrl = '';
+  const res = await apiPost('/api/config', { cfg: { chatAvatarUrl: '' }, menu });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  renderChatAvatarPreview();
+  statusEl.innerHTML = 'Avatar removido — voltou a usar a logo da marca.';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+
+// ═══════════════════════════════════════════
 // v67: FUNDO DO CHAT (Chat Express) — Configurações → Aparência → Fundo do Chat.
 // Diferente da Splash Screen (várias fotos em sequência), aqui é só UMA imagem de cada vez,
 // salva direto via /api/chat/background (endpoints próprios, fora do "Salvar Tudo" genérico) —
@@ -3635,10 +3704,15 @@ function renderChatBgInfo(){
 function renderChatBgGallery(){
   const cb = cfg.chatBackground || {};
   const el = document.getElementById('chatbg-gallery');
+  if(!el) return;
   el.innerHTML = CHATBG_GALLERY.map(g => {
     const active = cb.url === g.url;
-    return `<button type="button" onclick="selectChatBgPreset('${g.url}','${g.name.replace(/'/g,"\\'")}')"
-      style="padding:0;border-radius:10px;overflow:hidden;border:2px solid ${active?'#D32F2F':'var(--border)'};height:74px;background-image:url('${g.url}');background-size:cover;background-position:center;position:relative;cursor:pointer;">
+    const safeName = g.name.replace(/'/g,"\\'");
+    return `<button type="button" onclick="selectChatBgPreset('${g.url}','${safeName}')"
+      style="padding:0;border-radius:10px;overflow:hidden;border:2px solid ${active?'#D32F2F':'var(--border)'};height:74px;position:relative;cursor:pointer;background:#0b0d11;">
+      <img src="${g.url}" alt="${g.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:9px;color:var(--muted);text-align:center;padding:4px;">Falha ao carregar</span>
       <span style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:9px;padding:3px 4px;text-align:center;line-height:1.2;">${g.name}</span>
     </button>`;
   }).join('');
@@ -5828,6 +5902,9 @@ function loadSettings(){
   document.getElementById('cfg-days').value=cfg.days||'Ter–Dom';
   renderWeekScheduleEditor();
   renderLogoEditor();
+  renderChatAvatarEditor();
+  const mensagensIconEl = document.getElementById('mensagens-header-icon');
+  if (mensagensIconEl) mensagensIconEl.src = cfg.chatAvatarUrl || cfg.logoUrl || '/icons/chat-express-icon.png';
   renderSplashEditor();
   renderChatBgEditor();
   // v33: aparência do cardápio (foto do prato e fonte)
@@ -5967,6 +6044,76 @@ function atualizarBotaoMuteAdmin(){
   btn.classList.toggle('wa-muted', muted);
   btn.title = muted ? 'Silenciado — clique pra ouvir avisos desta conversa de novo' : 'Silenciar aviso sonoro desta conversa';
 }
+
+// ═══════════════════════════════════════════
+// v70: EXCLUIR HISTÓRICO DE CONVERSA — apaga de vez (sem volta) a conversa aberta no momento.
+// ═══════════════════════════════════════════
+async function excluirHistoricoConversaAdmin(){
+  if(!conversaAdminAtivaId) return;
+  const c = conversasAdminCache.find(x=>x.id===conversaAdminAtivaId);
+  const nome = c && c.nomeCliente ? c.nomeCliente : 'esse cliente';
+  if(!confirm(`Excluir todo o histórico de mensagens com ${nome}? Essa ação não pode ser desfeita.`)) return;
+  const r = await fetch('/api/admin/atendimento/'+conversaAdminAtivaId, { method:'DELETE', headers: authHeaders() });
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok){ alert(data.error || 'Erro ao excluir a conversa.'); return; }
+  fecharConversaAdmin();
+  loadAtendimentoConversas();
+  showToast('🗑️ Histórico excluído', 'A conversa foi apagada.');
+}
+
+// ═══════════════════════════════════════════
+// v70: NOVA CONVERSA COM CLIENTE CADASTRADO — busca no cadastro de clientes (mesma base usada em
+// SMS/Relatórios) e permite mandar a primeira mensagem sem esperar o cliente escrever antes.
+// ═══════════════════════════════════════════
+let atdClientesCache = null;
+async function abrirBuscaClienteAtendimento(){
+  if(!atdClientesCache){
+    try{ const data = await apiGet('/api/admin/customers'); atdClientesCache = data.customers || []; }
+    catch(e){ atdClientesCache = []; }
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div class="modal" style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:10px;">🔍 Nova conversa com cliente cadastrado</div>
+      <input type="text" id="atd-busca-input" placeholder="Buscar por nome ou telefone..." style="margin-bottom:10px;" autocomplete="off"/>
+      <div id="atd-busca-lista" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:4px;min-height:100px;"></div>
+      <button type="button" class="btn secondary sm" style="margin-top:12px;" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+  const input = overlay.querySelector('#atd-busca-input');
+  const renderLista = (termo)=>{
+    const q = (termo||'').trim().toLowerCase();
+    const filtrados = !q ? atdClientesCache.slice(0,30) : atdClientesCache.filter(c =>
+      (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q.replace(/\D/g,''))
+    ).slice(0,30);
+    const lista = overlay.querySelector('#atd-busca-lista');
+    if(!filtrados.length){ lista.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:10px;">Nenhum cliente encontrado.</div>'; return; }
+    lista.innerHTML = filtrados.map(c => `
+      <button type="button" onclick='iniciarConversaComCliente(${JSON.stringify(c.name||'').replace(/'/g,"&apos;")}, ${JSON.stringify(c.phone||'').replace(/'/g,"&apos;")})'
+        style="text-align:left;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;">
+        <div style="font-size:13px;font-weight:600;">${esc(c.name||'(sem nome)')}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(c.phone||'')} · ${c.orderCount||0} pedido(s)</div>
+      </button>`).join('');
+  };
+  renderLista('');
+  input.addEventListener('input', ()=> renderLista(input.value));
+  input.focus();
+}
+async function iniciarConversaComCliente(nome, telefone){
+  document.querySelectorAll('.modal-overlay').forEach(m=>m.remove());
+  if(!telefone){ alert('Esse cliente não tem telefone cadastrado.'); return; }
+  const msg = prompt(`Mensagem inicial pra ${nome||telefone}:`);
+  if(!msg || !msg.trim()) return;
+  const res = await apiPost('/api/admin/atendimento/nova', { nome, telefone, mensagem: msg.trim() });
+  if(!res.ok){ alert(res.data.error || 'Erro ao iniciar a conversa.'); return; }
+  await loadAtendimentoConversas();
+  abrirConversaAdmin(res.data.conversa.id);
+  showToast('✅ Conversa iniciada', `Mensagem enviada pra ${nome||telefone}.`);
+}
+
 let audioCtxChatExpress = null;
 function atdBeep(freq, durMs, delayMs, volume){
   try{
