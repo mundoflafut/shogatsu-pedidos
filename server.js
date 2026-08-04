@@ -207,6 +207,15 @@ const DEFAULT_CFG = {
   feeZoneFallback: 'padrao',      // 'padrao' (usa cfg.fee se não achar a zona) ou 'bloqueado' (recusa o pedido)
   // ── Cupons de desconto (aplicados pelo cliente no checkout) ──
   coupons: [],                    // [{code, type:'percent'|'valor'|'frete_gratis', value, active, expiresAt, usageLimit, usedCount, minOrder}]
+  // ── Popup premium de instalação do PWA (v71) — oferece um benefício (cupom já cadastrado
+  // acima em cfg.coupons, ou um valor de bônus só informativo) pra quem instala o app ──
+  installPromo: {
+    enabled: true,
+    type: 'cupom',                // 'cupom' (usa um código de cfg.coupons) ou 'bonus' (texto livre de crédito)
+    cupomCode: '',                 // ex: 'PRIMEIRO10' — precisa existir em cfg.coupons pra funcionar no checkout
+    bonusValue: '',                 // ex: '10,00' — só exibido no popup, não debita nada sozinho
+    benefitCode: ''                 // código opcional copiado pro cliente ao clicar em Instalar (se vazio, usa cupomCode)
+  },
   // ── Fidelidade — cliente acumula pontos a cada pedido ENTREGUE e troca por desconto ──
   loyalty: {
     enabled: true,
@@ -1335,6 +1344,7 @@ const server = http.createServer(async (req, res) => {
             ? current.cfg.weekSchedule.map((d, i) => ({ ...d, ...(body.cfg.weekSchedule[i] || {}) }))
             : current.cfg.weekSchedule,
           rodizioPopular: { ...current.cfg.rodizioPopular, ...(body.cfg && body.cfg.rodizioPopular || {}) },
+          installPromo: { ...current.cfg.installPromo, ...(body.cfg && body.cfg.installPromo || {}) },
           splash: {
             ...current.cfg.splash,
             ...(body.cfg && body.cfg.splash || {}),
