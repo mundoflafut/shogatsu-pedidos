@@ -124,6 +124,10 @@ const DEFAULT_CFG = {
     { username: 'admin', password: 'shogatsu2026', role: 'admin' }
   ],
   logoUrl: '',
+  // v70: avatar do Chat Express agora é separado da logo geral da marca (logoUrl acima) — o
+  // restaurante pode usar um mascote/ícone diferente no chat sem mexer na logo do cabeçalho.
+  // Cai pra logoUrl, e depois pro ícone padrão do sistema, se estiver vazio.
+  chatAvatarUrl: '',
   print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
   autoAcceptOrders: 0,          // v55: 1 = pedido novo já nasce ACEITO sozinho (pula o clique em "Aceitar Pedido"), com número de ficha já atribuído — pensado pra combinar com impressão automática (vias já saem com o número certo, sem ninguém precisar tocar em nada)
   sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
@@ -1521,10 +1525,30 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/atendimento/iniciar' && req.method === 'POST') {
     const { cfg } = readConfig();
     const todas = lerAtendimentos();
+    // v70: se o cliente já tem cadastro (pediu antes / fez login no cardápio), o nome/telefone
+    // dele vêm no corpo — assim o atendente já vê o nome de verdade na lista de conversas, em
+    // vez do genérico "Cliente XXXXX". Cliente anônimo (sem cadastro) manda vazio, sem problema.
+    let nome = '', telefone = '';
+    try { const body = await readBody(req, 2000); nome = String(body.nome || '').trim().slice(0, 80); telefone = String(body.telefone || '').trim().slice(0, 30); } catch (e) {}
+    // v70: se o ATENDENTE já iniciou uma conversa com esse telefone antes do cliente aparecer
+    // (ver /api/admin/atendimento/nova), reaproveita ela agora — assim a mensagem que o
+    // restaurante mandou primeiro já aparece esperando o cliente, em vez de nascer uma conversa
+    // vazia separada. Só entra aqui se o cliente informou telefone (tem cadastro).
+    if (telefone) {
+      const telNorm = normalizePhone(telefone);
+      const existente = Object.values(todas).find(c => c.criadaPorAtendente && normalizePhone(c.telefoneCliente || '') === telNorm && !c.adotadaPeloCliente);
+      if (existente) {
+        existente.adotadaPeloCliente = true;
+        existente.ultimaAtividade = new Date().toISOString();
+        salvarAtendimentos(todas);
+        return sendJSON(res, 200, { conversaId: existente.id, modo: existente.modo });
+      }
+    }
     const id = crypto.randomBytes(10).toString('hex');
     todas[id] = {
       id, criadaEm: new Date().toISOString(), ultimaAtividade: new Date().toISOString(),
-      modo: (cfg.ia && cfg.ia.enabled) ? 'ia' : 'humano', naoLidaAtendente: false, mensagens: []
+      modo: (cfg.ia && cfg.ia.enabled) ? 'ia' : 'humano', naoLidaAtendente: false, mensagens: [],
+      nomeCliente: nome, telefoneCliente: telefone
     };
     salvarAtendimentos(todas);
     return sendJSON(res, 200, { conversaId: id, modo: todas[id].modo });
@@ -1640,6 +1664,50 @@ const server = http.createServer(async (req, res) => {
       .sort((a, b) => new Date(b.ultimaAtividade) - new Date(a.ultimaAtividade))
       .slice(0, 200);
     return sendJSON(res, 200, { conversas: lista });
+  }
+  // ── POST /api/admin/atendimento/nova (v70) — atendente inicia uma conversa com um cliente já
+  // cadastrado (achado via /api/admin/customers), sem esperar o cliente escrever primeiro. Fica
+  // esperando: se esse cliente abrir o Chat Express depois usando o mesmo telefone, cai direto
+  // nessa mesma conversa (ver /api/atendimento/iniciar) e já vê a mensagem esperando ele. ──
+  if (pathname === '/api/admin/atendimento/nova' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { nome, telefone, mensagem } = await readBody(req);
+      const tel = String(telefone || '').trim();
+      const msg = String(mensagem || '').trim().slice(0, 1000);
+      if (!tel) return sendJSON(res, 400, { error: 'Escolha um cliente com telefone cadastrado.' });
+      if (!msg) return sendJSON(res, 400, { error: 'Escreva a mensagem inicial.' });
+      const todas = lerAtendimentos();
+      const telNorm = normalizePhone(tel);
+      // já existe uma conversa em aberto com esse telefone? reaproveita em vez de duplicar
+      const existente = Object.values(todas).find(c => normalizePhone(c.telefoneCliente || '') === telNorm);
+      const conversa = existente || (() => {
+        const id = crypto.randomBytes(10).toString('hex');
+        todas[id] = {
+          id, criadaEm: new Date().toISOString(), modo: 'humano', naoLidaAtendente: false, mensagens: [],
+          nomeCliente: String(nome || '').trim().slice(0, 80), telefoneCliente: tel,
+          criadaPorAtendente: true, adotadaPeloCliente: false
+        };
+        return todas[id];
+      })();
+      conversa.modo = 'humano';
+      conversa.mensagens.push({ de: 'atendente', texto: msg, ts: new Date().toISOString() });
+      conversa.ultimaAtividade = new Date().toISOString();
+      salvarAtendimentos(todas);
+      return sendJSON(res, 200, { ok: true, conversa });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── DELETE /api/admin/atendimento/:id (v70) — apaga o histórico de uma conversa por completo.
+  // Ação sem volta — o cliente, se reabrir o chat com o mesmo id salvo, vai simplesmente começar
+  // uma conversa nova do zero (o servidor responde 404 pra esse id antigo). ──
+  const conversaDeleteMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)$/);
+  if (conversaDeleteMatch && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra excluir conversas.' });
+    const todas = lerAtendimentos();
+    if (!todas[conversaDeleteMatch[1]]) return sendJSON(res, 404, { error: 'Conversa não encontrada.' });
+    delete todas[conversaDeleteMatch[1]];
+    salvarAtendimentos(todas);
+    return sendJSON(res, 200, { ok: true });
   }
   const conversaResponderMatch = pathname.match(/^\/api\/admin\/atendimento\/([a-f0-9]+)\/responder$/);
   if (conversaResponderMatch && req.method === 'POST') {
@@ -3691,7 +3759,10 @@ function estimateDeliveryWindow(order, cfg) {
   }
 
   // ── Arquivos estáticos (site do cliente + painel) ──
-  if (req.method === 'GET') return serveStatic(req, res, pathname);
+  // v70: HEAD também precisa funcionar aqui — antes só GET era aceito, e ferramentas que checam
+  // se uma imagem existe com HEAD (alguns proxies, monitoramento, pré-carregadores) recebiam 404
+  // mesmo com o arquivo existindo normalmente.
+  if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, pathname);
 
   res.writeHead(404); res.end('Not found');
 });
