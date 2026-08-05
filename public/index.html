@@ -2574,9 +2574,31 @@ function applyTheme() {
 // v68: prato sem foto ainda — mostra a logo da loja como imagem provisória (em vez de só o
 // emoji da categoria), com object-fit:contain pra nunca cortar. É só provisório: assim que o
 // prato ganha uma foto de verdade no painel, ela substitui isso automaticamente.
+const PH_FIT_MAP = { preencher:'fill', ajustar:'contain', cortar:'cover' };
+const PH_RADIUS_MAP = { nenhum:'0px', pequeno:'6px', medio:'12px', grande:'20px' };
+// v73: foto provisória global — usada quando o prato não tem foto própria cadastrada
 function itemPlaceholderHtml(icon){
+  const ph = cfg.placeholderPhoto;
+  if (ph && ph.enabled && ph.url) {
+    const fit = PH_FIT_MAP[ph.mode] || 'cover';
+    const radius = PH_RADIUS_MAP[ph.radius] || '4px';
+    return `<img src="${ph.url}" alt="Foto do prato" style="width:100%;height:100%;object-fit:${fit};border-radius:${radius};">`;
+  }
   if (cfg.logoUrl) return `<img src="${cfg.logoUrl}" alt="Foto ainda não cadastrada" style="width:62%;height:62%;object-fit:contain;opacity:.5;margin:auto;">`;
   return icon;
+}
+// v73: resolve o badge de um item — respeita item.badgeMode ('global' herda o Badge Global,
+// 'manual' usa o texto próprio do item, 'off' não mostra nenhum badge.
+function itemBadgeHtml(item){
+  const mode = item.badgeMode || 'global';
+  if (mode === 'off') return '';
+  if (mode === 'manual') return item.badge ? `<div class="item-badge">${item.badge}</div>` : '';
+  const gb = cfg.globalBadge;
+  if (gb && gb.enabled) {
+    const style = `background:${gb.bgColor};color:${gb.textColor};font-size:${gb.fontSize}px;font-weight:${gb.fontWeight};opacity:${(gb.opacity==null?100:gb.opacity)/100};border-radius:${gb.borderRadius}px;padding:${gb.padding}px ${Number(gb.padding)+4}px;${gb.borderEnabled?`border:1px solid ${gb.borderColor};`:''}${gb.shadow?'box-shadow:0 2px 6px rgba(0,0,0,.35);':''}`;
+    return `<div class="item-badge" style="${style}">${gb.icon ? gb.icon+' ' : ''}${gb.text}</div>`;
+  }
+  return item.badge ? `<div class="item-badge">${item.badge}</div>` : '';
 }
 function renderMenu() {
   document.getElementById('hero-address').textContent = cfg.addr;
@@ -2680,7 +2702,7 @@ function renderMenu() {
             <button onclick="toggleFavorite('${key}', event)" title="Favoritar" style="position:absolute;top:6px;right:6px;background:rgba(10,10,10,.55);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${favorites.has(key) ? '❤️' : '🤍'}</button>
           </div>
           <div class="item-body">
-            ${item.badge && isAvail ? `<div class="item-badge">${item.badge}</div>` : ''}
+            ${isAvail ? itemBadgeHtml(item) : ''}
             ${!isAvail ? `<div class="item-badge" style="background:var(--muted);color:#fff;">Indisponível</div>` : ''}
             <div class="item-name">${item.name}</div>
             <div class="item-desc">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
@@ -3147,13 +3169,13 @@ function setPlaceBtnState(state, customLabel) {
 async function placeOrder() {
   if (!Number(cfg.open)) { alert('O restaurante está fechado no momento. Tente novamente durante o horário de funcionamento: ' + cfg.hours); return; }
 
-  let name = '', phone = '', address = '';
+  let name = '', phone = '', address = '', hood = '';
   if (mode === 'delivery') {
     name = document.getElementById('f-name').value.trim();
     phone = document.getElementById('f-phone').value.trim();
     const street = document.getElementById('f-street').value.trim();
     const number = document.getElementById('f-number').value.trim();
-    const hood = document.getElementById('f-hood').value.trim();
+    hood = document.getElementById('f-hood').value.trim();
     const comp = document.getElementById('f-comp').value.trim();
     const ref = document.getElementById('f-ref').value.trim();
     const cep = document.getElementById('f-cep').value.trim();
@@ -3193,7 +3215,7 @@ async function placeOrder() {
   try {
     const r = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, name, phone, address, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points, scheduledFor })
+      body: JSON.stringify({ mode, name, phone, address, hood, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points, scheduledFor })
     });
     const data = await r.json();
     if (!r.ok) { alert(data.error || 'Não foi possível enviar o pedido.'); setPlaceBtnState('idle'); return; }

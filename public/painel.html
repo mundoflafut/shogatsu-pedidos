@@ -849,12 +849,19 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <span class="panel-title" id="menu-active-cat-title">Selecione uma categoria</span>
             <button class="btn primary sm" onclick="openAddItem()">+ Novo Item</button>
           </div>
-          <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
-            <input id="menu-search" placeholder="🔎 Buscar prato em todo o cardápio..." oninput="onMenuSearch(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--white);font-size:12px;"/>
+          <div style="padding:8px 14px 0;border-bottom:1px solid var(--border);display:flex;gap:6px;">
+            <button type="button" class="btn sm" id="menu-tabbtn-itens" onclick="switchMenuMainTab('itens')" style="border-radius:6px 6px 0 0;">📋 Edição</button>
+            <button type="button" class="btn sm secondary" id="menu-tabbtn-photos" onclick="switchMenuMainTab('photos')" style="border-radius:6px 6px 0 0;">🖼 Fotos Provisórias &amp; Badges</button>
           </div>
-          <div class="menu-items-body" id="menu-items-body">
-            <div style="text-align:center;padding:40px;color:var(--muted)">Selecione uma categoria</div>
+          <div id="menu-tab-content-itens">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
+              <input id="menu-search" placeholder="🔎 Buscar prato em todo o cardápio..." oninput="onMenuSearch(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--white);font-size:12px;"/>
+            </div>
+            <div class="menu-items-body" id="menu-items-body">
+              <div style="text-align:center;padding:40px;color:var(--muted)">Selecione uma categoria</div>
+            </div>
           </div>
+          <div id="menu-tab-content-photos" class="menu-items-body" style="display:none;"></div>
         </div>
       </div>
     </div>
@@ -1121,6 +1128,36 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <thead><tr><th>#</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Modo</th><th>Status</th><th>Hora</th></tr></thead>
             <tbody id="orders-table-body"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ── v73: Relatório de Taxas de Motoboy ── -->
+      <div class="panel" id="courier-report-panel" style="margin-top:16px;">
+        <div class="panel-header">
+          <span class="panel-title">🛵 Taxas de Motoboy</span>
+          <button class="btn sm secondary" onclick="printCourierReport()">🖨 Imprimir</button>
+        </div>
+        <div class="panel-body">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;">
+            <div class="field" style="width:150px;"><label>De</label><input type="date" id="cr-from"/></div>
+            <div class="field" style="width:150px;"><label>Até</label><input type="date" id="cr-to"/></div>
+            <div class="field" style="width:200px;"><label>Motoboy</label>
+              <select id="cr-courier"><option value="">Todos</option></select>
+            </div>
+            <div class="field" style="min-width:220px;">
+              <label>Visualização</label>
+              <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;">
+                <button type="button" class="btn sm" id="cr-mode-junto" onclick="setCourierReportMode('junto')" style="border-radius:0;">👥 Juntos</button>
+                <button type="button" class="btn sm secondary" id="cr-mode-separado" onclick="setCourierReportMode('separado')" style="border-radius:0;">🧍 Separados</button>
+              </div>
+            </div>
+            <button class="btn primary sm" onclick="renderCourierReport()" style="height:38px;">🔎 Filtrar</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Valor pago por entrega definido em Configurações → 🛵 Pagamento de Motoboy. Só conta entregas com status <b>Entregue</b> e motoboy atribuído.
+          </div>
+          <div id="courier-report-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;"></div>
+          <div id="courier-report-body"></div>
         </div>
       </div>
     </div>
@@ -1436,6 +1473,21 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div class="field"><label>Taxa Fixa / Padrão R$ <span style="font-weight:400;color:var(--muted);">(usada no modo fixo, e como reserva nos outros modos)</span></label><input id="cfg-fee" type="number" placeholder="8"/></div>
           <div id="fee-mode-body"></div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🛵 Pagamento de Motoboy</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Valor que a loja paga pra cada entregador por entrega — usado no relatório <b>Relatórios → 🛵 Taxas de Motoboy</b>.
+            É separado da taxa de entrega cobrada do cliente logo acima.
+          </div>
+          <div class="field"><label>Como calcular o valor pago ao motoboy?</label>
+            <select id="cp-mode" onchange="renderCourierPayModeUI()">
+              <option value="fixo">💰 Valor fixo (mesmo valor toda entrega)</option>
+              <option value="bairro">📍 Por bairro</option>
+            </select>
+          </div>
+          <div class="field"><label>Valor fixo por entrega (R$) <span style="font-weight:400;color:var(--muted);">(usado no modo fixo, e como reserva no modo por bairro)</span></label><input id="cp-fixedvalue" type="number" step="0.01" placeholder="6"/></div>
+          <div id="cp-mode-body"></div>
         </div>
 <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">🎟️ Cupons de Desconto</div>
@@ -1995,6 +2047,14 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       </div>
       <div class="field-row">
         <div class="field"><label>Badge (destaque)</label><input id="item-badge" placeholder="ex: 🔥 Destaque  ou  👑 Premium"/></div>
+      </div>
+      <div class="field" style="margin-top:-4px;">
+        <label style="font-size:10px;">🏷 Badge deste item <span style="font-weight:400;color:var(--muted);">(configurado em Cardápio → 🖼 Fotos Provisórias &amp; Badges)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="item-badgemode" value="global" id="item-badgemode-global"/> Herdar Badge Global</label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="item-badgemode" value="manual" id="item-badgemode-manual"/> Personalizar (usa o texto acima)</label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="item-badgemode" value="off" id="item-badgemode-off"/> Sem badge</label>
+        </div>
       </div>
       <div class="field" style="margin-top:6px;">
         <label style="display:flex;align-items:center;justify-content:space-between;">
@@ -5178,6 +5238,230 @@ function renderMenuEditor(){
     </div>`).join('');
   renderMenuItems();
 }
+
+// ═══════════════════════════════════════════
+// v73: 🖼 FOTOS PROVISÓRIAS & BADGES — foto/selo global aplicados a todo o cardápio
+// ═══════════════════════════════════════════
+function switchMenuMainTab(tab){
+  document.getElementById('menu-tabbtn-itens').className = 'btn sm' + (tab==='itens'?'':' secondary');
+  document.getElementById('menu-tabbtn-photos').className = 'btn sm' + (tab==='photos'?'':' secondary');
+  document.getElementById('menu-tab-content-itens').style.display = tab==='itens' ? '' : 'none';
+  document.getElementById('menu-tab-content-photos').style.display = tab==='photos' ? '' : 'none';
+  if(tab==='photos') renderPlaceholderBadgePanel();
+}
+
+let phBadgeState = null;
+function initPhBadgeState(){
+  phBadgeState = {
+    photo: Object.assign({ enabled:false, url:'', position:'esquerda', mode:'cortar', radius:'medio' }, JSON.parse(JSON.stringify(cfg.placeholderPhoto||{}))),
+    badge: Object.assign({ enabled:false, text:'Mais vendido', icon:'🔥', bgColor:'#c0392b', textColor:'#ffffff', fontSize:11, fontWeight:700, opacity:100, borderEnabled:false, borderColor:'#ffffff', borderRadius:6, padding:6, shadow:true, position:'canto-superior-esquerdo' }, JSON.parse(JSON.stringify(cfg.globalBadge||{})))
+  };
+}
+
+const PH_RADIUS_MAP = { nenhum:'0px', pequeno:'6px', medio:'12px', grande:'20px' };
+const PH_FIT_MAP = { preencher:'fill', ajustar:'contain', cortar:'cover' };
+
+function renderPlaceholderBadgePanel(){
+  if(!phBadgeState) initPhBadgeState();
+  const el = document.getElementById('menu-tab-content-photos');
+  const p = phBadgeState.photo, b = phBadgeState.badge;
+  el.innerHTML = `
+    <div style="padding:16px;display:flex;flex-direction:column;gap:18px;max-width:900px;">
+      <div style="font-size:11px;color:var(--muted);">
+        Ferramentas globais que valem pro cardápio inteiro — sem mexer item por item. A aba de edição normal continua exatamente igual.
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">🖼 Foto Provisória Global</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+          Esta imagem será exibida automaticamente em todos os produtos que ainda não possuem foto cadastrada.
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="width:100px;height:100px;flex:0 0 auto;border-radius:10px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);">
+            ${p.url ? `<img src="${p.url.replace(/"/g,'&quot;')}" style="width:100%;height:100%;object-fit:cover;" alt="Foto provisória"/>` : `<span style="font-size:26px;color:var(--muted);">🖼️</span>`}
+          </div>
+          <div style="flex:1;min-width:220px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <input type="file" accept="image/png,image/jpeg,image/webp" id="ph-photo-file" style="display:none;" onchange="uploadPlaceholderPhoto(this)"/>
+              <button type="button" class="btn secondary sm" onclick="document.getElementById('ph-photo-file').click()">📷 ${p.url?'Alterar Foto':'Selecionar Foto'}</button>
+              <button type="button" class="btn secondary sm" onclick="removePlaceholderPhoto()">🗑 Remover Foto</button>
+              <button type="button" class="btn ${p.enabled?'success':'secondary'} sm" onclick="togglePlaceholderPhoto()">${p.enabled?'✅ Ativada (clique p/ desativar)':'⏸ Ativar Foto Provisória'}</button>
+            </div>
+            <span id="ph-photo-status" style="font-size:11px;color:var(--muted);"></span>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Quando um produto recebe uma foto manual, ele para de usar esta automaticamente — a foto manual nunca é substituída.</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px;">
+          <div class="field"><label style="font-size:10px;">Posição</label>
+            <select onchange="phUpdateField('photo','position',this.value)">
+              <option value="esquerda" ${p.position==='esquerda'?'selected':''}>Esquerda</option>
+              <option value="direita" ${p.position==='direita'?'selected':''}>Direita</option>
+              <option value="acima" ${p.position==='acima'?'selected':''}>Acima</option>
+            </select>
+          </div>
+          <div class="field"><label style="font-size:10px;">Modo da imagem</label>
+            <select onchange="phUpdateField('photo','mode',this.value)">
+              <option value="preencher" ${p.mode==='preencher'?'selected':''}>Preencher</option>
+              <option value="ajustar" ${p.mode==='ajustar'?'selected':''}>Ajustar</option>
+              <option value="cortar" ${p.mode==='cortar'?'selected':''}>Cortar</option>
+            </select>
+          </div>
+          <div class="field"><label style="font-size:10px;">Arredondamento</label>
+            <select onchange="phUpdateField('photo','radius',this.value)">
+              <option value="nenhum" ${p.radius==='nenhum'?'selected':''}>Nenhum</option>
+              <option value="pequeno" ${p.radius==='pequeno'?'selected':''}>Pequeno</option>
+              <option value="medio" ${p.radius==='medio'?'selected':''}>Médio</option>
+              <option value="grande" ${p.radius==='grande'?'selected':''}>Grande</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">🏷 Badge Global</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+          Selo exibido automaticamente nos produtos (ex: 🔥 Mais vendido, ⭐ Novidade, 💎 Premium). Em cada item, escolha "Herdar Badge Global" ou "Personalizar" (na edição do item).
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
+          <input type="checkbox" ${b.enabled?'checked':''} onchange="phUpdateField('badge','enabled',this.checked)"/> Badge Global ativo
+        </label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+          <div class="field"><label style="font-size:10px;">Ícone</label><input value="${esc(b.icon)}" maxlength="4" oninput="phUpdateField('badge','icon',this.value)"/></div>
+          <div class="field" style="grid-column:span 2;"><label style="font-size:10px;">Texto</label><input value="${esc(b.text)}" maxlength="30" oninput="phUpdateField('badge','text',this.value)"/></div>
+          <div class="field"><label style="font-size:10px;">Cor do fundo</label><input type="color" value="${b.bgColor}" oninput="phUpdateField('badge','bgColor',this.value)"/></div>
+          <div class="field"><label style="font-size:10px;">Cor da fonte</label><input type="color" value="${b.textColor}" oninput="phUpdateField('badge','textColor',this.value)"/></div>
+          <div class="field"><label style="font-size:10px;">Tamanho da fonte (px)</label><input type="number" min="8" max="24" value="${b.fontSize}" oninput="phUpdateField('badge','fontSize',parseInt(this.value)||11)"/></div>
+          <div class="field"><label style="font-size:10px;">Peso da fonte</label>
+            <select onchange="phUpdateField('badge','fontWeight',parseInt(this.value))">
+              <option value="400" ${b.fontWeight==400?'selected':''}>Normal</option>
+              <option value="600" ${b.fontWeight==600?'selected':''}>Semi-negrito</option>
+              <option value="700" ${b.fontWeight==700?'selected':''}>Negrito</option>
+              <option value="900" ${b.fontWeight==900?'selected':''}>Extra-negrito</option>
+            </select>
+          </div>
+          <div class="field"><label style="font-size:10px;">Transparência (%)</label><input type="range" min="30" max="100" value="${b.opacity}" oninput="phUpdateField('badge','opacity',parseInt(this.value))"/></div>
+          <div class="field"><label style="font-size:10px;">Raio da borda (px)</label><input type="number" min="0" max="30" value="${b.borderRadius}" oninput="phUpdateField('badge','borderRadius',parseInt(this.value)||0)"/></div>
+          <div class="field"><label style="font-size:10px;">Espaçamento interno (px)</label><input type="number" min="0" max="20" value="${b.padding}" oninput="phUpdateField('badge','padding',parseInt(this.value)||0)"/></div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:6px;font-size:10px;"><input type="checkbox" ${b.borderEnabled?'checked':''} onchange="phUpdateField('badge','borderEnabled',this.checked)"/> Borda</label>
+            <input type="color" value="${b.borderColor}" oninput="phUpdateField('badge','borderColor',this.value)" style="margin-top:4px;"/>
+          </div>
+          <div class="field"><label style="display:flex;align-items:center;gap:6px;font-size:10px;margin-top:18px;"><input type="checkbox" ${b.shadow?'checked':''} onchange="phUpdateField('badge','shadow',this.checked)"/> Sombra</label></div>
+          <div class="field" style="grid-column:span 2;"><label style="font-size:10px;">Posição do badge</label>
+            <select onchange="phUpdateField('badge','position',this.value)">
+              <option value="acima-foto" ${b.position==='acima-foto'?'selected':''}>Acima da foto</option>
+              <option value="abaixo-foto" ${b.position==='abaixo-foto'?'selected':''}>Abaixo da foto</option>
+              <option value="sobre-foto" ${b.position==='sobre-foto'?'selected':''}>Sobre a foto</option>
+              <option value="acima-nome" ${b.position==='acima-nome'?'selected':''}>Acima do nome</option>
+              <option value="abaixo-nome" ${b.position==='abaixo-nome'?'selected':''}>Abaixo do nome</option>
+              <option value="canto-superior-esquerdo" ${b.position==='canto-superior-esquerdo'?'selected':''}>Canto superior esquerdo</option>
+              <option value="canto-superior-direito" ${b.position==='canto-superior-direito'?'selected':''}>Canto superior direito</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">👁 Pré-visualização</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Atualiza instantaneamente conforme você muda qualquer opção acima.</div>
+        <div id="ph-preview-wrap" style="display:flex;justify-content:center;padding:10px;"></div>
+      </div>
+
+      <div>
+        <button class="btn primary" onclick="savePlaceholderBadgeSettings()">💾 Salvar Fotos Provisórias &amp; Badges</button>
+      </div>
+    </div>`;
+  updatePhPreview();
+}
+
+function phUpdateField(group, field, value){
+  phBadgeState[group][field] = value;
+  updatePhPreview();
+}
+function togglePlaceholderPhoto(){ phBadgeState.photo.enabled = !phBadgeState.photo.enabled; renderPlaceholderBadgePanel(); }
+function removePlaceholderPhoto(){ phBadgeState.photo.url=''; phBadgeState.photo.enabled=false; renderPlaceholderBadgePanel(); }
+
+async function uploadPlaceholderPhoto(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('ph-photo-status');
+  if(statusEl) statusEl.textContent = 'Enviando...';
+  try{
+    let dataUrl;
+    try{ dataUrl = await compressImageFile(file); }
+    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
+    phBadgeState.photo.url = res.data.url;
+    phBadgeState.photo.enabled = true;
+    renderPlaceholderBadgePanel();
+  }catch(e){
+    if(statusEl) statusEl.textContent='';
+    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
+  }finally{
+    input.value='';
+  }
+}
+
+function phBadgeHTML(b){
+  if(!b.enabled) return '';
+  const style = `display:inline-flex;align-items:center;gap:4px;background:${b.bgColor};color:${b.textColor};font-size:${b.fontSize}px;font-weight:${b.fontWeight};opacity:${(b.opacity==null?100:b.opacity)/100};border-radius:${b.borderRadius}px;padding:${b.padding}px ${Number(b.padding)+4}px;white-space:nowrap;${b.borderEnabled?`border:1px solid ${b.borderColor};`:''}${b.shadow?'box-shadow:0 2px 6px rgba(0,0,0,.35);':''}`;
+  return `<span style="${style}">${b.icon?esc(b.icon)+' ':''}${esc(b.text)}</span>`;
+}
+
+function updatePhPreview(){
+  const wrap = document.getElementById('ph-preview-wrap');
+  if(!wrap) return;
+  const p = phBadgeState.photo, b = phBadgeState.badge;
+  const radius = PH_RADIUS_MAP[p.radius] || '12px';
+  const fit = PH_FIT_MAP[p.mode] || 'cover';
+  const photoBox = p.url
+    ? `<div style="width:90px;height:90px;flex:0 0 auto;border-radius:${radius};overflow:hidden;background:#222;">
+        <img src="${p.url.replace(/"/g,'&quot;')}" style="width:100%;height:100%;object-fit:${fit};display:block;"/>
+      </div>`
+    : `<div style="width:90px;height:90px;flex:0 0 auto;border-radius:${radius};background:#1c1c1c;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);">🍽️</div>`;
+
+  const aboveBadge = b.position==='acima-foto' ? `<div style="margin-bottom:6px;">${phBadgeHTML(b)}</div>` : '';
+  const belowBadge = b.position==='abaixo-foto' ? `<div style="margin-top:6px;">${phBadgeHTML(b)}</div>` : '';
+  const overBadge = b.position==='sobre-foto' ? `<div style="position:absolute;top:4px;left:4px;">${phBadgeHTML(b)}</div>` : '';
+  const cornerBadge = (b.position==='canto-superior-esquerdo'||b.position==='canto-superior-direito')
+    ? `<div style="position:absolute;top:8px;${b.position==='canto-superior-esquerdo'?'left':'right'}:8px;z-index:2;">${phBadgeHTML(b)}</div>` : '';
+
+  const photoBlock = `<div style="position:relative;">${photoBox}${overBadge}</div>`;
+
+  const nameBlock = `
+    ${b.position==='acima-nome'?`<div style="margin-bottom:4px;">${phBadgeHTML(b)}</div>`:''}
+    <div style="font-weight:700;font-size:14px;color:var(--white);">Rodízio Master</div>
+    ${b.position==='abaixo-nome'?`<div style="margin-top:4px;">${phBadgeHTML(b)}</div>`:''}
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">10 sashimis de salmão, 5 sashimis haddock, 5 sashimis peixe branco...</div>
+    <div style="font-weight:700;color:var(--green-lt);margin-top:6px;">R$ 159,90</div>`;
+
+  let inner;
+  if(p.position==='acima'){
+    inner = `${aboveBadge}${photoBlock}${belowBadge}<div style="margin-top:8px;">${nameBlock}</div>`;
+  } else if(p.position==='direita'){
+    inner = `<div style="display:flex;gap:12px;align-items:flex-start;">
+      <div style="flex:1;">${nameBlock}</div>
+      <div>${aboveBadge}${photoBlock}${belowBadge}</div>
+    </div>`;
+  } else {
+    inner = `<div style="display:flex;gap:12px;align-items:flex-start;">
+      <div>${aboveBadge}${photoBlock}${belowBadge}</div>
+      <div style="flex:1;">${nameBlock}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML = `<div style="position:relative;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;width:100%;max-width:360px;">${cornerBadge}${inner}</div>`;
+}
+
+async function savePlaceholderBadgeSettings(){
+  cfg.placeholderPhoto = { ...phBadgeState.photo };
+  cfg.globalBadge = { ...phBadgeState.badge };
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  showToast('✅ Salvo!', 'Foto provisória e badge global atualizados — já valem pro cardápio.');
+}
+
 function selectCat(i){activeCatIdx=i;document.getElementById('menu-search').value='';menuSearchQuery='';renderMenuEditor();}
 function moveCategory(i,dir){
   const j=i+dir;
@@ -5224,6 +5508,16 @@ function renderMenuItems(){
     ?'<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum item. Clique em + Novo Item.</div>'
     :sec.items.map((item,ii)=>menuItemRowHTML(sec,activeCatIdx,item,ii,true)).join('');
 }
+// v73: rótulo do badge na listagem do painel, respeitando herdar-global/personalizar/sem-badge
+function menuItemBadgeLabelHTML(item){
+  const mode = item.badgeMode || 'global';
+  if(mode==='off') return '';
+  if(mode==='manual') return item.badge?`<span class="mi-badge">${esc(item.badge)}</span>`:'';
+  // mode==='global'
+  const gb = cfg.globalBadge;
+  if(gb && gb.enabled) return `<span class="mi-badge" title="Badge Global">${esc(gb.icon||'')} ${esc(gb.text||'')}</span>`;
+  return item.badge?`<span class="mi-badge">${esc(item.badge)}</span>`:''; // sem badge global ativo, cai pro texto próprio se existir
+}
 function stIcons(stations){
   return (stations&&stations.length?stations:[cfg.defaultStation||'cozinha']).map(s=>stationIcon(s)).join(' ');
 }
@@ -5235,12 +5529,15 @@ function menuItemRowHTML(sec,si,item,ii,allowReorder){
           <button onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover para cima">▲</button>
           <button onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover para baixo">▼</button>
         </span>`:`<span></span>`}
-        ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`:`<div class="mi-thumb empty">🍽️</div>`}
+        ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`
+          :(cfg.placeholderPhoto&&cfg.placeholderPhoto.enabled&&cfg.placeholderPhoto.url
+            ?`<img class="mi-thumb" src="${cfg.placeholderPhoto.url}" alt="${item.name}" title="Usando foto provisória global" style="opacity:.85;"/>`
+            :`<div class="mi-thumb empty">🍽️</div>`)}
         <div>
           ${!allowReorder?`<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">${sec.icon} ${sec.title}</div>`:''}
           <div class="mi-name">${item.name}</div>
           <div class="mi-desc">${item.desc||''}</div>
-          ${item.badge?`<span class="mi-badge">${item.badge}</span>`:''}
+          ${menuItemBadgeLabelHTML(item)}
           ${vCount?`<span class="mi-badge" style="background:rgba(201,168,76,.15);color:var(--gold);">⚙ ${vCount} variação${vCount>1?'ões':''}</span>`:''}
           <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons(item.stations)}</span>
         </div>
@@ -5363,6 +5660,7 @@ function openAddItem(){
   document.getElementById('item-edit-ii').value=-1;
   ['item-name','item-desc','item-qty','item-badge'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('item-price').value='';
+  document.getElementById('item-badgemode-global').checked=true;
   resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
@@ -5378,6 +5676,7 @@ function openEditItem(si,ii){
   document.getElementById('item-price').value=item.price;
   document.getElementById('item-qty').value=item.qty||'';
   document.getElementById('item-badge').value=item.badge||'';
+  document.getElementById('item-badgemode-'+(item.badgeMode||'global')).checked=true;
   resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
@@ -5500,6 +5799,7 @@ async function saveItem(){
     price:parseFloat(document.getElementById('item-price').value)||0,
     qty:document.getElementById('item-qty').value.trim(),
     badge:document.getElementById('item-badge').value.trim(),
+    badgeMode:(document.querySelector('input[name="item-badgemode"]:checked')||{}).value||'global',
     image:document.getElementById('item-image').value.trim(),
     imagePos:{x:posX,y:posY},
     variants:cleanVariants
@@ -5751,6 +6051,144 @@ async function renderReports(){
       <td><span class="status-badge ${statusClass[st]}">${statusLabel[st]}</span></td>
       <td style="font-size:11px;color:var(--muted)">${new Date(o.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
     </tr>`;}).join('');
+
+  // v73: relatório de taxas de motoboy — mesmo período padrão (últimos 7 dias)
+  if(document.getElementById('cr-from') && !document.getElementById('cr-from').value){
+    document.getElementById('cr-from').value = from;
+    document.getElementById('cr-to').value = to;
+  }
+  fillCourierSelect();
+  renderCourierReport();
+}
+
+// ── v73: Relatório de Taxas de Motoboy ──
+let courierReportMode = 'junto'; // 'junto' (somado) | 'separado' (por motoboy)
+let lastCourierReport = null;
+
+function setCourierReportMode(mode){
+  courierReportMode = mode;
+  document.getElementById('cr-mode-junto').className = 'btn sm' + (mode==='junto'?'':' secondary');
+  document.getElementById('cr-mode-separado').className = 'btn sm' + (mode==='separado'?'':' secondary');
+  renderCourierReportBody();
+}
+
+function fillCourierSelect(){
+  const sel = document.getElementById('cr-courier');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todos</option>' + (couriers||[]).map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  sel.value = current || '';
+}
+
+async function renderCourierReport(){
+  fillCourierSelect();
+  const from = document.getElementById('cr-from').value;
+  const to = document.getElementById('cr-to').value;
+  const courier = document.getElementById('cr-courier').value;
+  const qs = new URLSearchParams();
+  if(from) qs.set('from', from);
+  if(to) qs.set('to', to);
+  if(courier) qs.set('courier', courier);
+  let rep;
+  try{ rep = await apiGet('/api/admin/courier-report?'+qs.toString()); }catch(e){ return; }
+  lastCourierReport = rep;
+  const kpiEl = document.getElementById('courier-report-kpis');
+  kpiEl.innerHTML = `
+    <div class="settings-card" style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">Entregas no período</div>
+      <div style="font-size:22px;font-weight:700;color:var(--white);margin-top:4px;">${rep.totalDeliveries||0}</div>
+    </div>
+    <div class="settings-card" style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">Total a pagar</div>
+      <div style="font-size:22px;font-weight:700;color:var(--green-lt);margin-top:4px;">R$ ${(rep.totalValue||0).toFixed(2).replace('.',',')}</div>
+    </div>
+    <div class="settings-card" style="text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">Modo de cálculo</div>
+      <div style="font-size:16px;font-weight:700;color:var(--gold);margin-top:6px;">${rep.payMode==='bairro'?'Por bairro':'Valor fixo'}</div>
+    </div>`;
+  renderCourierReportBody();
+}
+
+function courierHoodTable(rows){
+  if(!rows || !rows.length) return '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Sem entregas no período.</div>';
+  return `<table class="table">
+    <thead><tr><th>Bairro</th><th>Qtd. entregas</th><th>Valor unitário</th><th>Total</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${esc(r.hood)}</td>
+      <td>${r.deliveries}</td>
+      <td>R$ ${Number(r.unitValue).toFixed(2).replace('.',',')}</td>
+      <td style="font-weight:600;color:var(--green-lt)">R$ ${Number(r.total).toFixed(2).replace('.',',')}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderCourierReportBody(){
+  const el = document.getElementById('courier-report-body');
+  if(!el || !lastCourierReport) return;
+  const rep = lastCourierReport;
+  if(courierReportMode === 'junto'){
+    el.innerHTML = `<div style="font-weight:600;margin-bottom:8px;">Todos os motoboys — somado</div>${courierHoodTable(rep.combinedByHood)}`;
+    return;
+  }
+  if(!rep.byCourier || !rep.byCourier.length){
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Sem entregas no período.</div>';
+    return;
+  }
+  el.innerHTML = rep.byCourier.map(c => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-weight:700;">🧍 ${esc(c.courier)}</span>
+        <span style="font-size:12px;color:var(--muted);">${c.deliveries} entrega(s) · <span style="color:var(--green-lt);font-weight:700;">R$ ${Number(c.total).toFixed(2).replace('.',',')}</span></span>
+      </div>
+      ${courierHoodTable(c.byHood)}
+    </div>`).join('');
+}
+
+function printCourierReport(){
+  if(!lastCourierReport){ showToast('Nada pra imprimir', 'Filtre o relatório primeiro.'); return; }
+  const rep = lastCourierReport;
+  const from = document.getElementById('cr-from').value || '—';
+  const to = document.getElementById('cr-to').value || '—';
+  const title = courierReportMode==='junto' ? 'Relatório de Taxas de Motoboy — Todos (Juntos)' : 'Relatório de Taxas de Motoboy — Separado por Motoboy';
+  let bodyHtml = '';
+  if(courierReportMode === 'junto'){
+    bodyHtml = `<h3>Todos os motoboys — somado</h3>${courierHoodTable(rep.combinedByHood)}
+      <div class="p-total">Total geral: R$ ${Number(rep.totalValue).toFixed(2).replace('.',',')}</div>
+      <div class="p-sign">
+        <div class="p-sign-line"></div><div>Assinatura do motoboy</div>
+      </div>`;
+  } else {
+    bodyHtml = (rep.byCourier||[]).map(c => `
+      <h3>🧍 ${esc(c.courier)} — ${c.deliveries} entrega(s)</h3>
+      ${courierHoodTable(c.byHood)}
+      <div class="p-total">Total ${esc(c.courier)}: R$ ${Number(c.total).toFixed(2).replace('.',',')}</div>
+      <div class="p-sign">
+        <div class="p-sign-line"></div><div>Assinatura de ${esc(c.courier)}</div>
+      </div>
+      <hr class="p-sep"/>`).join('') || '<p>Sem entregas no período.</p>';
+  }
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;}
+      h1{font-size:18px;margin-bottom:2px;}
+      h2{font-size:12px;font-weight:400;color:#555;margin-top:0;margin-bottom:18px;}
+      h3{font-size:14px;margin:18px 0 6px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:6px;}
+      th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left;}
+      th{background:#f2f2f2;}
+      .p-total{font-weight:700;font-size:13px;margin:8px 0 20px;text-align:right;}
+      .p-sign{margin-top:8px;margin-bottom:20px;max-width:280px;}
+      .p-sign-line{border-bottom:1px solid #111;height:34px;}
+      .p-sep{border:none;border-top:1px dashed #999;margin:16px 0;}
+      @media print{ button{display:none;} }
+    </style></head><body>
+    <h1>${title}</h1>
+    <h2>Período: ${from} a ${to} · Gerado em ${new Date().toLocaleString('pt-BR')}</h2>
+    ${bodyHtml}
+    <button onclick="window.print()" style="margin-top:10px;padding:8px 16px;">🖨 Imprimir</button>
+    </body></html>`);
+  win.document.close();
 }
 
 function exportCSV(){
@@ -5892,6 +6330,42 @@ function renderFeeZonesBairro(){
       </div>`).join('');
 }
 function addFeeZoneBairro(){ feeZonesBairroState.push({bairro:'',fee:0}); renderFeeZonesBairro(); }
+
+// v73: Pagamento de Motoboy (valor fixo ou por bairro)
+let courierPayZonesState=[];
+function loadCourierPaySettings(){
+  const pay = cfg.courierPay || { mode:'fixo', fixedValue:6, zones:[] };
+  document.getElementById('cp-mode').value = pay.mode || 'fixo';
+  document.getElementById('cp-fixedvalue').value = pay.fixedValue ?? 6;
+  courierPayZonesState = JSON.parse(JSON.stringify(pay.zones||[]));
+  renderCourierPayModeUI();
+}
+function renderCourierPayModeUI(){
+  const mode = document.getElementById('cp-mode').value;
+  const body = document.getElementById('cp-mode-body');
+  if(mode==='fixo'){
+    body.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-top:6px;">Toda entrega paga o mesmo valor ao motoboy — o valor configurado em "Valor fixo por entrega" acima.</div>`;
+    return;
+  }
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin:6px 0 10px;">
+      Cadastre o valor pago ao motoboy por entrega em cada bairro. Bairros fora da lista usam o valor fixo acima.
+    </div>
+    <div id="cp-zones" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="addCourierPayZone()">+ Bairro</button>`;
+  renderCourierPayZones();
+}
+function renderCourierPayZones(){
+  document.getElementById('cp-zones').innerHTML = courierPayZonesState.length===0
+    ? '<div style="font-size:11px;color:var(--muted);">Nenhum bairro cadastrado ainda.</div>'
+    : courierPayZonesState.map((z,i)=>`
+      <div class="vopt-row">
+        <input type="text" placeholder="Nome do bairro" value="${(z.bairro||'').replace(/"/g,'&quot;')}" oninput="courierPayZonesState[${i}].bairro=this.value"/>
+        <input type="number" step="0.01" placeholder="R$" value="${z.value||0}" oninput="courierPayZonesState[${i}].value=parseFloat(this.value)||0" style="flex:0 0 80px;"/>
+        <button type="button" onclick="courierPayZonesState.splice(${i},1);renderCourierPayZones();">🗑</button>
+      </div>`).join('');
+}
+function addCourierPayZone(){ courierPayZonesState.push({bairro:'',value:0}); renderCourierPayZones(); }
 function maskCEPField(input){
   let v = input.value.replace(/\D/g,'').slice(0,8);
   if (v.length > 5) v = v.slice(0,5) + '-' + v.slice(5);
@@ -5988,6 +6462,7 @@ function loadSettings(){
   renderStationsSettings();
   loadLabels();
   loadFeeSettings();
+  loadCourierPaySettings();
   document.getElementById('print-font').value = cfg.printFont||'monospace';
   document.getElementById('print-size').value = cfg.printSize||14;
   document.getElementById('print-color').value = cfg.printColor||'#000000';
@@ -7058,6 +7533,14 @@ async function saveAllSettings(){
     cfg.feeMaxKm = parseFloat(document.getElementById('fee-maxKm').value)||0;
     cfg.feeRound = parseFloat(document.getElementById('fee-round').value)||0;
     if(!cfg.storeLat||!cfg.storeLng){ alert('Clique em "📍 Localizar" (na seção Taxa de Entrega) pra definir o endereço de partida da loja antes de salvar o modo por distância.'); return; }
+  }
+
+  // v73: Pagamento de Motoboy
+  cfg.courierPay = cfg.courierPay || {};
+  cfg.courierPay.mode = document.getElementById('cp-mode')?.value || 'fixo';
+  cfg.courierPay.fixedValue = parseFloat(document.getElementById('cp-fixedvalue')?.value) || 0;
+  if(cfg.courierPay.mode === 'bairro'){
+    cfg.courierPay.zones = courierPayZonesState.filter(z=>String(z.bairro||'').trim());
   }
 
   // Cupons de desconto
