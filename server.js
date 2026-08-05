@@ -224,6 +224,43 @@ const DEFAULT_CFG = {
     redeemValue: 10,       // quanto vale em R$ de desconto cada bloco de redeemPoints
     minOrderToRedeem: 0    // pedido mínimo (R$) pra poder usar pontos, 0 = sem mínimo
   },
+  // ── v73: Foto Provisória Global — uma única imagem usada automaticamente em TODO produto
+  // que ainda não tem foto própria cadastrada. Assim que o produto ganha uma foto manual, ele
+  // para de usar a provisória sozinho (a foto manual sempre tem prioridade, nunca é substituída).
+  placeholderPhoto: {
+    enabled: false,
+    url: '',
+    position: 'esquerda',   // 'esquerda' | 'direita' | 'acima'
+    mode: 'cortar',         // 'preencher' | 'ajustar' | 'cortar'
+    radius: 'medio'         // 'nenhum' | 'pequeno' | 'medio' | 'grande'
+  },
+  // ── v73: Badge Global — um selo (ex: "🔥 Mais vendido") aplicado automaticamente em todos os
+  // produtos. Cada produto pode herdar essa configuração ou personalizar a própria (ver
+  // item.badgeMode/item.badgeOverride no cardápio). ──
+  globalBadge: {
+    enabled: false,
+    text: 'Mais vendido',
+    icon: '🔥',
+    bgColor: '#c0392b',
+    textColor: '#ffffff',
+    fontSize: 11,
+    fontWeight: 700,
+    opacity: 100,
+    borderEnabled: false,
+    borderColor: '#ffffff',
+    borderRadius: 6,
+    padding: 6,
+    shadow: true,
+    position: 'canto-superior-esquerdo' // acima-foto|abaixo-foto|sobre-foto|acima-nome|abaixo-nome|canto-superior-esquerdo|canto-superior-direito
+  },
+  // ── v73: valor pago ao motoboy por entrega — usado no Relatório de Taxas de Motoboy.
+  // É separado da taxa de entrega cobrada do CLIENTE (cfg.fee/feeZonesBairro/feeZonesCep) porque
+  // nem sempre o restaurante repassa o valor cheio pro entregador. ──
+  courierPay: {
+    mode: 'fixo',        // 'fixo' (mesmo valor pra toda entrega) ou 'bairro' (valor por bairro)
+    fixedValue: 6,
+    zones: []            // [{ bairro: 'Costazul', value: 6 }, ...]
+  },
   // ── Número da senha/pedido (1 a 200, cíclico) ──
   nextTicketNumber: 1,
   // ── SMS (envio de promoções pros clientes cadastrados) — usa a API da Twilio.
@@ -555,7 +592,11 @@ function readConfig() {
     scheduling: { ...DEFAULT_CFG.scheduling, ...(data.cfg.scheduling || {}) },
     rodizioPopular: { ...DEFAULT_CFG.rodizioPopular, ...(data.cfg.rodizioPopular || {}) },
     splash: { ...DEFAULT_CFG.splash, ...(data.cfg.splash || {}), photos: Array.isArray(data.cfg.splash && data.cfg.splash.photos) ? data.cfg.splash.photos : DEFAULT_CFG.splash.photos },
-    chatBackground: { ...DEFAULT_CFG.chatBackground, ...(data.cfg.chatBackground || {}) }
+    chatBackground: { ...DEFAULT_CFG.chatBackground, ...(data.cfg.chatBackground || {}) },
+    // v73
+    placeholderPhoto: { ...DEFAULT_CFG.placeholderPhoto, ...(data.cfg.placeholderPhoto || {}) },
+    globalBadge: { ...DEFAULT_CFG.globalBadge, ...(data.cfg.globalBadge || {}) },
+    courierPay: { ...DEFAULT_CFG.courierPay, ...(data.cfg.courierPay || {}), zones: Array.isArray(data.cfg.courierPay && data.cfg.courierPay.zones) ? data.cfg.courierPay.zones : DEFAULT_CFG.courierPay.zones }
   };
   // Se a auto-programação de horário estiver ativada, o status aberto/fechado
   // passa a ser calculado sozinho a partir do horário configurado — o toggle
@@ -794,6 +835,20 @@ function matchBairroZone(hood, zones) {
   }) || null;
 }
 
+
+// v73: extrai o bairro a partir do texto livre do endereço, pra pedidos antigos que não têm
+// o campo order.hood salvo separadamente (o checkout monta o endereço como
+// "Rua X, 123 - Bairro - Complemento (Referência) · CEP 00000-000" — ver public/index.html).
+// Best-effort: se não conseguir identificar, devolve string vazia (o pedido some da quebra por
+// bairro no relatório, mas continua entrando nos totais gerais).
+function extractHoodFromAddress(address) {
+  const addr = String(address || '');
+  const afterDash = addr.split(' - ').slice(1).join(' - '); // tudo depois de "Rua, Nº - "
+  if (!afterDash) return '';
+  let hood = afterDash.split(' - ')[0] || '';
+  hood = hood.split(' (')[0].split(' · ')[0].trim();
+  return hood.slice(0, 60);
+}
 
 // Acha um cupom válido pelo código (não expirado, ativo, dentro do limite de uso
 // e do pedido mínimo) e devolve o desconto já calculado pra esse subtotal.
@@ -1350,7 +1405,14 @@ const server = http.createServer(async (req, res) => {
             ...(body.cfg && body.cfg.splash || {}),
             photos: Array.isArray(body.cfg && body.cfg.splash && body.cfg.splash.photos) ? body.cfg.splash.photos : current.cfg.splash.photos
           },
-          chatBackground: { ...current.cfg.chatBackground, ...(body.cfg && body.cfg.chatBackground || {}) }
+          chatBackground: { ...current.cfg.chatBackground, ...(body.cfg && body.cfg.chatBackground || {}) },
+          // v73
+          placeholderPhoto: { ...current.cfg.placeholderPhoto, ...(body.cfg && body.cfg.placeholderPhoto || {}) },
+          globalBadge: { ...current.cfg.globalBadge, ...(body.cfg && body.cfg.globalBadge || {}) },
+          courierPay: {
+            ...current.cfg.courierPay, ...(body.cfg && body.cfg.courierPay || {}),
+            zones: Array.isArray(body.cfg && body.cfg.courierPay && body.cfg.courierPay.zones) ? body.cfg.courierPay.zones : current.cfg.courierPay.zones
+          }
         },
         menu: normalizeMenu(menuBeforeNormalize, validStationKeys, (body.cfg && body.cfg.defaultStation) || current.cfg.defaultStation)
       };
@@ -2050,6 +2112,79 @@ const server = http.createServer(async (req, res) => {
     const topItems = Object.values(itemsMap).sort((a, b) => b.qty - a.qty).slice(0, 15);
     const byDay = Object.values(byDayMap).sort((a, b) => a.date.localeCompare(b.date));
     return sendJSON(res, 200, { totalOrders, totalRevenue, avgTicket, byPayMethod, byDay, topItems });
+  }
+
+  // ── GET /api/admin/courier-report — v73: Relatório de Taxas de Motoboy ──
+  // Calcula quanto pagar a cada entregador, contando entregas por bairro e valor devido, com
+  // opção de ver todos juntos (somado) ou separado por motoboy. O valor devido por entrega usa
+  // cfg.courierPay: 'fixo' (mesmo valor sempre) ou 'bairro' (valor configurado por bairro,
+  // caindo pro valor fixo se o bairro da entrega não estiver cadastrado).
+  // Query params: from, to (datas AAAA-MM-DD), courier ('' = todos).
+  if (pathname === '/api/admin/courier-report' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra ver esse relatório.' });
+    const { cfg } = readConfig();
+    const orders = readJSON(ORDERS_FILE);
+    const from = query.from ? new Date(query.from + 'T00:00:00').getTime() : 0;
+    const to = query.to ? new Date(query.to + 'T23:59:59').getTime() : Infinity;
+    const courierFilter = String(query.courier || '').trim();
+    const pay = cfg.courierPay || { mode: 'fixo', fixedValue: 0, zones: [] };
+
+    const valueForHood = (hood) => {
+      if (pay.mode === 'bairro') {
+        const match = matchBairroZone(hood, pay.zones);
+        if (match) return Number(match.value) || 0;
+      }
+      return Number(pay.fixedValue) || 0;
+    };
+
+    const filtered = orders.filter(o => {
+      const t = new Date(o.createdAt).getTime();
+      if (t < from || t > to) return false;
+      if (o.mode !== 'delivery') return false;                 // motoboy só entra em entregas, não em retirada
+      if (o.status !== 'entregue') return false;                // só entregas concluídas contam pro pagamento
+      if (!o.courierName) return false;                          // sem motoboy atribuído, não entra no relatório
+      if (courierFilter && normalizeText(o.courierName) !== normalizeText(courierFilter)) return false;
+      return true;
+    });
+
+    // ── Agrupado "Separado" — um bloco por motoboy, cada um com a quebra por bairro ──
+    const byCourierMap = {};
+    filtered.forEach(o => {
+      const hood = o.hood || extractHoodFromAddress(o.address) || 'Não informado';
+      const value = valueForHood(hood);
+      if (!byCourierMap[o.courierName]) byCourierMap[o.courierName] = { courier: o.courierName, deliveries: 0, total: 0, byHood: {} };
+      const c = byCourierMap[o.courierName];
+      c.deliveries++;
+      c.total += value;
+      if (!c.byHood[hood]) c.byHood[hood] = { hood, deliveries: 0, unitValue: value, total: 0 };
+      c.byHood[hood].deliveries++;
+      c.byHood[hood].total += value;
+    });
+    const byCourier = Object.values(byCourierMap)
+      .map(c => ({ ...c, byHood: Object.values(c.byHood).sort((a, b) => b.deliveries - a.deliveries) }))
+      .sort((a, b) => b.total - a.total);
+
+    // ── Agrupado "Juntos" — todos os motoboys somados, só a quebra por bairro ──
+    const combinedByHoodMap = {};
+    filtered.forEach(o => {
+      const hood = o.hood || extractHoodFromAddress(o.address) || 'Não informado';
+      const value = valueForHood(hood);
+      if (!combinedByHoodMap[hood]) combinedByHoodMap[hood] = { hood, deliveries: 0, unitValue: value, total: 0 };
+      combinedByHoodMap[hood].deliveries++;
+      combinedByHoodMap[hood].total += value;
+    });
+    const combinedByHood = Object.values(combinedByHoodMap).sort((a, b) => b.deliveries - a.deliveries);
+
+    const totalDeliveries = filtered.length;
+    const totalValue = byCourier.reduce((s, c) => s + c.total, 0);
+
+    return sendJSON(res, 200, {
+      payMode: pay.mode,
+      totalDeliveries,
+      totalValue,
+      byCourier,
+      combinedByHood
+    });
   }
 
   // ── POST /api/login — autenticação do painel (usuário + senha, com nível de acesso) ──
@@ -3286,6 +3421,9 @@ function estimateDeliveryWindow(order, cfg) {
         name: String(body.name || '').slice(0, 80),
         phone: String(body.phone || '').slice(0, 30),
         address: String(body.address || '').slice(0, 200),
+        // v73: bairro separado (usado no Relatório de Taxas de Motoboy). Se o checkout mandar
+        // explicitamente (body.hood), usa ele; senão tenta extrair do texto do endereço.
+        hood: String(body.hood || extractHoodFromAddress(body.address)).slice(0, 60),
         items: (body.items || []).slice(0, 60).map(i => {
           // v49 — BUG CORRIGIDO ("impressora não imprime"): essa lista só aceitava 3 vias
           // (cozinha/sushibar/bar) — um item marcado pra "delivery", "expedição" ou uma via
