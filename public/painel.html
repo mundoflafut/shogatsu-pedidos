@@ -1097,7 +1097,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       </div>
     </div>
 
-    <!-- ── RELATÓRIOS ── */
+    <!-- ── RELATÓRIOS ── -->
     <div class="page" id="page-relatorios">
       <div id="reports-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
       <div class="report-grid">
@@ -1135,24 +1135,31 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       <div class="panel" id="courier-report-panel" style="margin-top:16px;">
         <div class="panel-header">
           <span class="panel-title">🛵 Taxas de Motoboy</span>
-          <button class="btn sm secondary" onclick="printCourierReport()">🖨 Imprimir</button>
+          <button class="btn sm secondary" onclick="printCourierReport()">🖨 Imprimir Relatório</button>
         </div>
         <div class="panel-body">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+            <button type="button" class="btn sm secondary" id="cr-period-hoje" onclick="setCourierReportPeriod('hoje')">Hoje</button>
+            <button type="button" class="btn sm secondary" id="cr-period-semana" onclick="setCourierReportPeriod('semana')">Semana</button>
+            <button type="button" class="btn sm secondary" id="cr-period-mes" onclick="setCourierReportPeriod('mes')">Mês</button>
+            <button type="button" class="btn sm secondary" id="cr-period-custom" onclick="setCourierReportPeriod('custom')">Personalizado</button>
+          </div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;">
-            <div class="field" style="width:150px;"><label>De</label><input type="date" id="cr-from"/></div>
-            <div class="field" style="width:150px;"><label>Até</label><input type="date" id="cr-to"/></div>
+            <div class="field" style="width:150px;"><label>De</label><input type="date" id="cr-from" onchange="setCourierReportPeriod('custom')"/></div>
+            <div class="field" style="width:150px;"><label>Até</label><input type="date" id="cr-to" onchange="setCourierReportPeriod('custom')"/></div>
             <div class="field" style="width:200px;"><label>Motoboy</label>
               <select id="cr-courier"><option value="">Todos</option></select>
             </div>
             <div class="field" style="min-width:220px;">
               <label>Visualização</label>
               <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;">
-                <button type="button" class="btn sm" id="cr-mode-junto" onclick="setCourierReportMode('junto')" style="border-radius:0;">👥 Juntos</button>
-                <button type="button" class="btn sm secondary" id="cr-mode-separado" onclick="setCourierReportMode('separado')" style="border-radius:0;">🧍 Separados</button>
+                <button type="button" class="btn sm" id="cr-mode-junto" onclick="setCourierReportMode('junto')" style="border-radius:0;" title="Lista pedido a pedido">👥 Junto</button>
+                <button type="button" class="btn sm secondary" id="cr-mode-separado" onclick="setCourierReportMode('separado')" style="border-radius:0;" title="Estatísticas por valor, quantidade e bairro">🧍 Separado</button>
               </div>
             </div>
             <button class="btn primary sm" onclick="renderCourierReport()" style="height:38px;">🔎 Filtrar</button>
           </div>
+          <div class="field" style="max-width:280px;margin-bottom:12px;"><label style="font-size:10px;">Responsável (aparece na impressão)</label><input type="text" id="cr-responsavel" placeholder="Nome de quem está conferindo"/></div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Valor pago por entrega definido em Configurações → 🛵 Pagamento de Motoboy. Só conta entregas com status <b>Entregue</b> e motoboy atribuído.
           </div>
@@ -1572,7 +1579,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Renomeie cada via como preferir e escolha como ela imprime: pela janela do
             navegador (mais simples, não precisa configurar nada), por impressora de
-            rede (IP) ou por impressora USB ligada nesse computador.
+            rede (IP) ou por impressora USB ligada nesse computador. Use ▲/▼ pra definir a
+            ordem/prioridade de exibição das vias (a "Caixa" fica sempre em primeiro).
           </div>
           <div id="stations-list" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
@@ -3239,7 +3247,7 @@ async function finishAdvanceStatus(id, body, wasAccepting){
 function showCourierLinkModal(orderId){
   const link = location.origin + '/entregador.html?id=' + encodeURIComponent(orderId);
   document.getElementById('courier-link-text').value = link;
-  document.getElementById('courier-link-modal').classList.add('open');
+  openModal('courier-link-modal');
 }
 function copyCourierLink(){
   const input = document.getElementById('courier-link-text');
@@ -3933,7 +3941,7 @@ async function openCourierPicker(orderId, body, wasAccepting, currentName){
   document.getElementById('courier-other-wrap').style.display='none';
   document.getElementById('courier-other-text').value = currentName||'';
   document.getElementById('courier-confirm-btn').disabled = true;
-  document.getElementById('courier-modal').classList.add('open');
+  openModal('courier-modal');
 }
 function selectCourierChip(el, name){
   document.querySelectorAll('#courier-picker-list .cancel-reason-chip').forEach(c=>c.classList.remove('selected'));
@@ -3971,7 +3979,7 @@ function deleteOrderFromSystem(id){
   document.getElementById('delete-order-id-label').textContent = id;
   document.getElementById('delete-order-password').value = '';
   document.getElementById('delete-order-err').style.display = 'none';
-  document.getElementById('delete-order-modal').classList.add('open');
+  openModal('delete-order-modal');
   setTimeout(()=>document.getElementById('delete-order-password').focus(), 50);
 }
 async function confirmDeleteOrder(){
@@ -4014,7 +4022,7 @@ function openDeleteDataModal(){
   document.getElementById('delete-data-password').value = '';
   document.getElementById('delete-data-err').style.display = 'none';
   document.getElementById('delete-data-confirm-btn').disabled = true;
-  document.getElementById('delete-data-modal').classList.add('open');
+  openModal('delete-data-modal');
 }
 function onDeleteDataWhatChange(){
   const what = document.getElementById('delete-data-what').value;
@@ -4065,7 +4073,7 @@ function cancelOrder(id){
   document.getElementById('cancel-reasons-list').innerHTML = reasons.map((r,i)=>
     `<div class="cancel-reason-chip" data-reason="${r.replace(/"/g,'&quot;')}" onclick="selectCancelReason(this,'${r.replace(/'/g,"\\'")}')">${r}</div>`
   ).join('') + `<div class="cancel-reason-chip" data-reason="__outro__" onclick="selectCancelReason(this,null)">✏️ Outro motivo (digitar)</div>`;
-  document.getElementById('cancel-modal').classList.add('open');
+  openModal('cancel-modal');
 }
 function selectCancelledBy(who){
   cancelledByState=who;
@@ -4480,11 +4488,18 @@ function updateNewBadge(){
   document.getElementById('pulse-ring').parentElement.classList.toggle('has-new',n>0);
 }
 
+// v73.1: BUG CORRIGIDO — o atalho "🖨 Impressoras" da barra lateral levava pra Configurações
+// mas nunca abria o acordeão "🖨 Impressoras" (que começa fechado, max-height:0), então na
+// prática parecia que "não abria nada". Agora abre o acordeão certo antes de rolar até ele.
 function goToPrinterSettings(){
   goPage('configuracoes');
   setTimeout(()=>{
-    const el=document.getElementById('stations-list');
-    if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    const acc = document.querySelector('.settings-accordion[data-accordion-key="impressoras"]');
+    if (acc && !acc.classList.contains('open')) toggleSettingsAccordion('impressoras');
+    setTimeout(()=>{
+      const el=document.getElementById('stations-list');
+      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 120);
   }, 150);
 }
 function openNewOrder(){
@@ -4492,7 +4507,7 @@ function openNewOrder(){
   document.getElementById('o-item-search').value='';
   document.getElementById('o-item-results').innerHTML='';
   renderManualOrderItems();
-  document.getElementById('order-modal').classList.add('open');
+  openModal('order-modal');
 }
 
 // ═══════════════════════════════════════════
@@ -5664,7 +5679,7 @@ function openAddItem(){
   resetItemPhotoPreview('', {x:50,y:50});
   editingVariants=[];
   renderVariantGroups();
-  document.getElementById('item-modal').classList.add('open');
+  openModal('item-modal');
 }
 function openEditItem(si,ii){
   const item=menu[si].items[ii];
@@ -5680,7 +5695,7 @@ function openEditItem(si,ii){
   resetItemPhotoPreview(item.image||'', item.imagePos||{x:50,y:50});
   editingVariants=JSON.parse(JSON.stringify(item.variants||[]));
   renderVariantGroups();
-  document.getElementById('item-modal').classList.add('open');
+  openModal('item-modal');
 }
 // ═══════════════════════════════════════════
 // 📠 ESTAÇÕES DE IMPRESSÃO — por item do cardápio (v49)
@@ -5698,7 +5713,7 @@ function openItemStationsModal(si,ii){
   const defKey = cfg.defaultStation || 'cozinha';
   document.getElementById('ism-default-station').textContent = stationIcon(defKey)+' '+stationLabel(defKey);
   renderIsmGrid();
-  document.getElementById('item-stations-modal').classList.add('open');
+  openModal('item-stations-modal');
 }
 function renderIsmGrid(){
   const el = document.getElementById('ism-grid');
@@ -5827,7 +5842,7 @@ function openImportMenu(){
   document.getElementById('import-menu-file').value = '';
   document.getElementById('import-menu-textarea').value = '';
   document.getElementById('import-menu-preview').textContent = '';
-  document.getElementById('import-menu-modal').classList.add('open');
+  openModal('import-menu-modal');
 }
 function handleImportMenuFile(input){
   const file = input.files[0];
@@ -5924,7 +5939,7 @@ function openAddCategory(){
   document.getElementById('cat-title').value='';
   document.getElementById('cat-note').value='';
   setCatStationCheckboxes(['cozinha']);
-  document.getElementById('cat-modal').classList.add('open');
+  openModal('cat-modal');
 }
 function openEditCategory(i){
   const sec=menu[i];
@@ -5934,7 +5949,7 @@ function openEditCategory(i){
   document.getElementById('cat-title').value=sec.title||'';
   document.getElementById('cat-note').value=sec.note||'';
   setCatStationCheckboxes(sec.stations&&sec.stations.length?sec.stations:['cozinha']);
-  document.getElementById('cat-modal').classList.add('open');
+  openModal('cat-modal');
 }
 async function saveCategory(){
   const idx=parseInt(document.getElementById('cat-edit-idx').value);
@@ -6052,18 +6067,45 @@ async function renderReports(){
       <td style="font-size:11px;color:var(--muted)">${new Date(o.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>
     </tr>`;}).join('');
 
-  // v73: relatório de taxas de motoboy — mesmo período padrão (últimos 7 dias)
+  // v73.1: relatório de taxas de motoboy — período padrão = Semana (últimos 7 dias)
   if(document.getElementById('cr-from') && !document.getElementById('cr-from').value){
     document.getElementById('cr-from').value = from;
     document.getElementById('cr-to').value = to;
+    const semanaBtn = document.getElementById('cr-period-semana');
+    if(semanaBtn) semanaBtn.className = 'btn sm';
   }
   fillCourierSelect();
   renderCourierReport();
 }
 
-// ── v73: Relatório de Taxas de Motoboy ──
-let courierReportMode = 'junto'; // 'junto' (somado) | 'separado' (por motoboy)
+// ── v73.1: Relatório de Taxas de Motoboy — Junto (pedido a pedido) / Separado (estatísticas) ──
+let courierReportMode = 'junto'; // 'junto' (lista pedido a pedido) | 'separado' (estatísticas)
 let lastCourierReport = null;
+
+function fmtDateInput(d){ return d.toISOString().slice(0,10); }
+function setCourierReportPeriod(period){
+  ['hoje','semana','mes','custom'].forEach(p=>{
+    const btn = document.getElementById('cr-period-'+p);
+    if(btn) btn.className = 'btn sm' + (p===period?'':' secondary');
+  });
+  if(period==='custom') return; // usuário está escolhendo as datas manualmente, não mexe nelas
+  const today = new Date();
+  const from = document.getElementById('cr-from'), to = document.getElementById('cr-to');
+  if(period==='hoje'){
+    from.value = fmtDateInput(today);
+    to.value = fmtDateInput(today);
+  } else if(period==='semana'){
+    const d = new Date(today);
+    d.setDate(d.getDate() - 6);
+    from.value = fmtDateInput(d);
+    to.value = fmtDateInput(today);
+  } else if(period==='mes'){
+    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+    from.value = fmtDateInput(d);
+    to.value = fmtDateInput(today);
+  }
+  renderCourierReport();
+}
 
 function setCourierReportMode(mode){
   courierReportMode = mode;
@@ -6109,17 +6151,50 @@ async function renderCourierReport(){
   renderCourierReportBody();
 }
 
-function courierHoodTable(rows){
+const CR_STATUS_LABEL = { entregue:'✅ Entregue', pronto:'🟢 Pronto', preparo:'🟡 Preparando', novo:'🆕 Novo', cancelado:'❌ Cancelado' };
+
+// ── RELATÓRIO JUNTO — tabela pedido a pedido: Pedido, Cliente, Bairro, Taxa, Data, Horário, Status ──
+function courierOrdersTable(rows){
   if(!rows || !rows.length) return '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Sem entregas no período.</div>';
   return `<table class="table">
-    <thead><tr><th>Bairro</th><th>Qtd. entregas</th><th>Valor unitário</th><th>Total</th></tr></thead>
+    <thead><tr><th>Pedido</th><th>Cliente</th><th>Bairro</th><th>Taxa motoboy</th><th>Motoboy</th><th>Data</th><th>Horário</th><th>Status</th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
+      <td>${esc(r.orderLabel)}</td>
+      <td>${esc(r.customer)}</td>
       <td>${esc(r.hood)}</td>
-      <td>${r.deliveries}</td>
-      <td>R$ ${Number(r.unitValue).toFixed(2).replace('.',',')}</td>
-      <td style="font-weight:600;color:var(--green-lt)">R$ ${Number(r.total).toFixed(2).replace('.',',')}</td>
+      <td style="font-weight:600;color:var(--green-lt)">R$ ${Number(r.value).toFixed(2).replace('.',',')}</td>
+      <td>${esc(r.courier)}</td>
+      <td>${esc(r.date)}</td>
+      <td>${esc(r.time)}</td>
+      <td>${CR_STATUS_LABEL[r.status]||esc(r.status)}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+}
+
+// ── RELATÓRIO SEPARADO — estatísticas por valor / quantidade / bairro ──
+function courierStatsHtml(rep){
+  const s = rep.stats || {};
+  const money = v => 'R$ ' + Number(v||0).toFixed(2).replace('.',',');
+  const byCourierRows = (s.deliveriesByCourier||[]).map(c=>`<tr><td>${esc(c.courier)}</td><td>${c.deliveries}</td><td style="color:var(--green-lt);font-weight:600;">${money(c.total)}</td></tr>`).join('');
+  const byHoodRows = (s.deliveriesByHood||[]).map(h=>`<tr><td>${esc(h.hood)}</td><td>${h.deliveries}</td><td style="color:var(--green-lt);font-weight:600;">${money(h.total)}</td></tr>`).join('');
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
+      <div class="settings-card"><div style="font-size:11px;color:var(--muted);">💰 Total arrecadado em taxas</div><div style="font-size:18px;font-weight:700;color:var(--green-lt);margin-top:4px;">${money(s.totalValue)}</div></div>
+      <div class="settings-card"><div style="font-size:11px;color:var(--muted);">📊 Média por entrega</div><div style="font-size:18px;font-weight:700;margin-top:4px;">${money(s.avgValue)}</div></div>
+      <div class="settings-card"><div style="font-size:11px;color:var(--muted);">⬆️ Maior taxa</div><div style="font-size:18px;font-weight:700;margin-top:4px;">${money(s.maxValue)}</div></div>
+      <div class="settings-card"><div style="font-size:11px;color:var(--muted);">⬇️ Menor taxa</div><div style="font-size:18px;font-weight:700;margin-top:4px;">${money(s.minValue)}</div></div>
+      <div class="settings-card"><div style="font-size:11px;color:var(--muted);">🔢 Quantidade total de entregas</div><div style="font-size:18px;font-weight:700;margin-top:4px;">${s.totalDeliveries||0}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+      <div>
+        <div style="font-weight:600;margin-bottom:8px;">🧍 Entregas por motoboy</div>
+        <table class="table"><thead><tr><th>Motoboy</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${byCourierRows||'<tr><td colspan="3" style="color:var(--muted);">Sem dados.</td></tr>'}</tbody></table>
+      </div>
+      <div>
+        <div style="font-weight:600;margin-bottom:8px;">📍 Entregas por bairro</div>
+        <table class="table"><thead><tr><th>Bairro</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${byHoodRows||'<tr><td colspan="3" style="color:var(--muted);">Sem dados.</td></tr>'}</tbody></table>
+      </div>
+    </div>`;
 }
 
 function renderCourierReportBody(){
@@ -6127,69 +6202,78 @@ function renderCourierReportBody(){
   if(!el || !lastCourierReport) return;
   const rep = lastCourierReport;
   if(courierReportMode === 'junto'){
-    el.innerHTML = `<div style="font-weight:600;margin-bottom:8px;">Todos os motoboys — somado</div>${courierHoodTable(rep.combinedByHood)}`;
-    return;
+    el.innerHTML = `<div style="font-weight:600;margin-bottom:8px;">Todas as entregas do período</div>${courierOrdersTable(rep.rows)}`;
+  } else {
+    el.innerHTML = courierStatsHtml(rep);
   }
-  if(!rep.byCourier || !rep.byCourier.length){
-    el.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:10px 0;">Sem entregas no período.</div>';
-    return;
-  }
-  el.innerHTML = rep.byCourier.map(c => `
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="font-weight:700;">🧍 ${esc(c.courier)}</span>
-        <span style="font-size:12px;color:var(--muted);">${c.deliveries} entrega(s) · <span style="color:var(--green-lt);font-weight:700;">R$ ${Number(c.total).toFixed(2).replace('.',',')}</span></span>
-      </div>
-      ${courierHoodTable(c.byHood)}
-    </div>`).join('');
 }
 
+// ── IMPRIMIR RELATÓRIO — layout profissional: SHOGATSU RESTAURANTE, Data, Responsável,
+// tabela Pedido|Cliente|Bairro|Taxa|Motoboy, totais e assinaturas (responsável + motoboy) ──
 function printCourierReport(){
   if(!lastCourierReport){ showToast('Nada pra imprimir', 'Filtre o relatório primeiro.'); return; }
   const rep = lastCourierReport;
   const from = document.getElementById('cr-from').value || '—';
   const to = document.getElementById('cr-to').value || '—';
-  const title = courierReportMode==='junto' ? 'Relatório de Taxas de Motoboy — Todos (Juntos)' : 'Relatório de Taxas de Motoboy — Separado por Motoboy';
-  let bodyHtml = '';
-  if(courierReportMode === 'junto'){
-    bodyHtml = `<h3>Todos os motoboys — somado</h3>${courierHoodTable(rep.combinedByHood)}
-      <div class="p-total">Total geral: R$ ${Number(rep.totalValue).toFixed(2).replace('.',',')}</div>
-      <div class="p-sign">
-        <div class="p-sign-line"></div><div>Assinatura do motoboy</div>
-      </div>`;
-  } else {
-    bodyHtml = (rep.byCourier||[]).map(c => `
-      <h3>🧍 ${esc(c.courier)} — ${c.deliveries} entrega(s)</h3>
-      ${courierHoodTable(c.byHood)}
-      <div class="p-total">Total ${esc(c.courier)}: R$ ${Number(c.total).toFixed(2).replace('.',',')}</div>
-      <div class="p-sign">
-        <div class="p-sign-line"></div><div>Assinatura de ${esc(c.courier)}</div>
-      </div>
-      <hr class="p-sep"/>`).join('') || '<p>Sem entregas no período.</p>';
-  }
+  const responsavel = (document.getElementById('cr-responsavel').value || '').trim();
+  const rows = rep.rows || [];
+  const totalTaxas = rep.totalValue || 0;
+  const qtdEntregas = rep.totalDeliveries || 0;
+
+  const tableRows = rows.map(r=>`<tr>
+      <td>${esc(r.orderLabel)}</td>
+      <td>${esc(r.customer)}</td>
+      <td>${esc(r.hood)}</td>
+      <td>R$ ${Number(r.value).toFixed(2).replace('.',',')}</td>
+      <td>${esc(r.courier)}</td>
+    </tr>`).join('') || '<tr><td colspan="5">Nenhuma entrega no período.</td></tr>';
+
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório de Entregas — Shogatsu</title>
     <style>
       body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;}
-      h1{font-size:18px;margin-bottom:2px;}
-      h2{font-size:12px;font-weight:400;color:#555;margin-top:0;margin-bottom:18px;}
-      h3{font-size:14px;margin:18px 0 6px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:6px;}
+      .p-header{text-align:center;margin-bottom:18px;}
+      .p-header h1{font-size:20px;letter-spacing:2px;margin:0;}
+      .p-header h2{font-size:13px;font-weight:400;color:#555;margin:2px 0 0;}
+      .p-meta{display:flex;justify-content:space-between;font-size:12px;margin:16px 0 10px;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:8px 0;}
+      table{width:100%;border-collapse:collapse;margin-bottom:10px;}
       th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:left;}
       th{background:#f2f2f2;}
-      .p-total{font-weight:700;font-size:13px;margin:8px 0 20px;text-align:right;}
-      .p-sign{margin-top:8px;margin-bottom:20px;max-width:280px;}
-      .p-sign-line{border-bottom:1px solid #111;height:34px;}
-      .p-sep{border:none;border-top:1px dashed #999;margin:16px 0;}
+      .p-totals{margin-top:14px;font-size:13px;}
+      .p-totals div{display:flex;justify-content:space-between;max-width:320px;padding:3px 0;}
+      .p-totals b{font-weight:700;}
+      .p-sign-wrap{display:flex;gap:40px;margin-top:50px;}
+      .p-sign{flex:1;}
+      .p-sign-line{border-bottom:1px solid #111;height:40px;}
+      .p-sign div:last-child{font-size:12px;text-align:center;margin-top:4px;}
       @media print{ button{display:none;} }
     </style></head><body>
-    <h1>${title}</h1>
-    <h2>Período: ${from} a ${to} · Gerado em ${new Date().toLocaleString('pt-BR')}</h2>
-    ${bodyHtml}
-    <button onclick="window.print()" style="margin-top:10px;padding:8px 16px;">🖨 Imprimir</button>
+    <div class="p-header">
+      <h1>SHOGATSU RESTAURANTE</h1>
+      <h2>Relatório de Entregas</h2>
+    </div>
+    <div class="p-meta">
+      <span><b>Período:</b> ${from} a ${to}</span>
+      <span><b>Data de emissão:</b> ${new Date().toLocaleDateString('pt-BR')}</span>
+      <span><b>Responsável:</b> ${esc(responsavel) || '_______________________'}</span>
+    </div>
+    <table>
+      <thead><tr><th>Pedido</th><th>Cliente</th><th>Bairro</th><th>Taxa</th><th>Motoboy</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div class="p-totals">
+      <div><span>Quantidade de entregas:</span> <b>${qtdEntregas}</b></div>
+      <div><span>Total de taxas:</span> <b>R$ ${Number(totalTaxas).toFixed(2).replace('.',',')}</b></div>
+    </div>
+    <div class="p-sign-wrap">
+      <div class="p-sign"><div class="p-sign-line"></div><div>Assinatura do Responsável</div></div>
+      <div class="p-sign"><div class="p-sign-line"></div><div>Assinatura do Motoboy</div></div>
+    </div>
+    <button onclick="window.print()" style="margin-top:24px;padding:8px 16px;">🖨 Imprimir</button>
     </body></html>`);
   win.document.close();
 }
+
 
 function exportCSV(){
   const rows=[['ID','Cliente','Telefone','Itens','Total','Pagamento','Modo','Status','Hora']];
@@ -7148,9 +7232,26 @@ function loadLabels(){
 }
 // v49: a lista de estações deixou de ser fixa — agora vem de cfg.stations (qualquer via
 // criada pelo admin aparece aqui e em todo o resto do sistema automaticamente).
+// v73.1: prioridade das vias de impressão — cfg.stationOrder guarda a ordem escolhida pelo
+// admin (nomes das chaves). "caixa" fica sempre primeiro e não entra na reordenação. Qualquer
+// via nova, ou que ainda não esteja em cfg.stationOrder, vai pro final na ordem em que existir.
 function getStationKeys(){
   if(!cfg.stations) cfg.stations={};
-  return Object.keys(cfg.stations).sort((a,b)=> (a==='caixa'?-1:b==='caixa'?1:0));
+  const all = Object.keys(cfg.stations);
+  const order = Array.isArray(cfg.stationOrder) ? cfg.stationOrder.filter(k=>all.includes(k) && k!=='caixa') : [];
+  const rest = all.filter(k=>k!=='caixa' && !order.includes(k));
+  const ordered = [...order, ...rest];
+  return all.includes('caixa') ? ['caixa', ...ordered] : ordered;
+}
+function moveStation(key, dir){
+  const keys = getStationKeys().filter(k=>k!=='caixa');
+  const i = keys.indexOf(key);
+  if(i===-1) return;
+  const j = i + dir;
+  if(j<0 || j>=keys.length) return;
+  [keys[i], keys[j]] = [keys[j], keys[i]];
+  cfg.stationOrder = keys;
+  renderStationsSettings();
 }
 async function detectUSBPrinter(key){
   showToast('🔍 Procurando...', 'Buscando impressoras USB conectadas neste servidor.');
@@ -7178,13 +7279,20 @@ function renderStationsSettings(){
   const el=document.getElementById('stations-list');
   if(!el)return;
   const keys = getStationKeys();
+  const movableKeys = keys.filter(k=>k!=='caixa');
   el.innerHTML=keys.map(key=>{
     const s=cfg.stations[key]||{label:key,icon:'📠',method:'navegador',ip:'',port:9100,device:'',prepTime:15,active:true};
     const isActive = s.active !== false;
+    const mi = movableKeys.indexOf(key); // -1 pra "caixa" (não reordenável)
+    const moveButtons = mi===-1 ? '' : `
+        <div style="display:flex;flex-direction:column;gap:1px;flex:0 0 auto;">
+          <button type="button" class="btn secondary sm" style="padding:2px 7px;line-height:1;" title="Subir prioridade" ${mi===0?'disabled':''} onclick="moveStation('${key}',-1)">▲</button>
+          <button type="button" class="btn secondary sm" style="padding:2px 7px;line-height:1;" title="Descer prioridade" ${mi===movableKeys.length-1?'disabled':''} onclick="moveStation('${key}',1)">▼</button>
+        </div>`;
     return `
     <div class="vgroup" data-station="${key}" style="${isActive?'':'opacity:.55;'}">
       <div class="vgroup-head" style="flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;flex:0 0 auto;cursor:pointer;" title="Desativar pausa essa via sem excluir nem desmarcar de nenhum item — útil se a impressora quebrar ou ficar fora do ar por um tempo.">
+        ${moveButtons}        <label style="display:flex;align-items:center;gap:5px;font-size:11px;flex:0 0 auto;cursor:pointer;" title="Desativar pausa essa via sem excluir nem desmarcar de nenhum item — útil se a impressora quebrar ou ficar fora do ar por um tempo.">
           <input type="checkbox" ${isActive?'checked':''} onchange="updateStationField('${key}','active',this.checked);renderStationsSettings();"/> Ativa
         </label>
         <input type="text" value="${(s.icon||'📠').replace(/"/g,'&quot;')}" maxlength="2" placeholder="📠"
@@ -7657,9 +7765,23 @@ async function restoreBackup(){
 
 // ═══════════════════════════════════════════
 // MODAL
+// v73.1: correção de bug — modais abriam sem fechar o que já estava aberto, então dava pra
+// empilhar dois (ou mais) uns sobre os outros (mesmo z-index, sem noção de "só um por vez").
+// openModal() agora é o único jeito de abrir um modal: fecha qualquer outro aberto primeiro.
 // ═══════════════════════════════════════════
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){const el=document.getElementById(id); if(el) el.classList.remove('open');}
+function closeAllModals(){ document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open')); }
+function openModal(id){
+  closeAllModals();
+  const el = document.getElementById(id);
+  if(!el){ console.warn('openModal: modal não encontrado ->', id); return; }
+  el.classList.add('open');
+}
 document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
+// ESC fecha o modal que estiver aberto no momento (só existe um por vez, ver openModal acima)
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ const open=document.querySelector('.modal-overlay.open'); if(open) open.classList.remove('open'); }
+});
 
 // ═══════════════════════════════════════════
 // INIT
