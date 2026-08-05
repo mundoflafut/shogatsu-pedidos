@@ -182,6 +182,9 @@ const DEFAULT_CFG = {
     // etc.) sem precisar excluir a via nem desmarcar ela de todos os itens. Enquanto active for
     // false, POST /api/print pula essa via de propósito (nem tenta imprimir, sem erro nenhum).
   },
+  // v73.1: ordem/prioridade das vias de impressão escolhida pelo admin (▲/▼ em Configurações →
+  // 📠 Impressoras por Estação). "caixa" não entra aqui — sempre é a primeira da lista.
+  stationOrder: [],
   // v49: estação padrão usada quando um item do cardápio não tem NENHUMA estação marcada —
   // configurável em Configurações → 📠 Impressoras por Estação.
   defaultStation: 'cozinha',
@@ -596,7 +599,9 @@ function readConfig() {
     // v73
     placeholderPhoto: { ...DEFAULT_CFG.placeholderPhoto, ...(data.cfg.placeholderPhoto || {}) },
     globalBadge: { ...DEFAULT_CFG.globalBadge, ...(data.cfg.globalBadge || {}) },
-    courierPay: { ...DEFAULT_CFG.courierPay, ...(data.cfg.courierPay || {}), zones: Array.isArray(data.cfg.courierPay && data.cfg.courierPay.zones) ? data.cfg.courierPay.zones : DEFAULT_CFG.courierPay.zones }
+    courierPay: { ...DEFAULT_CFG.courierPay, ...(data.cfg.courierPay || {}), zones: Array.isArray(data.cfg.courierPay && data.cfg.courierPay.zones) ? data.cfg.courierPay.zones : DEFAULT_CFG.courierPay.zones },
+    // v73.1: prioridade das impressoras/vias
+    stationOrder: Array.isArray(data.cfg.stationOrder) ? data.cfg.stationOrder : DEFAULT_CFG.stationOrder
   };
   // Se a auto-programação de horário estiver ativada, o status aberto/fechado
   // passa a ser calculado sozinho a partir do horário configurado — o toggle
@@ -1412,7 +1417,9 @@ const server = http.createServer(async (req, res) => {
           courierPay: {
             ...current.cfg.courierPay, ...(body.cfg && body.cfg.courierPay || {}),
             zones: Array.isArray(body.cfg && body.cfg.courierPay && body.cfg.courierPay.zones) ? body.cfg.courierPay.zones : current.cfg.courierPay.zones
-          }
+          },
+          // v73.1: prioridade das impressoras/vias
+          stationOrder: Array.isArray(body.cfg && body.cfg.stationOrder) ? body.cfg.stationOrder : current.cfg.stationOrder
         },
         menu: normalizeMenu(menuBeforeNormalize, validStationKeys, (body.cfg && body.cfg.defaultStation) || current.cfg.defaultStation)
       };
@@ -2175,15 +2182,49 @@ const server = http.createServer(async (req, res) => {
     });
     const combinedByHood = Object.values(combinedByHoodMap).sort((a, b) => b.deliveries - a.deliveries);
 
+    // ── v73.1: lista pedido-a-pedido (Relatório Junto) — Pedido, Cliente, Bairro, Taxa, Data,
+    // Horário, Status, Motoboy — pedida explicitamente na evolução v73 ──
+    const rows = filtered
+      .map(o => {
+        const hood = o.hood || extractHoodFromAddress(o.address) || 'Não informado';
+        const value = valueForHood(hood);
+        const d = new Date(o.createdAt);
+        return {
+          orderLabel: o.ticketNumber ? ('#' + o.ticketNumber) : ('#' + String(o.id).slice(-6)),
+          customer: o.name || 'Cliente',
+          hood,
+          value,
+          date: d.toLocaleDateString('pt-BR'),
+          time: d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          status: o.status,
+          courier: o.courierName,
+          createdAt: o.createdAt
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     const totalDeliveries = filtered.length;
     const totalValue = byCourier.reduce((s, c) => s + c.total, 0);
+    // ── v73.1: estatísticas "Por valor" e "Por quantidade" pro Relatório Separado ──
+    const values = rows.map(r => r.value);
+    const stats = {
+      totalValue,
+      avgValue: totalDeliveries ? totalValue / totalDeliveries : 0,
+      maxValue: values.length ? Math.max(...values) : 0,
+      minValue: values.length ? Math.min(...values) : 0,
+      totalDeliveries,
+      deliveriesByCourier: byCourier.map(c => ({ courier: c.courier, deliveries: c.deliveries, total: c.total })),
+      deliveriesByHood: combinedByHood.map(h => ({ hood: h.hood, deliveries: h.deliveries, total: h.total }))
+    };
 
     return sendJSON(res, 200, {
       payMode: pay.mode,
       totalDeliveries,
       totalValue,
       byCourier,
-      combinedByHood
+      combinedByHood,
+      rows,
+      stats
     });
   }
 
