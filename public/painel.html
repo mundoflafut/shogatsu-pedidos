@@ -639,7 +639,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <button class="nav-item" data-page="avaliacoes" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
     <div class="nav-section" data-min-role="admin">Sistema</div>
     <button class="nav-item" data-page="configuracoes" data-min-role="admin" onclick="goPage('configuracoes')"><span class="ni">⚙️</span> Configurações</button>
-    <button class="nav-item" data-min-role="admin" onclick="goToPrinterSettings()"><span class="ni">🖨</span> Impressoras</button>
+    <button class="nav-item" data-page="impressao" data-min-role="admin" onclick="goPage('impressao')"><span class="ni">🖨</span> Central de Impressão</button>
     <button class="nav-item" data-page="usuarios" data-min-role="master" onclick="goPage('usuarios')"><span class="ni">👥</span> Usuários</button>
     <button class="nav-item" onclick="toggleTheme()"><span class="ni" id="theme-icon">🌙</span> <span id="theme-label">Modo Escuro</span></button>
   </nav>
@@ -785,7 +785,15 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     </div>
 
     <!-- ── MENSAGENS (Chat Express) ── -->
+    <!-- ── v74: CENTRAL DE MENSAGENS — inbox ao vivo + toda configuração/campanha de
+    comunicação (WhatsApp, Push, SMS, Popup, Contatos, Cupons, Anúncios, Atendimento por IA)
+    juntos na mesma página, em abas — sem espalhar isso em Configurações. ── -->
     <div class="page" id="page-mensagens">
+      <div style="padding:0 0 10px;border-bottom:1px solid var(--border);display:flex;gap:6px;">
+        <button type="button" class="btn sm" id="msg-tabbtn-inbox" onclick="switchMensagensTab('inbox')" style="border-radius:6px 6px 0 0;">💬 Conversas</button>
+        <button type="button" class="btn sm secondary" id="msg-tabbtn-central" onclick="switchMensagensTab('central')" style="border-radius:6px 6px 0 0;">📣 Central de Mensagens</button>
+      </div>
+      <div id="msg-tab-inbox">
      <div class="settings-card" style="padding-bottom:0;">
       <div class="settings-card-title" style="display:flex;align-items:center;gap:8px;">
         <img src="/icons/chat-express-icon.png" id="mensagens-header-icon" alt="Chat Express" style="width:24px;height:24px;border-radius:6px;object-fit:contain;background:#0b0d11;" onerror="this.onerror=null;this.src='/icons/chat-express-icon.png';"/>
@@ -829,6 +837,219 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
       </div>
      </div>
+    </div>
+      <div id="msg-tab-central" style="display:none;">
+        <div style="padding:12px 0;">
+          <button class="btn primary" onclick="saveMensagensCentral()">💾 Salvar Central de Mensagens</button>
+        </div>
+        <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Se preenchido, o cardápio mostra um botão que abre a conversa direto no Instagram ou
+            Facebook do restaurante. Deixe em branco pra não mostrar o botão.
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">@ do Instagram</label><input id="cfg-social-instagram" placeholder="seu_instagram"/></div>
+            <div class="field"><label style="font-size:10px;">Usuário/ID da página do Facebook</label><input id="cfg-social-facebook" placeholder="suapagina"/></div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Central de Mensagens" no topo desta aba.</div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📲 Popup de Instalação do App</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Popup premium que aparece pro cliente instalar o app (tela cheia, fundo escuro), oferecendo
+            um benefício no primeiro pedido. Aparece 2s após a primeira visita e some por 15 dias se o
+            cliente não instalar — some pra sempre assim que ele instalar.
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label style="font-size:10px;">Exibir popup?</label>
+              <select id="cfg-installpromo-enabled">
+                <option value="1">Ativado</option>
+                <option value="0">Desativado</option>
+              </select>
+            </div>
+            <div class="field">
+              <label style="font-size:10px;">Tipo de benefício</label>
+              <select id="cfg-installpromo-type" onchange="toggleInstallPromoFields()">
+                <option value="cupom">Cupom de desconto</option>
+                <option value="bonus">Bônus em reais (só exibido no popup)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field" id="cfg-installpromo-cupom-wrap">
+              <label style="font-size:10px;">Código do cupom (precisa existir em 🎟️ Cupons pra funcionar no checkout)</label>
+              <input id="cfg-installpromo-cupomcode" placeholder="ex: PRIMEIRO10" style="text-transform:uppercase;"/>
+            </div>
+            <div class="field" id="cfg-installpromo-bonus-wrap" style="display:none;">
+              <label style="font-size:10px;">Valor do bônus (R$)</label>
+              <input id="cfg-installpromo-bonusvalue" placeholder="ex: 10,00"/>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label style="font-size:10px;">Código do benefício exibido/copiado (opcional — se vazio, usa o código do cupom acima)</label>
+              <input id="cfg-installpromo-benefitcode" placeholder="ex: PRIMEIRO10"/>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Central de Mensagens" no topo desta aba.</div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📥 Importar Contatos Externos</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Importa uma lista de contatos externa (CSV do Google Contatos, CSV do Outlook, vCard
+            .vcf do Android/iOS, ou bloco de notas .txt com um contato por linha) pra ampliar quem
+            recebe SMS promocional. Fica separado dos "Clientes cadastrados" (que vêm de pedidos
+            reais) — cada telefone é agrupado automaticamente por DDD.
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:12px;">
+            <label>CSV (Google/Outlook)<br/><input type="file" accept=".csv" onchange="importarContatosArquivo(event,'csv')"/></label>
+            <label>vCard (Android/iOS)<br/><input type="file" accept=".vcf" onchange="importarContatosArquivo(event,'vcard')"/></label>
+            <label>Bloco de notas (.txt)<br/><input type="file" accept=".txt" onchange="importarContatosArquivo(event,'txt')"/></label>
+          </div>
+          <div id="contatos-import-status" style="font-size:12px;margin-bottom:10px;"></div>
+          <div id="contatos-por-ddd" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;">Nenhum contato importado ainda.</div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📢 SMS para Clientes</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Manda promoções por SMS pros clientes cadastrados. Precisa de uma conta própria na
+            <a href="https://www.twilio.com" target="_blank" style="color:var(--gold);">Twilio</a> (serviço pago de
+            terceiros — cobra por SMS enviado). Sem isso configurado, o envio falha com um aviso claro.
+          </div>
+          <div style="font-size:11px;color:var(--gold);margin-bottom:12px;line-height:1.5;">
+            ⚠️ Se a conta Twilio ainda for do tipo <b>Trial (gratuita)</b>, TODA mensagem chega
+            pro cliente com um aviso automático em inglês grudado na frente (algo como
+            "Sent from your Twilio trial account - "). Isso não é o Shogatsu escrevendo em
+            inglês — é a própria Twilio quem obriga esse aviso em contas trial, e não tem como
+            tirar por configuração nenhuma. Some sozinho assim que a conta Twilio vira paga.
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Account SID</label><input id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx"/></div>
+            <div class="field"><label style="font-size:10px;">Auth Token</label><input id="sms-token" type="password" placeholder="••••••••••"/></div>
+            <div class="field"><label style="font-size:10px;">Número de origem</label><input id="sms-from" placeholder="+15005550006"/></div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+              <input type="checkbox" id="sms-whatsapp-notify"/> 💬 Notificar cliente automaticamente por WhatsApp a cada mudança de status
+            </label>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+              Usa a MESMA conta Twilio acima (Account SID / Auth Token), só precisa de um número
+              habilitado pra WhatsApp na sua conta Twilio (sandbox pra testar de graça, ou número
+              aprovado em produção). Sem isso preenchido, essa opção simplesmente não faz nada — o
+              painel continua funcionando normal, sem travar em lugar nenhum.
+            </div>
+            <div class="field"><label style="font-size:10px;">Número Twilio habilitado pra WhatsApp</label><input id="sms-whatsapp-from" placeholder="+14155238886"/></div>
+          </div>
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
+            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:8px;">Mensagem promocional</label>
+            <textarea id="sms-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;"></textarea>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
+              <label style="font-size:10px;color:var(--muted);">Clientes cadastrados</label>
+              <div>
+                <button type="button" class="btn secondary sm" onclick="selectAllPromoCustomers(true)">Selecionar todos</button>
+                <button type="button" class="btn secondary sm" onclick="selectAllPromoCustomers(false)">Limpar</button>
+              </div>
+            </div>
+            <div id="promo-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
+            <button class="btn success" style="margin-top:10px;" onclick="sendPromoSMS()">📤 Enviar Promoção por SMS</button>
+            <div id="sms-send-status" style="font-size:12px;margin-top:8px;"></div>
+          </div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🔔 Notificações Push</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Manda a notificação direto no navegador do cliente (celular ou computador), mesmo com o
+            site fechado — sem custo nenhum, sem precisar de app nem de conta em serviço pago. Só
+            alcança quem já ativou as notificações em "Minha Conta" no cardápio.
+            <span id="push-subs-count" style="display:block;margin-top:6px;color:var(--gold);"></span>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
+            <input type="checkbox" id="push-send-all"/> 📢 Enviar pra TODOS os inscritos (ignora a lista abaixo — inclui quem ativou sem ter conta)
+          </label>
+          <div class="field"><label style="font-size:10px;">Título da notificação</label><input id="push-title" placeholder="Ex: Shogatsu"/></div>
+          <textarea id="push-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;margin-top:8px;"></textarea>
+          <div class="field" style="margin-top:8px;">
+            <label style="font-size:10px;">Imagem grande (opcional — deixa a notificação parecida com apps de delivery tipo iFood; cole o link de uma foto do prato/promoção)</label>
+            <input id="push-image" placeholder="https://.../foto-promocao.jpg"/>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
+            <label style="font-size:10px;color:var(--muted);">Clientes cadastrados (que também ativaram push)</label>
+            <div>
+              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(true)">Selecionar todos</button>
+              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(false)">Limpar</button>
+            </div>
+          </div>
+          <div id="push-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
+          <button class="btn success" style="margin-top:10px;" onclick="sendPushCampaign()">📤 Enviar Notificação Push</button>
+          <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
+            tem tal prato etc.). Escolha um provedor <b>gratuito</b> (Groq, OpenRouter, Hugging
+            Face ou Google Gemini) ou a Anthropic (paga). Sem chave cadastrada ou desativado, o
+            botão de dúvidas simplesmente não aparece pro cliente, sem quebrar nada. O cliente
+            sempre pode tocar em "Falar com atendente" pra um humano assumir a conversa.
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
+            <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
+          </label>
+          <div class="field-row">
+            <div class="field">
+              <label style="font-size:10px;">Provedor</label>
+              <select id="ia-provider" onchange="atualizarDicaProvedorIa()">
+                <option value="groq">Groq — grátis</option>
+                <option value="openrouter">OpenRouter — grátis</option>
+                <option value="huggingface">Hugging Face — grátis</option>
+                <option value="gemini">Google Gemini — grátis</option>
+                <option value="anthropic">Anthropic (Claude) — pago</option>
+              </select>
+            </div>
+            <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
+          </div>
+          <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
+          <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
+
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
+            <div id="ia-faq-lista"></div>
+            <div class="field-row" style="margin-top:8px;">
+              <div class="field"><label style="font-size:10px;">Pergunta</label><input id="ia-faq-pergunta" placeholder="Ex: Vocês têm opção vegetariana?"/></div>
+              <div class="field"><label style="font-size:10px;">Resposta</label><input id="ia-faq-resposta" placeholder="Ex: Temos sim! Veja a categoria Vegetarianos."/></div>
+            </div>
+            <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
+          </div>
+
+          <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
+          <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🎟️ Cupons de Desconto</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            O cliente digita o código no checkout do site. Tipos: porcentagem, valor fixo em R$, ou frete grátis.
+          </div>
+          <div id="coupons-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addCoupon()">+ Novo Cupom</button>
+        </div>
+
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📣 Anúncios no Cardápio</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Aparecem como banner pra <b>qualquer pessoa</b> que abrir o cardápio, mesmo sem conta —
+            diferente do SMS, que só alcança quem já é cliente cadastrado. Bom pra avisar promoções,
+            novidades do cardápio, horário especial, etc.
+          </div>
+          <div id="announcements-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
+        </div>        </div>
+      </div>
     </div>
 
     <!-- ── CARDÁPIO ── -->
@@ -1169,17 +1390,95 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       </div>
     </div>
 
+    <!-- ── v74: CENTRAL DE IMPRESSÃO — antes ficava espalhado dentro de Configurações;
+    agora é uma página própria, direto no menu, sem precisar abrir acordeão nenhum. ── -->
+    <div class="page" id="page-impressao">
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-weight:700;font-size:15px;">🖨 Central de Impressão</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+              Todas as vias, fontes e alertas de impressão num lugar só. A vinculação de
+              "Estação de Impressão" por prato continua na edição do Cardápio.
+            </div>
+          </div>
+          <button class="btn primary" onclick="savePrinterCentral()">💾 Salvar Central de Impressão</button>
+        </div>
+      </div>
+      <div class="settings-grid">
+<div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">📠 Impressoras por Estação</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Renomeie cada via como preferir e escolha como ela imprime: pela janela do
+            navegador (mais simples, não precisa configurar nada), por impressora de
+            rede (IP) ou por impressora USB ligada nesse computador. Use ▲/▼ pra definir a
+            ordem/prioridade de exibição das vias (a "Caixa" fica sempre em primeiro).
+          </div>
+          <div id="stations-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+        </div>
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🔤 Fonte de Impressão</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Vale pra vias que imprimem pelo navegador (a fonte é aplicada de verdade).
+            Em impressoras térmicas de rede/USB o hardware só suporta letra maior ou
+            normal — tamanho 18 ou mais já sai em modo grande automaticamente.
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Modelo da fonte</label>
+              <select id="print-font" onchange="updatePrintFontPreview()">
+                <option value="monospace">Monoespaçada (estilo recibo clássico)</option>
+                <option value="sans-serif">Sem serifa (mais moderna)</option>
+                <option value="serif">Serifada</option>
+                <option value='"Courier New", monospace'>Datilografada (Courier New)</option>
+                <option value='Georgia, "Times New Roman", serif'>Elegante (Georgia)</option>
+                <option value='"Arial Narrow", Arial, sans-serif'>Condensada (economiza papel)</option>
+                <option value='Verdana, sans-serif'>Clean (Verdana)</option>
+                <option value='"Trebuchet MS", sans-serif'>Arredondada (Trebuchet)</option>
+              </select>
+            </div>
+            <div class="field"><label style="font-size:10px;">Tamanho (px)</label><input type="number" id="print-size" min="10" max="28" oninput="updatePrintFontPreview()"/></div>
+            <div class="field" style="flex:0 0 100%;"><label style="font-size:10px;">Pré-visualização</label>
+              <div id="print-font-preview" style="background:#fff;color:#000;padding:10px 14px;border-radius:6px;font-size:14px;">SHOGATSU — Pedido #AB12CD · R$ 45,00</div>
+            </div>
+            <div class="field"><label style="font-size:10px;">Cor do texto</label><input type="color" id="print-color" style="height:34px;padding:2px;" oninput="updatePrintFontPreview()"/></div>
+          </div>
+        </div>
+<div class="settings-card">
+          <div class="settings-card-title">🔔 Impressão Automática</div>
+          <div class="field"><label>Imprimir ao Receber Pedido</label>
+            <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
+          </div>
+        </div>
+<div class="settings-card">
+          <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Som que toca no app do cliente sempre que ele recebe qualquer aviso (pedido confirmado,
+            status mudou, etc). Escolha um estilo e clique em Testar pra ouvir.
+          </div>
+          <div class="field"><label style="font-size:10px;">Estilo do som</label>
+            <select id="cfg-customer-alert-sound">
+              <option value="classico">🔔 Clássico (0,4s)</option>
+              <option value="suave">💧 Suave (0,3s)</option>
+              <option value="dupla">🎵 Nota Dupla (0,4s)</option>
+              <option value="sino">⏰ Sino (1,5s)</option>
+              <option value="oriental">🎋 Oriental — Sino Zen (4s)</option>
+            </select>
+          </div>
+          <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
+        </div>      </div>
+    </div>
+
     <!-- ── CONFIGURAÇÕES ── -->
     <div class="page" id="page-configuracoes">
 
       <div class="settings-topbar">
         <div class="settings-search-wrap">
           <span class="settings-search-icon">🔎</span>
-          <input type="text" id="settings-search" placeholder="Pesquisar configuração... (ex: PIX, fonte, horário, impressora)" oninput="filterSettingsSearch(this.value)" autocomplete="off"/>
+          <input type="text" id="settings-search" placeholder="Pesquisar configuração... (ex: PIX, fonte, horário, cupom)" oninput="filterSettingsSearch(this.value)" autocomplete="off"/>
           <button type="button" id="settings-search-clear" class="settings-search-clear" onclick="clearSettingsSearch()" style="display:none;" title="Limpar pesquisa">✕</button>
         </div>
-        <button type="button" class="btn secondary sm" onclick="jumpToSettingsCard('impressoras','settings-printer-card')" title="Ir direto pra configuração de impressoras">
-          🖨 Impressoras
+        <button type="button" class="btn secondary sm" onclick="goPage('impressao')" title="Ir pra Central de Impressão">
+          🖨 Central de Impressão
         </button>
       </div>
       <div id="settings-search-empty" style="display:none;padding:30px 10px;text-align:center;color:var(--muted);font-size:13px;">
@@ -1497,14 +1796,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="cp-mode-body"></div>
         </div>
 <div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🎟️ Cupons de Desconto</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            O cliente digita o código no checkout do site. Tipos: porcentagem, valor fixo em R$, ou frete grátis.
-          </div>
-          <div id="coupons-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addCoupon()">+ Novo Cupom</button>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">⭐ Fidelidade (Pontos)</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Cliente ganha pontos a cada pedido <b>entregue</b> e troca por desconto no próximo pedido.
@@ -1520,16 +1811,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label>Valor do bloco (R$ de desconto)</label><input id="cfg-loyalty-redeemvalue" type="number" step="0.01" placeholder="10"/></div>
           </div>
         </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📣 Anúncios no Cardápio</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Aparecem como banner pra <b>qualquer pessoa</b> que abrir o cardápio, mesmo sem conta —
-            diferente do SMS, que só alcança quem já é cliente cadastrado. Bom pra avisar promoções,
-            novidades do cardápio, horário especial, etc.
-          </div>
-          <div id="announcements-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-          <button type="button" class="btn secondary sm" style="margin-top:10px;" onclick="addAnnouncement()">+ Novo Anúncio</button>
-        </div>
+
           </div>
         </div>
       </div>
@@ -1563,283 +1845,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             </div>
             <div class="field"><label style="font-size:10px;">Access Token (produção) do Mercado Pago</label><input id="cfg-pixgw-token" type="password" placeholder="APP_USR-••••••••••"/></div>
           </div>
-        </div>
-          </div>
-        </div>
-      </div>
-      <div class="settings-accordion" data-accordion-key="impressoras">
-        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('impressoras')">
-          <span class="acc-title">🖨 Impressoras</span>
-          <span class="acc-chevron" id="acc-chevron-impressoras">▾</span>
-        </div>
-        <div class="settings-accordion-body" id="acc-body-impressoras">
-          <div class="settings-grid">
-<div class="settings-card" id="settings-printer-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📠 Impressoras por Estação</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Renomeie cada via como preferir e escolha como ela imprime: pela janela do
-            navegador (mais simples, não precisa configurar nada), por impressora de
-            rede (IP) ou por impressora USB ligada nesse computador. Use ▲/▼ pra definir a
-            ordem/prioridade de exibição das vias (a "Caixa" fica sempre em primeiro).
-          </div>
-          <div id="stations-list" style="display:flex;flex-direction:column;gap:12px;"></div>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🔤 Fonte de Impressão</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Vale pra vias que imprimem pelo navegador (a fonte é aplicada de verdade).
-            Em impressoras térmicas de rede/USB o hardware só suporta letra maior ou
-            normal — tamanho 18 ou mais já sai em modo grande automaticamente.
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo da fonte</label>
-              <select id="print-font" onchange="updatePrintFontPreview()">
-                <option value="monospace">Monoespaçada (estilo recibo clássico)</option>
-                <option value="sans-serif">Sem serifa (mais moderna)</option>
-                <option value="serif">Serifada</option>
-                <option value='"Courier New", monospace'>Datilografada (Courier New)</option>
-                <option value='Georgia, "Times New Roman", serif'>Elegante (Georgia)</option>
-                <option value='"Arial Narrow", Arial, sans-serif'>Condensada (economiza papel)</option>
-                <option value='Verdana, sans-serif'>Clean (Verdana)</option>
-                <option value='"Trebuchet MS", sans-serif'>Arredondada (Trebuchet)</option>
-              </select>
-            </div>
-            <div class="field"><label style="font-size:10px;">Tamanho (px)</label><input type="number" id="print-size" min="10" max="28" oninput="updatePrintFontPreview()"/></div>
-            <div class="field" style="flex:0 0 100%;"><label style="font-size:10px;">Pré-visualização</label>
-              <div id="print-font-preview" style="background:#fff;color:#000;padding:10px 14px;border-radius:6px;font-size:14px;">SHOGATSU — Pedido #AB12CD · R$ 45,00</div>
-            </div>
-            <div class="field"><label style="font-size:10px;">Cor do texto</label><input type="color" id="print-color" style="height:34px;padding:2px;" oninput="updatePrintFontPreview()"/></div>
-          </div>
-        </div>
-<div class="settings-card">
-          <div class="settings-card-title">🔔 Impressão Automática</div>
-          <div class="field"><label>Imprimir ao Receber Pedido</label>
-            <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
-          </div>
-        </div>
-<div class="settings-card">
-          <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            Som que toca no app do cliente sempre que ele recebe qualquer aviso (pedido confirmado,
-            status mudou, etc). Escolha um estilo e clique em Testar pra ouvir.
-          </div>
-          <div class="field"><label style="font-size:10px;">Estilo do som</label>
-            <select id="cfg-customer-alert-sound">
-              <option value="classico">🔔 Clássico (0,4s)</option>
-              <option value="suave">💧 Suave (0,3s)</option>
-              <option value="dupla">🎵 Nota Dupla (0,4s)</option>
-              <option value="sino">⏰ Sino (1,5s)</option>
-              <option value="oriental">🎋 Oriental — Sino Zen (4s)</option>
-            </select>
-          </div>
-          <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
-        </div>
-          </div>
-        </div>
-      </div>
-      <div class="settings-accordion" data-accordion-key="whatsapp">
-        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('whatsapp')">
-          <span class="acc-title">📱 WhatsApp & Atendimento</span>
-          <span class="acc-chevron" id="acc-chevron-whatsapp">▾</span>
-        </div>
-        <div class="settings-accordion-body" id="acc-body-whatsapp">
-          <div class="settings-grid">
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📱 Redes Sociais — Pedido Direto</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Se preenchido, o cardápio mostra um botão que abre a conversa direto no Instagram ou
-            Facebook do restaurante. Deixe em branco pra não mostrar o botão.
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">@ do Instagram</label><input id="cfg-social-instagram" placeholder="seu_instagram"/></div>
-            <div class="field"><label style="font-size:10px;">Usuário/ID da página do Facebook</label><input id="cfg-social-facebook" placeholder="suapagina"/></div>
-          </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📲 Popup de Instalação do App</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Popup premium que aparece pro cliente instalar o app (tela cheia, fundo escuro), oferecendo
-            um benefício no primeiro pedido. Aparece 2s após a primeira visita e some por 15 dias se o
-            cliente não instalar — some pra sempre assim que ele instalar.
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label style="font-size:10px;">Exibir popup?</label>
-              <select id="cfg-installpromo-enabled">
-                <option value="1">Ativado</option>
-                <option value="0">Desativado</option>
-              </select>
-            </div>
-            <div class="field">
-              <label style="font-size:10px;">Tipo de benefício</label>
-              <select id="cfg-installpromo-type" onchange="toggleInstallPromoFields()">
-                <option value="cupom">Cupom de desconto</option>
-                <option value="bonus">Bônus em reais (só exibido no popup)</option>
-              </select>
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field" id="cfg-installpromo-cupom-wrap">
-              <label style="font-size:10px;">Código do cupom (precisa existir em 🎟️ Cupons pra funcionar no checkout)</label>
-              <input id="cfg-installpromo-cupomcode" placeholder="ex: PRIMEIRO10" style="text-transform:uppercase;"/>
-            </div>
-            <div class="field" id="cfg-installpromo-bonus-wrap" style="display:none;">
-              <label style="font-size:10px;">Valor do bônus (R$)</label>
-              <input id="cfg-installpromo-bonusvalue" placeholder="ex: 10,00"/>
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label style="font-size:10px;">Código do benefício exibido/copiado (opcional — se vazio, usa o código do cupom acima)</label>
-              <input id="cfg-installpromo-benefitcode" placeholder="ex: PRIMEIRO10"/>
-            </div>
-          </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Salva junto com o botão "💾 Salvar Tudo" no fim da página.</div>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📥 Importar Contatos Externos</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Importa uma lista de contatos externa (CSV do Google Contatos, CSV do Outlook, vCard
-            .vcf do Android/iOS, ou bloco de notas .txt com um contato por linha) pra ampliar quem
-            recebe SMS promocional. Fica separado dos "Clientes cadastrados" (que vêm de pedidos
-            reais) — cada telefone é agrupado automaticamente por DDD.
-          </div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:12px;">
-            <label>CSV (Google/Outlook)<br/><input type="file" accept=".csv" onchange="importarContatosArquivo(event,'csv')"/></label>
-            <label>vCard (Android/iOS)<br/><input type="file" accept=".vcf" onchange="importarContatosArquivo(event,'vcard')"/></label>
-            <label>Bloco de notas (.txt)<br/><input type="file" accept=".txt" onchange="importarContatosArquivo(event,'txt')"/></label>
-          </div>
-          <div id="contatos-import-status" style="font-size:12px;margin-bottom:10px;"></div>
-          <div id="contatos-por-ddd" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;">Nenhum contato importado ainda.</div>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">📢 SMS para Clientes</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Manda promoções por SMS pros clientes cadastrados. Precisa de uma conta própria na
-            <a href="https://www.twilio.com" target="_blank" style="color:var(--gold);">Twilio</a> (serviço pago de
-            terceiros — cobra por SMS enviado). Sem isso configurado, o envio falha com um aviso claro.
-          </div>
-          <div style="font-size:11px;color:var(--gold);margin-bottom:12px;line-height:1.5;">
-            ⚠️ Se a conta Twilio ainda for do tipo <b>Trial (gratuita)</b>, TODA mensagem chega
-            pro cliente com um aviso automático em inglês grudado na frente (algo como
-            "Sent from your Twilio trial account - "). Isso não é o Shogatsu escrevendo em
-            inglês — é a própria Twilio quem obriga esse aviso em contas trial, e não tem como
-            tirar por configuração nenhuma. Some sozinho assim que a conta Twilio vira paga.
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Account SID</label><input id="sms-sid" placeholder="ACxxxxxxxxxxxxxxxx"/></div>
-            <div class="field"><label style="font-size:10px;">Auth Token</label><input id="sms-token" type="password" placeholder="••••••••••"/></div>
-            <div class="field"><label style="font-size:10px;">Número de origem</label><input id="sms-from" placeholder="+15005550006"/></div>
-          </div>
-          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
-              <input type="checkbox" id="sms-whatsapp-notify"/> 💬 Notificar cliente automaticamente por WhatsApp a cada mudança de status
-            </label>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-              Usa a MESMA conta Twilio acima (Account SID / Auth Token), só precisa de um número
-              habilitado pra WhatsApp na sua conta Twilio (sandbox pra testar de graça, ou número
-              aprovado em produção). Sem isso preenchido, essa opção simplesmente não faz nada — o
-              painel continua funcionando normal, sem travar em lugar nenhum.
-            </div>
-            <div class="field"><label style="font-size:10px;">Número Twilio habilitado pra WhatsApp</label><input id="sms-whatsapp-from" placeholder="+14155238886"/></div>
-          </div>
-          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px;">
-            <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:8px;">Mensagem promocional</label>
-            <textarea id="sms-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;"></textarea>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
-              <label style="font-size:10px;color:var(--muted);">Clientes cadastrados</label>
-              <div>
-                <button type="button" class="btn secondary sm" onclick="selectAllPromoCustomers(true)">Selecionar todos</button>
-                <button type="button" class="btn secondary sm" onclick="selectAllPromoCustomers(false)">Limpar</button>
-              </div>
-            </div>
-            <div id="promo-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
-            <button class="btn success" style="margin-top:10px;" onclick="sendPromoSMS()">📤 Enviar Promoção por SMS</button>
-            <div id="sms-send-status" style="font-size:12px;margin-top:8px;"></div>
-          </div>
-        </div>
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🔔 Notificações Push</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Manda a notificação direto no navegador do cliente (celular ou computador), mesmo com o
-            site fechado — sem custo nenhum, sem precisar de app nem de conta em serviço pago. Só
-            alcança quem já ativou as notificações em "Minha Conta" no cardápio.
-            <span id="push-subs-count" style="display:block;margin-top:6px;color:var(--gold);"></span>
-          </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
-            <input type="checkbox" id="push-send-all"/> 📢 Enviar pra TODOS os inscritos (ignora a lista abaixo — inclui quem ativou sem ter conta)
-          </label>
-          <div class="field"><label style="font-size:10px;">Título da notificação</label><input id="push-title" placeholder="Ex: Shogatsu"/></div>
-          <textarea id="push-message" placeholder="Ex: 🍣 Hoje tem 15% OFF com o cupom PROMO15! Peça já no site." style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--white);font-size:13px;margin-top:8px;"></textarea>
-          <div class="field" style="margin-top:8px;">
-            <label style="font-size:10px;">Imagem grande (opcional — deixa a notificação parecida com apps de delivery tipo iFood; cole o link de uma foto do prato/promoção)</label>
-            <input id="push-image" placeholder="https://.../foto-promocao.jpg"/>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;">
-            <label style="font-size:10px;color:var(--muted);">Clientes cadastrados (que também ativaram push)</label>
-            <div>
-              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(true)">Selecionar todos</button>
-              <button type="button" class="btn secondary sm" onclick="selectAllPushCustomers(false)">Limpar</button>
-            </div>
-          </div>
-          <div id="push-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
-          <button class="btn success" style="margin-top:10px;" onclick="sendPushCampaign()">📤 Enviar Notificação Push</button>
-          <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
-        </div>
-          </div>
-        </div>
-      </div>
-      <div class="settings-accordion" data-accordion-key="ia">
-        <div class="settings-accordion-header" onclick="toggleSettingsAccordion('ia')">
-          <span class="acc-title">🤖 Inteligência Artificial</span>
-          <span class="acc-chevron" id="acc-chevron-ia">▾</span>
-        </div>
-        <div class="settings-accordion-body" id="acc-body-ia">
-          <div class="settings-grid">
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Responde dúvidas simples do cliente automaticamente no cardápio (horário, endereço, se
-            tem tal prato etc.). Escolha um provedor <b>gratuito</b> (Groq, OpenRouter, Hugging
-            Face ou Google Gemini) ou a Anthropic (paga). Sem chave cadastrada ou desativado, o
-            botão de dúvidas simplesmente não aparece pro cliente, sem quebrar nada. O cliente
-            sempre pode tocar em "Falar com atendente" pra um humano assumir a conversa.
-          </div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
-            <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
-          </label>
-          <div class="field-row">
-            <div class="field">
-              <label style="font-size:10px;">Provedor</label>
-              <select id="ia-provider" onchange="atualizarDicaProvedorIa()">
-                <option value="groq">Groq — grátis</option>
-                <option value="openrouter">OpenRouter — grátis</option>
-                <option value="huggingface">Hugging Face — grátis</option>
-                <option value="gemini">Google Gemini — grátis</option>
-                <option value="anthropic">Anthropic (Claude) — pago</option>
-              </select>
-            </div>
-            <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
-          </div>
-          <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
-          <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
-
-          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
-            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
-            <div id="ia-faq-lista"></div>
-            <div class="field-row" style="margin-top:8px;">
-              <div class="field"><label style="font-size:10px;">Pergunta</label><input id="ia-faq-pergunta" placeholder="Ex: Vocês têm opção vegetariana?"/></div>
-              <div class="field"><label style="font-size:10px;">Resposta</label><input id="ia-faq-resposta" placeholder="Ex: Temos sim! Veja a categoria Vegetarianos."/></div>
-            </div>
-            <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
-          </div>
-
-          <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
-          <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
           </div>
         </div>
@@ -3026,8 +3031,8 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',mensagens:'Mensagens',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações'};
-const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin' };
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',mensagens:'Mensagens',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações',impressao:'Central de Impressão'};
+const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin', impressao:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
     showToast('🔒 Acesso restrito','Seu usuário não tem permissão pra essa área.');
@@ -3045,6 +3050,7 @@ function goPage(id, silent){
   if(id==='qrlinks'){renderQrLinksPage();renderRpEditor();}
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
+  if(id==='impressao')loadPrinterCentral();
   if(id==='usuarios')loadUsersPage();
   if(id==='motoboys')loadCouriersPage();
   if(id==='avaliacoes')loadReviewsPage();
@@ -4488,20 +4494,9 @@ function updateNewBadge(){
   document.getElementById('pulse-ring').parentElement.classList.toggle('has-new',n>0);
 }
 
-// v73.1: BUG CORRIGIDO — o atalho "🖨 Impressoras" da barra lateral levava pra Configurações
-// mas nunca abria o acordeão "🖨 Impressoras" (que começa fechado, max-height:0), então na
-// prática parecia que "não abria nada". Agora abre o acordeão certo antes de rolar até ele.
-function goToPrinterSettings(){
-  goPage('configuracoes');
-  setTimeout(()=>{
-    const acc = document.querySelector('.settings-accordion[data-accordion-key="impressoras"]');
-    if (acc && !acc.classList.contains('open')) toggleSettingsAccordion('impressoras');
-    setTimeout(()=>{
-      const el=document.getElementById('stations-list');
-      if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
-    }, 120);
-  }, 150);
-}
+// v74: as configurações de impressora saíram de Configurações e agora moram na própria
+// Central de Impressão (página dedicada) — este atalho vira um alias simples.
+function goToPrinterSettings(){ goPage('impressao'); }
 function openNewOrder(){
   manualOrderItems=[];
   document.getElementById('o-item-search').value='';
@@ -6537,34 +6532,11 @@ function loadSettings(){
   document.getElementById('sched-close').value = cfg.schedule?.closeTime||'23:00';
   reviewPhrasesState = JSON.parse(JSON.stringify(cfg.reviewPhrases||[]));
   renderReviewPhrasesList();
-  const printEl=document.getElementById('cfg-print');
-  if(printEl) printEl.value=String(Number(cfg.print)||0);
   const soundEl=document.getElementById('cfg-sound');
   if(soundEl) soundEl.value=String(cfg.sound===undefined?1:Number(cfg.sound));
-  const custAlertEl=document.getElementById('cfg-customer-alert-sound');
-  if(custAlertEl) custAlertEl.value=cfg.customerAlertSound||'classico';
-  renderStationsSettings();
   loadLabels();
   loadFeeSettings();
   loadCourierPaySettings();
-  document.getElementById('print-font').value = cfg.printFont||'monospace';
-  document.getElementById('print-size').value = cfg.printSize||14;
-  document.getElementById('print-color').value = cfg.printColor||'#000000';
-  updatePrintFontPreview();
-  loadCoupons();
-  const socialInstaEl=document.getElementById('cfg-social-instagram'); if(socialInstaEl) socialInstaEl.value=cfg.social?.instagram||'';
-  const socialFbEl=document.getElementById('cfg-social-facebook'); if(socialFbEl) socialFbEl.value=cfg.social?.facebook||'';
-  const ip = cfg.installPromo || {};
-  const ipEnabledEl=document.getElementById('cfg-installpromo-enabled'); if(ipEnabledEl) ipEnabledEl.value = ip.enabled===false ? '0' : '1';
-  const ipTypeEl=document.getElementById('cfg-installpromo-type'); if(ipTypeEl) ipTypeEl.value = ip.type||'cupom';
-  const ipCupomEl=document.getElementById('cfg-installpromo-cupomcode'); if(ipCupomEl) ipCupomEl.value = ip.cupomCode||'';
-  const ipBonusEl=document.getElementById('cfg-installpromo-bonusvalue'); if(ipBonusEl) ipBonusEl.value = ip.bonusValue||'';
-  const ipBenefitEl=document.getElementById('cfg-installpromo-benefitcode'); if(ipBenefitEl) ipBenefitEl.value = ip.benefitCode||'';
-  toggleInstallPromoFields();
-  loadSmsSettings();
-  loadAnnouncements();
-  loadIaSettings();
-  loadContatosImportados();
 }
 // ═══════════════════════════════════════════
 // Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
@@ -6599,6 +6571,62 @@ function adicionarFaqIa(){
   renderFaqIaLista();
 }
 function removerFaqIa(i){ iaFaqAtual.splice(i,1); renderFaqIaLista(); }
+// ═══════════════════════════════════════════
+// v74: CENTRAL DE MENSAGENS — aba "Conversas" (inbox ao vivo, já existia) + aba "Central"
+// (tudo que é configuração/campanha de comunicação: WhatsApp, Push, SMS, Popup de instalação,
+// Contatos, Cupons, Anúncios, Atendimento por IA — antes espalhado em 3 acordeões diferentes
+// dentro de Configurações). Load/save da aba Central são independentes de "Salvar Tudo".
+// ═══════════════════════════════════════════
+let mensagensCentralLoaded = false;
+function switchMensagensTab(tab){
+  document.getElementById('msg-tabbtn-inbox').className = 'btn sm' + (tab==='inbox'?'':' secondary');
+  document.getElementById('msg-tabbtn-central').className = 'btn sm' + (tab==='central'?'':' secondary');
+  document.getElementById('msg-tab-inbox').style.display = tab==='inbox' ? '' : 'none';
+  document.getElementById('msg-tab-central').style.display = tab==='central' ? '' : 'none';
+  if(tab==='central' && !mensagensCentralLoaded){ mensagensCentralLoaded = true; loadMensagensCentral(); }
+}
+function loadMensagensCentral(){
+  loadCoupons();
+  const socialInstaEl=document.getElementById('cfg-social-instagram'); if(socialInstaEl) socialInstaEl.value=cfg.social?.instagram||'';
+  const socialFbEl=document.getElementById('cfg-social-facebook'); if(socialFbEl) socialFbEl.value=cfg.social?.facebook||'';
+  const ip = cfg.installPromo || {};
+  const ipEnabledEl=document.getElementById('cfg-installpromo-enabled'); if(ipEnabledEl) ipEnabledEl.value = ip.enabled===false ? '0' : '1';
+  const ipTypeEl=document.getElementById('cfg-installpromo-type'); if(ipTypeEl) ipTypeEl.value = ip.type||'cupom';
+  const ipCupomEl=document.getElementById('cfg-installpromo-cupomcode'); if(ipCupomEl) ipCupomEl.value = ip.cupomCode||'';
+  const ipBonusEl=document.getElementById('cfg-installpromo-bonusvalue'); if(ipBonusEl) ipBonusEl.value = ip.bonusValue||'';
+  const ipBenefitEl=document.getElementById('cfg-installpromo-benefitcode'); if(ipBenefitEl) ipBenefitEl.value = ip.benefitCode||'';
+  toggleInstallPromoFields();
+  loadSmsSettings();
+  loadAnnouncements();
+  loadIaSettings();
+  loadContatosImportados();
+}
+async function saveMensagensCentral(){
+  cfg.coupons = couponsState.filter(c=>String(c.code||'').trim());
+  cfg.announcements = announcementsState.filter(a=>String(a.title||'').trim() && String(a.message||'').trim());
+  cfg.sms = {
+    accountSid: document.getElementById('sms-sid').value.trim(),
+    authToken: document.getElementById('sms-token').value.trim(),
+    fromNumber: document.getElementById('sms-from').value.trim(),
+    fromWhatsApp: document.getElementById('sms-whatsapp-from')?.value.trim() || '',
+    notifyWhatsApp: document.getElementById('sms-whatsapp-notify')?.checked || false
+  };
+  cfg.social = {
+    instagram: document.getElementById('cfg-social-instagram')?.value.trim() || '',
+    facebook: document.getElementById('cfg-social-facebook')?.value.trim() || ''
+  };
+  cfg.installPromo = {
+    enabled: document.getElementById('cfg-installpromo-enabled')?.value !== '0',
+    type: document.getElementById('cfg-installpromo-type')?.value || 'cupom',
+    cupomCode: (document.getElementById('cfg-installpromo-cupomcode')?.value || '').trim().toUpperCase(),
+    bonusValue: (document.getElementById('cfg-installpromo-bonusvalue')?.value || '').trim(),
+    benefitCode: (document.getElementById('cfg-installpromo-benefitcode')?.value || '').trim()
+  };
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  showToast('✅ Salvo!', 'Central de Mensagens atualizada (cupons, anúncios, SMS, redes sociais, popup de instalação).');
+}
+
 async function loadIaSettings(){
   const res = await apiGet('/api/ia/settings');
   const enabledEl=document.getElementById('ia-enabled'); if(enabledEl) enabledEl.checked = !!res?.enabled;
@@ -7275,6 +7303,35 @@ async function detectNetworkPrinter(key){
     alert(res?.note || res?.error || 'Nenhuma impressora encontrada na rede.');
   }
 }
+// ═══════════════════════════════════════════
+// v74: CENTRAL DE IMPRESSÃO — página própria (antes vivia dentro de Configurações).
+// Tem load/save independentes, com botão de salvar só dela — não depende mais de "Salvar Tudo".
+// ═══════════════════════════════════════════
+function loadPrinterCentral(){
+  renderStationsSettings();
+  const printEl=document.getElementById('cfg-print');
+  if(printEl) printEl.value=String(Number(cfg.print)||0);
+  const custAlertEl=document.getElementById('cfg-customer-alert-sound');
+  if(custAlertEl) custAlertEl.value=cfg.customerAlertSound||'classico';
+  const fontEl=document.getElementById('print-font'); if(fontEl) fontEl.value=cfg.printFont||'monospace';
+  const sizeEl=document.getElementById('print-size'); if(sizeEl) sizeEl.value=cfg.printSize||14;
+  const colorEl=document.getElementById('print-color'); if(colorEl) colorEl.value=cfg.printColor||'#000000';
+  updatePrintFontPreview();
+}
+async function savePrinterCentral(){
+  const printEl=document.getElementById('cfg-print');
+  if(printEl) cfg.print = parseInt(printEl.value)||0;
+  const custAlertEl=document.getElementById('cfg-customer-alert-sound');
+  if(custAlertEl) cfg.customerAlertSound = custAlertEl.value||'classico';
+  cfg.printFont = document.getElementById('print-font').value;
+  cfg.printSize = parseInt(document.getElementById('print-size').value)||14;
+  cfg.printColor = document.getElementById('print-color').value||'#000000';
+  // cfg.stations/cfg.stationOrder já ficam atualizados ao vivo (updateStationField/moveStation)
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  showToast('✅ Salvo!', 'Configurações de impressão atualizadas.');
+}
+
 function renderStationsSettings(){
   const el=document.getElementById('stations-list');
   if(!el)return;
@@ -7618,12 +7675,8 @@ async function saveAllSettings(){
     closeTime: document.getElementById('sched-close').value||'23:00'
   };
   cfg.reviewPhrases = reviewPhrasesState.map(p=>p.trim()).filter(Boolean);
-  const printEl=document.getElementById('cfg-print');
-  if(printEl) cfg.print = parseInt(printEl.value)||0;
   const soundEl=document.getElementById('cfg-sound');
   if(soundEl) cfg.sound = parseInt(soundEl.value)||0;
-  const custAlertEl2=document.getElementById('cfg-customer-alert-sound');
-  if(custAlertEl2) cfg.customerAlertSound = custAlertEl2.value||'classico';
 
   // Taxa de entrega
   const feeMode = document.getElementById('fee-mode').value;
@@ -7650,41 +7703,6 @@ async function saveAllSettings(){
   if(cfg.courierPay.mode === 'bairro'){
     cfg.courierPay.zones = courierPayZonesState.filter(z=>String(z.bairro||'').trim());
   }
-
-  // Cupons de desconto
-  cfg.coupons = couponsState.filter(c=>String(c.code||'').trim());
-
-  // Anúncios pro cardápio (visíveis pra qualquer visitante)
-  cfg.announcements = announcementsState.filter(a=>String(a.title||'').trim() && String(a.message||'').trim());
-
-  // SMS (Twilio)
-  cfg.sms = {
-    accountSid: document.getElementById('sms-sid').value.trim(),
-    authToken: document.getElementById('sms-token').value.trim(),
-    fromNumber: document.getElementById('sms-from').value.trim(),
-    fromWhatsApp: document.getElementById('sms-whatsapp-from')?.value.trim() || '',
-    notifyWhatsApp: document.getElementById('sms-whatsapp-notify')?.checked || false
-  };
-
-  // Redes sociais — botão de pedido direto no Instagram/Facebook do cardápio (v56)
-  cfg.social = {
-    instagram: document.getElementById('cfg-social-instagram')?.value.trim() || '',
-    facebook: document.getElementById('cfg-social-facebook')?.value.trim() || ''
-  };
-
-  // Popup premium de instalação do PWA (v71)
-  cfg.installPromo = {
-    enabled: document.getElementById('cfg-installpromo-enabled')?.value !== '0',
-    type: document.getElementById('cfg-installpromo-type')?.value || 'cupom',
-    cupomCode: (document.getElementById('cfg-installpromo-cupomcode')?.value || '').trim().toUpperCase(),
-    bonusValue: (document.getElementById('cfg-installpromo-bonusvalue')?.value || '').trim(),
-    benefitCode: (document.getElementById('cfg-installpromo-benefitcode')?.value || '').trim()
-  };
-
-  // Fonte de impressão (impressoras em si já ficam salvas em cfg.stations, atualizado ao digitar)
-  cfg.printFont = document.getElementById('print-font').value;
-  cfg.printSize = parseInt(document.getElementById('print-size').value)||14;
-  cfg.printColor = document.getElementById('print-color').value||'#000000';
 
   // Textos de status e botões
   cfg.labels = {
