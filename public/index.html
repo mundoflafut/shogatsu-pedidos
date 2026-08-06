@@ -2695,20 +2695,50 @@ function renderMenu() {
         const hasVariants = item.variants && item.variants.length > 0;
         const inCart = cart[key];
         const cartQty = hasVariants ? cartQtyForBase(key) : (inCart ? inCart.qty : 0);
+        const isFav = favorites.has(key);
+        const badgeHtml = !isAvail
+          ? `<div class="item-badge" style="background:var(--muted);color:#fff;">Indisponível</div>`
+          : itemBadgeHtml(item);
+        // v75: BUG CORRIGIDO — "Posição do badge" (Cardápio → Fotos Provisórias & Badges) só
+        // mudava a pré-visualização no painel, nunca o cardápio de verdade pro cliente (o badge
+        // ficava sempre "grudado" no mesmo lugar, por isso parecia "travado"). Agora a posição
+        // escolhida é aplicada aqui de verdade.
+        const badgePos = !isAvail ? 'abaixo-foto' : ((cfg.globalBadge && cfg.globalBadge.position) || 'abaixo-foto');
+        const badgeCornerStyle = badgePos==='sobre-foto' ? 'position:absolute;top:6px;left:6px;z-index:2;'
+          : badgePos==='canto-superior-esquerdo' ? 'position:absolute;top:6px;left:6px;z-index:2;'
+          : badgePos==='canto-superior-direito' ? 'position:absolute;top:6px;right:38px;z-index:2;'
+          : '';
+        const badgeInsideImg = badgeHtml && ['sobre-foto','canto-superior-esquerdo','canto-superior-direito'].includes(badgePos);
+        const badgeAboveImg = badgeHtml && badgePos==='acima-foto';
+        const badgeBelowImg = badgeHtml && badgePos==='abaixo-foto';
+        const badgeAboveName = badgeHtml && badgePos==='acima-nome';
+        const badgeBelowName = badgeHtml && badgePos==='abaixo-nome';
         return `
         <div class="item-card" id="card-${key}" style="${isAvail ? '' : 'opacity:.55;'}">
+          ${badgeAboveImg ? badgeHtml : ''}
           <div class="item-img" style="position:relative;">
             ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;">` : itemPlaceholderHtml(sec.icon)}
-            <button onclick="toggleFavorite('${key}', event)" title="Favoritar" style="position:absolute;top:6px;right:6px;background:rgba(10,10,10,.55);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${favorites.has(key) ? '❤️' : '🤍'}</button>
+            ${badgeInsideImg ? `<div style="${badgeCornerStyle}">${badgeHtml}</div>` : ''}
+            <button onclick="toggleFavorite('${key}', event)" title="Favoritar" style="position:absolute;top:6px;right:6px;background:rgba(10,10,10,.55);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">${isFav ? '❤️' : '🤍'}</button>
           </div>
+          ${badgeBelowImg ? badgeHtml : ''}
           <div class="item-body">
-            ${isAvail ? itemBadgeHtml(item) : ''}
-            ${!isAvail ? `<div class="item-badge" style="background:var(--muted);color:#fff;">Indisponível</div>` : ''}
+            ${badgeAboveName ? badgeHtml : ''}
             <div class="item-name">${item.name}</div>
+            ${badgeBelowName ? badgeHtml : ''}
             <div class="item-desc">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
             ${cartQty > 0 ? `<div class="mi-in-cart-tag">🛒 ${cartQty} no carrinho</div>` : ''}
             <div class="item-footer">
-              <span class="item-price">${hasVariants ? 'a partir de ' : ''}R$ ${item.price.toFixed(2).replace('.', ',')}</span>
+              ${(() => {
+                if (hasVariants) return `<span class="item-price">a partir de R$ ${item.price.toFixed(2).replace('.', ',')}</span>`;
+                const disc = getActiveItemDiscount(key);
+                if (!disc) return `<span class="item-price">R$ ${item.price.toFixed(2).replace('.', ',')}</span>`;
+                const finalPrice = effectivePrice(item, key);
+                return `<span class="item-price">
+                  <span style="text-decoration:line-through;color:var(--muted);font-size:11px;font-weight:400;margin-right:5px;">R$ ${item.price.toFixed(2).replace('.', ',')}</span>
+                  <span style="color:var(--red-lt,#e05a4a);">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>
+                </span>`;
+              })()}
               ${!isAvail
                 ? `<span style="font-size:11px;color:var(--muted);">Indisponível</span>`
                 : hasVariants
@@ -2787,6 +2817,27 @@ function getItemByKey(key) {
   const sec = menu.find(s => s.id === secId);
   return sec ? sec.items[parseInt(ii)] : null;
 }
+// v75: desconto direto num item, configurado em Configurações → 📣 Central de Mensagens →
+// Anúncios no Cardápio. Cada anúncio pode (opcionalmente) estar amarrado a um prato específico
+// com um desconto em % ou em R$ — enquanto o anúncio estiver ativo e não vencido, o prato sai
+// mais barato tanto na exibição quanto no carrinho/checkout.
+function getActiveItemDiscount(key) {
+  const list = cfg.announcements || [];
+  const now = Date.now();
+  for (const a of list) {
+    if (a.active === false) continue;
+    if (a.expiresAt && new Date(a.expiresAt).getTime() < now) continue;
+    if (a.itemDiscount && a.itemDiscount.key === key && Number(a.itemDiscount.value) > 0) return a.itemDiscount;
+  }
+  return null;
+}
+function effectivePrice(item, key) {
+  const base = Number(item.price) || 0;
+  const d = getActiveItemDiscount(key);
+  if (!d) return base;
+  let price = d.type === 'percent' ? base * (1 - Number(d.value) / 100) : base - Number(d.value);
+  return Math.max(0.5, Math.round(price * 100) / 100); // nunca deixa ir a zero/negativo
+}
 // v44: BUG CORRIGIDO — bar e sushibar nunca recebiam impressão. Quando o item em si não tem
 // `stations` própria, o fallback precisa cair pra via configurada na CATEGORIA (definida em
 // "Editar Cardápio" > categoria), e só usar 'cozinha' se nem a categoria tiver via definida.
@@ -2807,7 +2858,7 @@ function addToCart(key) {
   const item = getItemByKey(key);
   if (!item || item.available === false) return;
   if (item.variants && item.variants.length) { openVariantPicker(key); return; }
-  if (!cart[key]) cart[key] = { baseKey: key, name: item.name, price: item.price, stations: stationsForItemKey(key, item), qty: 0 };
+  if (!cart[key]) cart[key] = { baseKey: key, name: item.name, price: effectivePrice(item, key), stations: stationsForItemKey(key, item), qty: 0 };
   cart[key].qty++;
   updateCartUI(); renderMenu(); animateAdd(key); refreshCartSummary();
 }

@@ -360,7 +360,7 @@ table{max-width:100%;}
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
 .modal-overlay.open{display:flex;}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:90%;max-width:520px;max-height:90vh;overflow-y:auto;}
+.modal{background:var(--card);border:1.5px solid var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.4),0 20px 60px rgba(0,0,0,.55),0 0 24px rgba(201,168,76,.15);border-radius:12px;width:90%;max-width:520px;max-height:90vh;overflow-y:auto;}
 .modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .modal-title{font-size:16px;font-weight:600;}
 .modal-close{background:none;border:none;color:var(--muted);font-size:20px;line-height:1;}
@@ -491,7 +491,7 @@ table{max-width:100%;}
 /* ── v37: MODERNIZAÇÃO VISUAL — só aparência (sombra, blur, animação, elevação); nenhuma lógica muda ── */
 .topbar{backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);background:color-mix(in srgb, var(--panel) 88%, transparent);}
 .modal-overlay{backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);}
-.modal{animation:modalPopIn .2s cubic-bezier(.2,.8,.3,1) both;box-shadow:0 24px 60px rgba(0,0,0,.45);}
+.modal{border:2px solid var(--gold);animation:modalPopIn .2s cubic-bezier(.2,.8,.3,1) both;box-shadow:0 0 0 1px rgba(0,0,0,.5),0 24px 60px rgba(0,0,0,.5),0 0 0 5px rgba(201,168,76,.12),0 0 30px rgba(201,168,76,.22);}
 @keyframes modalPopIn{from{opacity:0;transform:scale(.96) translateY(8px);}to{opacity:1;transform:scale(1) translateY(0);}}
 .page{animation:pageFadeIn .22s ease both;}
 @keyframes pageFadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
@@ -2084,38 +2084,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
   </div>
 </div>
 
-<!-- MODAL 📠 ESTAÇÕES DE IMPRESSÃO (por item do cardápio) -->
-<div class="modal-overlay" id="item-stations-modal">
-  <div class="modal" style="max-width:460px;">
-    <div class="modal-header">
-      <span class="modal-title">📠 Estações de Impressão</span>
-      <button class="modal-close" onclick="closeModal('item-stations-modal')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="ism-si"/>
-      <input type="hidden" id="ism-ii"/>
-      <div id="ism-item-name" style="font-size:13px;color:var(--muted);margin-bottom:4px;"></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
-        Selecione em quais estações este item deverá ser impresso automaticamente quando o pedido
-        for para a cozinha/produção. Um item pode pertencer a mais de uma estação.
-      </p>
-      <div id="ism-grid" class="station-check-grid"></div>
-      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-        <button type="button" class="btn secondary sm" onclick="ismToggleAll(true)">✔ Selecionar Todas</button>
-        <button type="button" class="btn secondary sm" onclick="ismToggleAll(false)">✖ Limpar Seleção</button>
-      </div>
-      <div style="font-size:10.5px;color:var(--muted);margin-top:12px;">
-        Se nenhuma estação ficar marcada, o item usa a estação padrão do sistema
-        (<b><span id="ism-default-station"></span></b> — configurável em Configurações → 📠 Impressoras por Estação).
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn secondary" onclick="closeModal('item-stations-modal')">❌ Cancelar</button>
-      <button type="button" class="btn primary" onclick="saveItemStations()">💾 Salvar</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL CATEGORIA -->
 <div class="modal-overlay" id="cat-modal">
   <div class="modal">
@@ -2133,7 +2101,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       <div class="field" style="margin-top:6px;">
         <label>Imprime na(s) via(s) de:</label>
         <div id="cat-stations-checks" style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;"></div>
-        <div style="font-size:10px;color:var(--muted);">Todos os itens dessa categoria saem nessa(s) via(s) na hora de imprimir (a menos que o item tenha suas próprias estações definidas em 📠 Estações). Marque mais de uma se a categoria inteira precisa sair em duas vias.</div>
+        <div style="font-size:10px;color:var(--muted);">Todos os itens dessa categoria saem nessa(s) via(s) na hora de imprimir. Marque mais de uma se a categoria inteira precisa sair em duas vias.</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -3828,17 +3796,35 @@ function renderChatBgGallery(){
   const cb = cfg.chatBackground || {};
   const el = document.getElementById('chatbg-gallery');
   if(!el) return;
-  el.innerHTML = CHATBG_GALLERY.map(g => {
+  el.innerHTML = CHATBG_GALLERY.map((g,gi) => {
     const active = cb.url === g.url;
     const safeName = g.name.replace(/'/g,"\\'");
     return `<button type="button" onclick="selectChatBgPreset('${g.url}','${safeName}')"
       style="padding:0;border-radius:10px;overflow:hidden;border:2px solid ${active?'#D32F2F':'var(--border)'};height:74px;position:relative;cursor:pointer;background:#0b0d11;">
-      <img src="${g.url}" alt="${g.name}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;"
-        onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <img id="chatbg-gallery-img-${gi}" src="${g.url}" alt="${g.name}" loading="lazy" data-retries="0" style="width:100%;height:100%;object-fit:cover;display:block;"
+        onerror="chatBgGalleryImgRetry(this)">
       <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:9px;color:var(--muted);text-align:center;padding:4px;">Falha ao carregar</span>
       <span style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);color:#fff;font-size:9px;padding:3px 4px;text-align:center;line-height:1.2;">${g.name}</span>
     </button>`;
   }).join('');
+}
+// v75: BUG CORRIGIDO — a galeria de fundos prontos às vezes mostrava "Falha ao carregar" mesmo
+// com o arquivo existindo certinho no servidor. Causa: numa falha passageira (ex: servidor
+// "acordando" de um deploy gratuito que hiberna, ou um soluço de rede bem no instante em que o
+// painel abre), o navegador desistia na primeira tentativa e nunca tentava de novo. Agora tenta
+// automaticamente mais 2 vezes (com um pequeno intervalo crescente) antes de mostrar a mensagem
+// de falha — cobre exatamente esse tipo de falha passageira.
+function chatBgGalleryImgRetry(img){
+  const tries = parseInt(img.dataset.retries || '0', 10);
+  if(tries < 2){
+    img.dataset.retries = String(tries + 1);
+    const baseUrl = img.src.split('?')[0];
+    setTimeout(()=>{ img.src = baseUrl + '?retry=' + (tries + 1) + '&t=' + Date.now(); }, 400 * (tries + 1));
+    return;
+  }
+  img.style.display = 'none';
+  const fallback = img.nextElementSibling;
+  if(fallback) fallback.style.display = 'flex';
 }
 async function uploadChatBgPhoto(input){
   const file = input.files && input.files[0];
@@ -5555,7 +5541,6 @@ function menuItemRowHTML(sec,si,item,ii,allowReorder){
         <div style="font-size:11px;color:var(--muted)">${item.qty||'—'}</div>
         <button class="mi-btn" onclick="toggleItemAvailability(${si},${ii})" style="${item.available===false?'background:var(--red-bg);color:var(--red-lt);':'background:rgba(80,200,120,.12);color:#50c878;'}">${item.available===false?'🚫 Esgotado':'✅ Disponível'}</button>
         <button class="mi-btn edit" onclick="openEditItem(${si},${ii})"><span style="font-size:17px;">✏️</span> Editar</button>
-        <button class="mi-btn stations" onclick="openItemStationsModal(${si},${ii})" title="Estações de Impressão"><span style="font-size:17px;">📠</span> Estações</button>
         <button class="mi-btn del"  onclick="deleteItem(${si},${ii})">🗑</button>
       </div>`;
 }
@@ -5692,56 +5677,9 @@ function openEditItem(si,ii){
   renderVariantGroups();
   openModal('item-modal');
 }
-// ═══════════════════════════════════════════
-// 📠 ESTAÇÕES DE IMPRESSÃO — por item do cardápio (v49)
-// Define pra quais estações (Caixa, Cozinha, Sushibar, Bar, Delivery, Expedição e qualquer
-// via customizada criada em Configurações → 📠 Impressoras por Estação) esse item é enviado
-// automaticamente na hora de imprimir os pedidos. Um item pode pertencer a várias estações.
-// ═══════════════════════════════════════════
-let ismSelected = [];
-function openItemStationsModal(si,ii){
-  const item = menu[si].items[ii];
-  document.getElementById('ism-si').value = si;
-  document.getElementById('ism-ii').value = ii;
-  document.getElementById('ism-item-name').textContent = '🍽️ '+item.name;
-  ismSelected = (item.stations && item.stations.length) ? [...item.stations] : [];
-  const defKey = cfg.defaultStation || 'cozinha';
-  document.getElementById('ism-default-station').textContent = stationIcon(defKey)+' '+stationLabel(defKey);
-  renderIsmGrid();
-  openModal('item-stations-modal');
-}
-function renderIsmGrid(){
-  const el = document.getElementById('ism-grid');
-  el.innerHTML = getStationKeys().map(key=>{
-    const checked = ismSelected.includes(key);
-    return `
-    <label class="station-check-card ${checked?'checked':''}" onclick="event.preventDefault();ismToggle('${key}');">
-      <input type="checkbox" ${checked?'checked':''} readonly/>
-      <span class="sc-box">✓</span>
-      <span class="sc-icon">${stationIcon(key)}</span>
-      <span class="sc-label">${esc(stationLabel(key))}</span>
-    </label>`;
-  }).join('');
-}
-function ismToggle(key){
-  if(ismSelected.includes(key)) ismSelected = ismSelected.filter(s=>s!==key);
-  else ismSelected = [...ismSelected, key];
-  renderIsmGrid();
-}
-function ismToggleAll(all){
-  ismSelected = all ? getStationKeys() : [];
-  renderIsmGrid();
-}
-async function saveItemStations(){
-  const si = parseInt(document.getElementById('ism-si').value);
-  const ii = parseInt(document.getElementById('ism-ii').value);
-  menu[si].items[ii].stations = [...new Set(ismSelected)];
-  const res = await apiPost('/api/config', { cfg, menu });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar as estações desse item.'); return; }
-  closeModal('item-stations-modal');
-  renderMenuItems();
-  showToast('📠 Estações salvas', `${menu[si].items[ii].name}: ${stIcons(menu[si].items[ii].stations)||'estação padrão'}`);
-}
+// v75: BUG "Estações" saiu da edição do item — agora só existe em nível de Categoria
+// (Cardápio → editar categoria → "Imprime na(s) via(s) de:"). Todo item herda automaticamente
+// as vias da categoria; não existe mais controle por item.
 // ── Variações (grupos de opções, ex: Tamanho / Adicionais) ──
 function addVariantGroup(){
   editingVariants.push({id:'g'+Date.now().toString(36),name:'',type:'single',required:false,options:[{name:'',priceDelta:0}]});
@@ -6603,7 +6541,14 @@ function loadMensagensCentral(){
 }
 async function saveMensagensCentral(){
   cfg.coupons = couponsState.filter(c=>String(c.code||'').trim());
-  cfg.announcements = announcementsState.filter(a=>String(a.title||'').trim() && String(a.message||'').trim());
+  cfg.announcements = announcementsState
+    .filter(a=>String(a.title||'').trim() && String(a.message||'').trim())
+    .map(a => ({
+      ...a,
+      // v75: só salva o desconto se o admin realmente escolheu um prato e um valor válido —
+      // evita salvar um "desconto fantasma" sem prato vinculado.
+      itemDiscount: (a.itemDiscount && a.itemDiscount.key && Number(a.itemDiscount.value) > 0) ? a.itemDiscount : null
+    }));
   cfg.sms = {
     accountSid: document.getElementById('sms-sid').value.trim(),
     authToken: document.getElementById('sms-token').value.trim(),
@@ -7081,12 +7026,24 @@ function loadAnnouncements(){
   announcementsState = JSON.parse(JSON.stringify(cfg.announcements||[]));
   renderAnnouncementsList();
 }
+function menuItemOptionsHtml(selectedKey){
+  return '<option value="">— selecione um prato —</option>' + (menu||[]).map(sec =>
+    `<optgroup label="${esc(sec.icon||'')} ${esc(sec.title||'')}">` +
+    (sec.items||[]).map((it,ii) => {
+      const key = sec.id + '-' + ii;
+      return `<option value="${key}" ${key===selectedKey?'selected':''}>${esc(it.name)} (R$ ${Number(it.price).toFixed(2).replace('.',',')})</option>`;
+    }).join('') + '</optgroup>'
+  ).join('');
+}
 function renderAnnouncementsList(){
   const el=document.getElementById('announcements-list');
   if(!el)return;
   el.innerHTML = announcementsState.length===0
     ? '<div style="font-size:11px;color:var(--muted);">Nenhum anúncio cadastrado ainda.</div>'
-    : announcementsState.map((a,i)=>`
+    : announcementsState.map((a,i)=>{
+      const hasDiscount = !!a.itemDiscount;
+      const d = a.itemDiscount || { key:'', type:'percent', value:'' };
+      return `
       <div class="vgroup">
         <div class="vgroup-head" style="flex-wrap:wrap;">
           <input type="text" placeholder="Título curto (ex: 🎉 Nova promoção!)" value="${(a.title||'').replace(/"/g,'&quot;')}" oninput="announcementsState[${i}].title=this.value" style="flex:1;min-width:160px;"/>
@@ -7097,10 +7054,35 @@ function renderAnnouncementsList(){
         </div>
         <textarea placeholder="Mensagem completa do anúncio" oninput="announcementsState[${i}].message=this.value" style="width:100%;min-height:50px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--white);font-size:12px;margin-top:6px;">${a.message||''}</textarea>
         <div class="field" style="margin-top:6px;"><label style="font-size:10px;">Válido até (opcional)</label><input type="date" value="${a.expiresAt?a.expiresAt.slice(0,10):''}" onchange="announcementsState[${i}].expiresAt=this.value?new Date(this.value+'T23:59:59').toISOString():''"/></div>
-      </div>`).join('');
+        <label style="font-size:11px;display:flex;align-items:center;gap:6px;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+          <input type="checkbox" ${hasDiscount?'checked':''} onchange="toggleAnnouncementDiscount(${i}, this.checked)"/> 🏷️ Aplicar desconto direto num item do cardápio
+        </label>
+        ${hasDiscount ? `
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:8px;">
+          <div class="field"><label style="font-size:10px;">Prato</label>
+            <select onchange="announcementsState[${i}].itemDiscount.key=this.value">${menuItemOptionsHtml(d.key)}</select>
+          </div>
+          <div class="field"><label style="font-size:10px;">Tipo</label>
+            <select onchange="announcementsState[${i}].itemDiscount.type=this.value">
+              <option value="percent" ${d.type==='percent'?'selected':''}>% desconto</option>
+              <option value="fixed" ${d.type==='fixed'?'selected':''}>R$ desconto</option>
+            </select>
+          </div>
+          <div class="field"><label style="font-size:10px;">Valor</label>
+            <input type="number" min="0" step="0.01" value="${d.value||''}" placeholder="${d.type==='percent'?'ex: 15':'ex: 5.00'}" oninput="announcementsState[${i}].itemDiscount.value=parseFloat(this.value)||0"/>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">O prato aparece com o preço riscado + preço com desconto no cardápio, enquanto este anúncio estiver ativo e não vencido.</div>
+        ` : ''}
+      </div>`;
+    }).join('');
+}
+function toggleAnnouncementDiscount(i, checked){
+  announcementsState[i].itemDiscount = checked ? { key:'', type:'percent', value:'' } : null;
+  renderAnnouncementsList();
 }
 function addAnnouncement(){
-  announcementsState.push({id:'an'+Date.now().toString(36), title:'', message:'', active:true, expiresAt:''});
+  announcementsState.push({id:'an'+Date.now().toString(36), title:'', message:'', active:true, expiresAt:'', itemDiscount:null});
   renderAnnouncementsList();
 }
 
