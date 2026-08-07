@@ -332,6 +332,61 @@ table{max-width:100%;}
 .mi-btn.del{background:var(--red-bg);color:var(--red-lt);border:1px solid var(--red-dk);}
 .mi-btn.del:hover{background:var(--red);color:#fff;}
 
+/* ── v76: EDITOR DE CARDÁPIO MODERNIZADO (estilo cards, tipo iFood) — mesma paleta de cores,
+   só reorganiza layout/UX. Não mexe em nenhuma função/API existente. ── */
+.menu-filter-bar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--border);}
+.menu-filter-chip{border:1px solid var(--border2);background:var(--panel);color:var(--muted);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.menu-filter-chip:hover{border-color:var(--gold);color:var(--white);}
+.menu-filter-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
+.menu-cat-quicknav{display:flex;gap:8px;overflow-x:auto;padding:10px 14px;border-bottom:1px solid var(--border);scrollbar-width:thin;}
+.menu-cat-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;border:1px solid var(--border2);background:var(--panel);color:var(--muted);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;}
+.menu-cat-chip:hover{border-color:var(--gold);color:var(--white);}
+.menu-cat-chip.active{background:var(--red-bg);border-color:var(--red);color:var(--red-lt);}
+.menu-cat-chip .cnt{background:rgba(255,255,255,.12);border-radius:10px;padding:0 6px;font-size:10px;}
+.mi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:2px;}
+.mi-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s,border-color .15s;cursor:default;}
+.mi-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.35);border-color:var(--border2);}
+.mi-card.dragging{opacity:.4;}
+.mi-card-media{position:relative;width:100%;aspect-ratio:16/11;background:var(--card);overflow:hidden;}
+.mi-card-media img{width:100%;height:100%;object-fit:cover;display:block;}
+.mi-card-media .mi-thumb-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--muted);}
+.mi-card-media.unavailable img{filter:grayscale(.7) brightness(.55);}
+.mi-card-drag-handle{position:absolute;top:8px;left:8px;background:rgba(10,10,10,.55);color:#fff;border:none;border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:grab;z-index:2;}
+.mi-card-badges{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;z-index:2;}
+.mi-card-photo-edit{position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;border:none;}
+.mi-card-media:hover .mi-card-photo-edit{opacity:1;background:rgba(0,0,0,.45);}
+.mi-card-photo-edit span{background:rgba(20,20,20,.85);color:#fff;font-size:11px;font-weight:600;padding:6px 12px;border-radius:20px;}
+.mi-card-unavail-tag{position:absolute;bottom:8px;left:8px;background:var(--red);color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 9px;border-radius:20px;z-index:2;}
+.mi-card-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px;flex:1;}
+.mi-card-name{font-size:14px;font-weight:700;line-height:1.25;}
+.mi-card-desc{font-size:11.5px;color:var(--muted);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em;}
+.mi-card-tags{display:flex;flex-wrap:wrap;gap:5px;}
+.mi-card-footer{display:flex;flex-direction:column;gap:8px;margin-top:auto;padding-top:6px;}
+.mi-card-actions{display:flex;gap:5px;flex-wrap:wrap;}
+.mi-card-actions button{border:none;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.mi-card-actions .ca-avail{background:rgba(80,200,120,.14);color:#50c878;margin-left:auto;}
+.mi-card-actions .ca-avail.off{background:var(--red-bg);color:var(--red-lt);}
+.mi-card-actions .ca-edit{background:var(--blue-bg);color:var(--blue);}
+.mi-card-actions .ca-edit:hover{background:var(--blue);color:#fff;transform:scale(1.08);}
+.mi-card-actions .ca-del{background:var(--red-bg);color:var(--red-lt);}
+.mi-card-actions .ca-del:hover{background:var(--red);color:#fff;transform:scale(1.08);}
+@media (max-width:640px){
+  .mi-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .mi-card-name{font-size:13px;}
+  .mi-card-desc{font-size:11px;min-height:2.4em;}
+}
+/* v76: BUG CORRIGIDO — essa regra responsiva do editor de cardápio precisa vir DEPOIS da regra
+   base ".menu-editor{grid-template-columns:260px 1fr}" (lá em cima, perto do topo do arquivo)
+   pra realmente ganhar no empate de especificidade CSS. Colocada antes, o navegador ignorava e
+   o cardápio ficava espremido/cortado no celular mesmo com a media query "batendo". */
+@media (max-width:760px){
+  .menu-editor{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto;}
+  .menu-cats-wrap{flex-direction:row;}
+  .menu-cats{display:flex;overflow-x:auto;overflow-y:hidden;max-height:120px;}
+  .menu-cat-item{flex:0 0 210px;border-bottom:none;border-right:1px solid var(--border);}
+  .menu-items-panel{min-height:60vh;}
+}
+
 /* ── MODAL: 📠 Estações de Impressão (por item do cardápio) ── */
 .station-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:4px;}
 .station-check-card{
@@ -1078,7 +1133,16 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
               <input id="menu-search" placeholder="🔎 Buscar prato em todo o cardápio..." oninput="onMenuSearch(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--white);font-size:12px;"/>
             </div>
-            <div class="menu-items-body" id="menu-items-body">
+            <div class="menu-cat-quicknav" id="menu-cat-quicknav"></div>
+            <div class="menu-filter-bar" id="menu-filter-bar">
+              <button type="button" class="menu-filter-chip active" data-filter="todos" onclick="setMenuFilter('todos')">🍽️ Todos</button>
+              <button type="button" class="menu-filter-chip" data-filter="disponivel" onclick="setMenuFilter('disponivel')">✅ Disponível</button>
+              <button type="button" class="menu-filter-chip" data-filter="indisponivel" onclick="setMenuFilter('indisponivel')">🚫 Indisponível</button>
+              <button type="button" class="menu-filter-chip" data-filter="promocao" onclick="setMenuFilter('promocao')">🏷️ Promoção</button>
+              <button type="button" class="menu-filter-chip" data-filter="destaque" onclick="setMenuFilter('destaque')">⭐ Destaque</button>
+              <button type="button" class="btn secondary sm" style="margin-left:auto;" onclick="openClientPreview()" title="Ver como o cliente vê o cardápio">👁 Ver como cliente</button>
+            </div>
+            <div class="menu-items-body mi-grid" id="menu-items-body">
               <div style="text-align:center;padding:40px;color:var(--muted)">Selecione uma categoria</div>
             </div>
           </div>
@@ -5209,14 +5273,51 @@ async function importarCardapioCustos(){
 // MENU EDITOR
 // ═══════════════════════════════════════════
 let menuSearchQuery='';
+let menuFilterState='todos';
 function onMenuSearch(v){ menuSearchQuery=(v||'').trim().toLowerCase(); renderMenuItems(); }
+function setMenuFilter(f){
+  menuFilterState=f;
+  document.querySelectorAll('#menu-filter-bar .menu-filter-chip').forEach(b=>b.classList.toggle('active', b.dataset.filter===f));
+  renderMenuItems();
+}
+function openClientPreview(){ window.open('/', '_blank'); }
+function renderMenuCatQuicknav(){
+  const el=document.getElementById('menu-cat-quicknav');
+  if(!el) return;
+  el.innerHTML = menu.map((s,i)=>`
+    <button type="button" class="menu-cat-chip ${i===activeCatIdx && !menuSearchQuery?'active':''}" onclick="selectCat(${i})">
+      <span>${s.icon||'🍽️'}</span><span>${esc(s.title)}</span><span class="cnt">${s.items.length}</span>
+    </button>`).join('');
+}
+// v76: um item conta como "em Promoção" se tiver um Anúncio ativo com desconto amarrado a ele
+// (ver Central de Mensagens → Anúncios), e como "Destaque" se tiver algum badge (global ou próprio).
+function itemHasActivePromo(item, si, ii){
+  const key = (menu[si] && menu[si].id) + '-' + ii;
+  const now = Date.now();
+  return (cfg.announcements||[]).some(a => a.active!==false && (!a.expiresAt || new Date(a.expiresAt).getTime()>=now) && a.itemDiscount && a.itemDiscount.key===key);
+}
+function itemHasBadge(item){
+  const mode = item.badgeMode || 'global';
+  if(mode==='off') return false;
+  if(mode==='manual') return !!item.badge;
+  return !!(cfg.globalBadge && cfg.globalBadge.enabled) || !!item.badge;
+}
+function menuFilterPass(item, si, ii){
+  if(menuFilterState==='todos') return true;
+  if(menuFilterState==='disponivel') return item.available!==false;
+  if(menuFilterState==='indisponivel') return item.available===false;
+  if(menuFilterState==='promocao') return itemHasActivePromo(item, si, ii);
+  if(menuFilterState==='destaque') return itemHasBadge(item);
+  return true;
+}
 function renderMenuEditor(){
   if(activeCatIdx>=menu.length) activeCatIdx=Math.max(0,menu.length-1);
   document.getElementById('menu-cats-list').innerHTML = menu.length===0
     ? '<div style="text-align:center;padding:30px 12px;color:var(--muted);font-size:12px;">Nenhuma categoria ainda.<br>Clique em + Categoria.</div>'
     : menu.map((s,i)=>`
-    <div class="menu-cat-item ${i===activeCatIdx?'active':''}" onclick="selectCat(${i})">
+    <div class="menu-cat-item ${i===activeCatIdx?'active':''}" draggable="true" data-cat-idx="${i}" onclick="selectCat(${i})">
       <div class="menu-cat-item-top">
+        <span style="cursor:grab;" title="Arraste pra reordenar">⠿</span>
         <span>${s.icon||'🍽️'}</span>
         <span class="menu-cat-name" title="${s.title}">${s.title}</span>
         <span class="menu-cat-count">${s.items.length}</span>
@@ -5232,7 +5333,42 @@ function renderMenuEditor(){
         </span>
       </div>
     </div>`).join('');
+  setupCatDragDrop();
+  renderMenuCatQuicknav();
   renderMenuItems();
+}
+// v76: arrastar-e-soltar pra reordenar categorias (além dos botões ▲▼, que continuam
+// funcionando normalmente — o arrastar é só um atalho a mais).
+function setupCatDragDrop(){
+  const container = document.getElementById('menu-cats-list');
+  if(!container || container._dragBound) return;
+  container._dragBound = true;
+  let fromIdx = null;
+  container.addEventListener('dragstart', e=>{
+    const row = e.target.closest('[data-cat-idx]');
+    if(!row) return;
+    fromIdx = parseInt(row.dataset.catIdx);
+    row.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(fromIdx)); }catch(err){}
+  });
+  container.addEventListener('dragend', e=>{
+    const row = e.target.closest('[data-cat-idx]');
+    if(row) row.classList.remove('dragging');
+    fromIdx = null;
+  });
+  container.addEventListener('dragover', e=>{ if(fromIdx!==null) e.preventDefault(); });
+  container.addEventListener('drop', e=>{
+    e.preventDefault();
+    const row = e.target.closest('[data-cat-idx]');
+    if(!row || fromIdx===null) return;
+    const toIdx = parseInt(row.dataset.catIdx);
+    if(toIdx===fromIdx) return;
+    const moved = menu.splice(fromIdx,1)[0];
+    menu.splice(toIdx,0,moved);
+    if(activeCatIdx===fromIdx) activeCatIdx=toIdx;
+    saveMenuSilently();
+    renderMenuEditor();
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -5483,26 +5619,31 @@ function itemMatches(item,q){
   return (item.name||'').toLowerCase().includes(q) || (item.desc||'').toLowerCase().includes(q);
 }
 function renderMenuItems(){
+  renderMenuCatQuicknav();
   // Modo busca: procura em TODAS as categorias, não só na selecionada
   if(menuSearchQuery){
     const results=[];
-    menu.forEach((sec,si)=>sec.items.forEach((item,ii)=>{ if(itemMatches(item,menuSearchQuery)) results.push({sec,si,item,ii}); }));
+    menu.forEach((sec,si)=>sec.items.forEach((item,ii)=>{ if(itemMatches(item,menuSearchQuery) && menuFilterPass(item,si,ii)) results.push({sec,si,item,ii}); }));
     document.getElementById('menu-active-cat-title').textContent=`🔎 Resultados para "${menuSearchQuery}" (${results.length})`;
     document.getElementById('menu-items-body').innerHTML=results.length===0
-      ?'<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum prato encontrado.</div>'
-      :results.map(({sec,si,item,ii})=>menuItemRowHTML(sec,si,item,ii,false)).join('');
+      ?'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Nenhum prato encontrado.</div>'
+      :results.map(({sec,si,item,ii})=>menuItemCardHTML(sec,si,item,ii,false)).join('');
     return;
   }
   const sec=menu[activeCatIdx];
   if(!sec){
     document.getElementById('menu-active-cat-title').textContent='Selecione uma categoria';
-    document.getElementById('menu-items-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Crie uma categoria pra começar a montar o cardápio.</div>';
+    document.getElementById('menu-items-body').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Crie uma categoria pra começar a montar o cardápio.</div>';
     return;
   }
   document.getElementById('menu-active-cat-title').textContent=sec.icon+' '+sec.title;
+  const visibleItems = sec.items.map((item,ii)=>({item,ii})).filter(({item,ii})=>menuFilterPass(item,activeCatIdx,ii));
   document.getElementById('menu-items-body').innerHTML=sec.items.length===0
-    ?'<div style="text-align:center;padding:40px;color:var(--muted)">Nenhum item. Clique em + Novo Item.</div>'
-    :sec.items.map((item,ii)=>menuItemRowHTML(sec,activeCatIdx,item,ii,true)).join('');
+    ?'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Nenhum item. Clique em + Novo Item.</div>'
+    :(visibleItems.length===0
+      ?'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">Nenhum item nesse filtro.</div>'
+      :visibleItems.map(({item,ii})=>menuItemCardHTML(sec,activeCatIdx,item,ii,true)).join(''));
+  setupItemDragDrop();
 }
 // v73: rótulo do badge na listagem do painel, respeitando herdar-global/personalizar/sem-badge
 function menuItemBadgeLabelHTML(item){
@@ -5517,32 +5658,102 @@ function menuItemBadgeLabelHTML(item){
 function stIcons(stations){
   return (stations&&stations.length?stations:[cfg.defaultStation||'cozinha']).map(s=>stationIcon(s)).join(' ');
 }
-function menuItemRowHTML(sec,si,item,ii,allowReorder){
+// v76: EDITOR DE CARDÁPIO MODERNIZADO — card em vez de linha, mesmas funções/onclicks de sempre
+// (toggleItemAvailability, openEditItem, deleteItem, moveItem) só que reorganizadas visualmente.
+function menuItemCardHTML(sec,si,item,ii,allowReorder){
   const vCount=(item.variants||[]).length;
+  const unavailable = item.available===false;
+  const promo = itemHasActivePromo(item, si, ii);
+  const photoUrl = item.image || ((cfg.placeholderPhoto&&cfg.placeholderPhoto.enabled&&cfg.placeholderPhoto.url) ? cfg.placeholderPhoto.url : '');
+  const catTag = !allowReorder ? `<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">${sec.icon} ${esc(sec.title)}</div>` : '';
   return `
-      <div class="menu-item-row">
-        ${allowReorder?`<span class="cat-reorder" style="flex-direction:column;">
-          <button onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover para cima">▲</button>
-          <button onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover para baixo">▼</button>
-        </span>`:`<span></span>`}
-        ${item.image?`<img class="mi-thumb" src="${item.image}" alt="${item.name}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`
-          :(cfg.placeholderPhoto&&cfg.placeholderPhoto.enabled&&cfg.placeholderPhoto.url
-            ?`<img class="mi-thumb" src="${cfg.placeholderPhoto.url}" alt="${item.name}" title="Usando foto provisória global" style="opacity:.85;"/>`
-            :`<div class="mi-thumb empty">🍽️</div>`)}
-        <div>
-          ${!allowReorder?`<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">${sec.icon} ${sec.title}</div>`:''}
-          <div class="mi-name">${item.name}</div>
-          <div class="mi-desc">${item.desc||''}</div>
-          ${menuItemBadgeLabelHTML(item)}
-          ${vCount?`<span class="mi-badge" style="background:rgba(201,168,76,.15);color:var(--gold);">⚙ ${vCount} variação${vCount>1?'ões':''}</span>`:''}
-          <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons(item.stations)}</span>
+      <div class="mi-card" draggable="${allowReorder?'true':'false'}" data-item-idx="${allowReorder?ii:''}">
+        <div class="mi-card-media ${unavailable?'unavailable':''}">
+          ${photoUrl
+            ? `<img src="${photoUrl}" alt="${esc(item.name)}" style="object-position:${(item.imagePos&&item.imagePos.x)||50}% ${(item.imagePos&&item.imagePos.y)||50}%;"/>`
+            : `<div class="mi-thumb-empty">🍽️</div>`}
+          ${allowReorder?`<button class="mi-card-drag-handle" title="Arraste pra reordenar">⠿</button>`:''}
+          <div class="mi-card-badges">
+            ${menuItemBadgeLabelHTML(item)}
+            ${promo?`<span class="mi-badge" style="background:var(--red);color:#fff;border-color:var(--red);">🏷️ Promoção</span>`:''}
+            ${vCount?`<span class="mi-badge" style="background:rgba(201,168,76,.85);color:#1a1405;border-color:transparent;">⚙ ${vCount} opção${vCount>1?'ões':''}</span>`:''}
+          </div>
+          ${unavailable?`<span class="mi-card-unavail-tag">🚫 Esgotado</span>`:''}
+          <button type="button" class="mi-card-photo-edit" onclick="quickChangeItemPhoto(${si},${ii})" title="Trocar foto rápido"><span>📷 Trocar foto</span></button>
         </div>
-        <div class="mi-price">R$ ${Number(item.price).toFixed(2).replace('.',',')}</div>
-        <div style="font-size:11px;color:var(--muted)">${item.qty||'—'}</div>
-        <button class="mi-btn" onclick="toggleItemAvailability(${si},${ii})" style="${item.available===false?'background:var(--red-bg);color:var(--red-lt);':'background:rgba(80,200,120,.12);color:#50c878;'}">${item.available===false?'🚫 Esgotado':'✅ Disponível'}</button>
-        <button class="mi-btn edit" onclick="openEditItem(${si},${ii})"><span style="font-size:17px;">✏️</span> Editar</button>
-        <button class="mi-btn del"  onclick="deleteItem(${si},${ii})">🗑</button>
+        <div class="mi-card-body">
+          ${catTag}
+          <div class="mi-card-name">${esc(item.name)}</div>
+          <div class="mi-card-desc">${esc(item.desc||'')}</div>
+          <div class="mi-card-tags">
+            ${item.qty?`<span class="mi-badge">${esc(item.qty)}</span>`:''}
+            <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons(item.stations)}</span>
+          </div>
+          <div class="mi-card-footer">
+            <span class="mi-price">R$ ${Number(item.price).toFixed(2).replace('.',',')}</span>
+            <div class="mi-card-actions">
+              ${allowReorder?`
+              <button class="ca-move" onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover pra cima" style="background:var(--border2);color:var(--muted);">▲</button>
+              <button class="ca-move" onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover pra baixo" style="background:var(--border2);color:var(--muted);">▼</button>`:''}
+              <button class="ca-avail ${unavailable?'off':''}" onclick="toggleItemAvailability(${si},${ii})" title="${unavailable?'Marcar disponível':'Marcar esgotado'}">${unavailable?'🚫':'✅'}</button>
+              <button class="ca-edit" onclick="openEditItem(${si},${ii})" title="Editar prato">✏️</button>
+              <button class="ca-del" onclick="deleteItem(${si},${ii})" title="Excluir prato">🗑</button>
+            </div>
+          </div>
+        </div>
       </div>`;
+}
+// v76: trocar a foto de um prato direto pelo card, sem abrir a edição completa (edição rápida).
+function quickChangeItemPhoto(si,ii){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/png,image/jpeg,image/webp';
+  input.onchange=async ()=>{
+    const file=input.files&&input.files[0];
+    if(!file) return;
+    let dataUrl;
+    try{ dataUrl=await compressImageFile(file); }
+    catch(e){ dataUrl=await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    const res=await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ alert(res.data.error||'Erro ao enviar a foto.'); return; }
+    menu[si].items[ii].image = res.data.url;
+    const saveRes = await apiPost('/api/config', { cfg, menu });
+    if(!saveRes.ok){ alert(saveRes.data.error||'Erro ao salvar.'); return; }
+    renderMenuItems();
+    showToast('📷 Foto atualizada', menu[si].items[ii].name);
+  };
+  input.click();
+}
+// v76: arrastar-e-soltar pra reordenar os itens dentro da categoria atual (além dos botões ▲▼).
+function setupItemDragDrop(){
+  const container = document.getElementById('menu-items-body');
+  if(!container) return;
+  container._dragBound2 = false; // sempre reamarra pq o container é recriado a cada render
+  let fromIdx = null;
+  container.ondragstart = e=>{
+    const card = e.target.closest('[data-item-idx]');
+    if(!card || card.dataset.itemIdx==='') return;
+    fromIdx = parseInt(card.dataset.itemIdx);
+    card.classList.add('dragging');
+    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(fromIdx)); }catch(err){}
+  };
+  container.ondragend = e=>{
+    const card = e.target.closest('[data-item-idx]');
+    if(card) card.classList.remove('dragging');
+    fromIdx = null;
+  };
+  container.ondragover = e=>{ if(fromIdx!==null) e.preventDefault(); };
+  container.ondrop = e=>{
+    e.preventDefault();
+    const card = e.target.closest('[data-item-idx]');
+    if(!card || fromIdx===null || card.dataset.itemIdx==='') return;
+    const toIdx = parseInt(card.dataset.itemIdx);
+    if(toIdx===fromIdx) return;
+    const items = menu[activeCatIdx].items;
+    const moved = items.splice(fromIdx,1)[0];
+    items.splice(toIdx,0,moved);
+    saveMenuSilently();
+    renderMenuItems();
+  };
 }
 async function toggleItemAvailability(si,ii){
   menu[si].items[ii].available = menu[si].items[ii].available===false ? true : false;
