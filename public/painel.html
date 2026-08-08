@@ -285,6 +285,11 @@ table{max-width:100%;}
 .cat-actions button.del:hover{background:var(--red);color:#fff;}
 .menu-items-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
 .menu-items-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+/* v77: BUG CORRIGIDO — faltava esse container ser flex também; sem isso, "flex:1" do
+   .menu-items-body (mais abaixo) não tinha efeito nenhum (só funciona dentro de um pai flex),
+   e a lista de produtos podia ficar cortada/sem rolagem própria em vez de rolar sozinha
+   mantendo a busca e os filtros sempre visíveis no topo. */
+#menu-tab-content-itens{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
 .menu-items-body{flex:1;overflow-y:auto;padding:14px;}
 .menu-item-row{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;display:grid;grid-template-columns:20px 46px 1fr auto auto auto auto auto;gap:10px;align-items:center;}
 .o-item-results{position:relative;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:14px;margin-top:4px;background:var(--bg);}
@@ -338,11 +343,6 @@ table{max-width:100%;}
 .menu-filter-chip{border:1px solid var(--border2);background:var(--panel);color:var(--muted);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;}
 .menu-filter-chip:hover{border-color:var(--gold);color:var(--white);}
 .menu-filter-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
-.menu-cat-quicknav{display:flex;gap:8px;overflow-x:auto;padding:10px 14px;border-bottom:1px solid var(--border);scrollbar-width:thin;}
-.menu-cat-chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;border:1px solid var(--border2);background:var(--panel);color:var(--muted);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;}
-.menu-cat-chip:hover{border-color:var(--gold);color:var(--white);}
-.menu-cat-chip.active{background:var(--red-bg);border-color:var(--red);color:var(--red-lt);}
-.menu-cat-chip .cnt{background:rgba(255,255,255,.12);border-radius:10px;padding:0 6px;font-size:10px;}
 .mi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:2px;}
 .mi-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s,border-color .15s;cursor:default;}
 .mi-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.35);border-color:var(--border2);}
@@ -468,8 +468,16 @@ table{max-width:100%;}
 @media (max-width:620px){ .settings-grid{grid-template-columns:1fr;} }
 .save-all-bar{position:sticky;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);padding:14px 20px;margin:24px -20px -20px;display:flex;align-items:center;justify-content:flex-end;gap:14px;box-shadow:0 -4px 20px rgba(0,0,0,.25);}
 .settings-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
-.card-ctrl-btn{background:none;border:none;cursor:pointer;opacity:.55;font-size:13px;padding:2px 4px;border-radius:4px;transition:opacity .15s,background .15s;}
-.card-ctrl-btn:hover{opacity:1;background:rgba(255,255,255,.08);}
+.card-menu-wrap{position:relative;}
+.card-menu-btn{background:none;border:none;cursor:pointer;opacity:.6;font-size:16px;padding:2px 8px;border-radius:6px;line-height:1;}
+.card-menu-btn:hover{opacity:1;background:rgba(255,255,255,.08);}
+.card-menu-dropdown{position:absolute;top:26px;right:0;background:var(--card);border:1px solid var(--border2);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.5);min-width:190px;z-index:50;overflow:hidden;display:none;}
+.card-menu-dropdown.open{display:block;}
+.card-menu-item{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;color:var(--white);font-size:12.5px;text-align:left;padding:9px 12px;cursor:pointer;transition:background .12s;}
+.card-menu-item:hover{background:rgba(255,255,255,.06);}
+.card-menu-item .cmi-icon{font-size:14px;width:16px;text-align:center;}
+.card-menu-item.active-state{color:var(--gold);}
+.card-menu-item.danger{color:var(--red-lt);border-top:1px solid var(--border);margin-top:2px;}
 .card-minimized{padding-bottom:20px;}
 .card-pinned{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold);}
 .card-favorited{border-color:var(--gold);}
@@ -1133,7 +1141,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
               <input id="menu-search" placeholder="🔎 Buscar prato em todo o cardápio..." oninput="onMenuSearch(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--white);font-size:12px;"/>
             </div>
-            <div class="menu-cat-quicknav" id="menu-cat-quicknav"></div>
             <div class="menu-filter-bar" id="menu-filter-bar">
               <button type="button" class="menu-filter-chip active" data-filter="todos" onclick="setMenuFilter('todos')">🍽️ Todos</button>
               <button type="button" class="menu-filter-chip" data-filter="disponivel" onclick="setMenuFilter('disponivel')">✅ Disponível</button>
@@ -2710,36 +2717,67 @@ function setupCardControls(){
     // movimentação pro "⭐ Favoritos" — é pra onde ele volta quando desfavoritado.
     if (!card._homeParent) { card._homeParent = card.parentElement; card._homeNext = card.nextSibling; }
 
-    if (!titleEl.querySelector('.card-controls')) {
+    if (!titleEl.querySelector('.card-menu-wrap')) {
       const textSpan = document.createElement('span');
       textSpan.textContent = titleEl.textContent;
       titleEl.textContent = '';
       titleEl.style.justifyContent = 'space-between';
       titleEl.appendChild(textSpan);
 
-      const controls = document.createElement('span');
-      controls.className = 'card-controls';
-      controls.style.cssText = 'display:flex;gap:4px;';
-      controls.innerHTML =
-        '<button type="button" class="card-ctrl-btn" data-act="fav" title="Favoritar (aparece em ⭐ Favoritos, no topo)">⭐</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="min" title="Minimizar">➖</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="pin" title="Fixar no topo do grupo">📌</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="cfg" title="Ir para o primeiro campo">⚙️</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="hide" title="Ocultar/Mostrar conteúdo">👁️</button>' +
-        '<button type="button" class="card-ctrl-btn" data-act="close" title="Fechar este card">✖</button>';
-      titleEl.appendChild(controls);
-      controls.addEventListener('click', (e) => {
-        const btn = e.target.closest('.card-ctrl-btn');
-        if (btn) handleCardControlClick(card, cardId, btn.dataset.act);
+      const wrap = document.createElement('span');
+      wrap.className = 'card-menu-wrap';
+      wrap.innerHTML =
+        '<button type="button" class="card-menu-btn" data-menu-toggle title="Mais opções">⋮</button>' +
+        '<div class="card-menu-dropdown">' +
+          '<button type="button" class="card-menu-item" data-act="fav"><span class="cmi-icon">⭐</span> Favoritar</button>' +
+          '<button type="button" class="card-menu-item" data-act="pin"><span class="cmi-icon">📌</span> Fixar no topo do grupo</button>' +
+          '<button type="button" class="card-menu-item" data-act="min"><span class="cmi-icon">➖</span> Minimizar</button>' +
+          '<button type="button" class="card-menu-item" data-act="hide"><span class="cmi-icon">👁️</span> Ocultar/Mostrar conteúdo</button>' +
+          '<button type="button" class="card-menu-item" data-act="cfg"><span class="cmi-icon">⚙️</span> Ir pro primeiro campo</button>' +
+          '<button type="button" class="card-menu-item danger" data-act="close"><span class="cmi-icon">✖</span> Fechar este card</button>' +
+        '</div>';
+      titleEl.appendChild(wrap);
+      wrap.querySelector('[data-menu-toggle]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleCardMenu(wrap);
+      });
+      wrap.querySelector('.card-menu-dropdown').addEventListener('click', (e) => {
+        const btn = e.target.closest('.card-menu-item');
+        if (btn) { handleCardControlClick(card, cardId, btn.dataset.act); closeAllCardMenus(); }
       });
     }
 
     const state = states[cardId] || {};
     if (state.closed) { card.style.display = 'none'; return; }
     applyCardState(card, state);
+    syncCardMenuActiveState(card, state);
   });
   updateFavSectionVisibility();
 }
+// v77: marca em negrito/dourado, no mini-menu "⋮", quais opções já estão ativas nesse card
+// (favoritado / fixado / minimizado / oculto) — só um retoque visual, sem mudar a lógica.
+function syncCardMenuActiveState(card, state){
+  const dropdown = card.querySelector('.card-menu-dropdown');
+  if (!dropdown) return;
+  const map = { fav:'favorite', pin:'pinned', min:'minimized', hide:'hidden' };
+  dropdown.querySelectorAll('.card-menu-item[data-act]').forEach(btn => {
+    const field = map[btn.dataset.act];
+    if (field) btn.classList.toggle('active-state', !!state[field]);
+  });
+}
+// v77: só um menu "⋮" aberto por vez, e fecha ao clicar fora — mesmo padrão já usado nos modais.
+function closeAllCardMenus(){
+  document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
+}
+function toggleCardMenu(wrap){
+  const dropdown = wrap.querySelector('.card-menu-dropdown');
+  const willOpen = !dropdown.classList.contains('open');
+  closeAllCardMenus();
+  if (willOpen) dropdown.classList.add('open');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-menu-wrap')) closeAllCardMenus();
+});
 
 // v69: mostra/esconde a seção "⭐ Favoritos" dependendo se tem algum card favoritado
 function updateFavSectionVisibility(){
@@ -2900,6 +2938,7 @@ function handleCardControlClick(card, cardId, act){
   saveCardStates(states);
   if (state.closed) card.style.display = 'none';
   else applyCardState(card, state);
+  syncCardMenuActiveState(card, state);
   updateFavSectionVisibility();
 }
 
@@ -5281,14 +5320,9 @@ function setMenuFilter(f){
   renderMenuItems();
 }
 function openClientPreview(){ window.open('/', '_blank'); }
-function renderMenuCatQuicknav(){
-  const el=document.getElementById('menu-cat-quicknav');
-  if(!el) return;
-  el.innerHTML = menu.map((s,i)=>`
-    <button type="button" class="menu-cat-chip ${i===activeCatIdx && !menuSearchQuery?'active':''}" onclick="selectCat(${i})">
-      <span>${s.icon||'🍽️'}</span><span>${esc(s.title)}</span><span class="cnt">${s.items.length}</span>
-    </button>`).join('');
-}
+// v77: BUG CORRIGIDO — a v76 tinha adicionado chips de categoria em cima da lista de itens,
+// só que isso duplicava a mesma navegação que já existe na coluna esquerda (mesmas categorias,
+// dois lugares diferentes). Removido — a coluna esquerda é a única navegação de categorias.
 // v76: um item conta como "em Promoção" se tiver um Anúncio ativo com desconto amarrado a ele
 // (ver Central de Mensagens → Anúncios), e como "Destaque" se tiver algum badge (global ou próprio).
 function itemHasActivePromo(item, si, ii){
@@ -5334,7 +5368,6 @@ function renderMenuEditor(){
       </div>
     </div>`).join('');
   setupCatDragDrop();
-  renderMenuCatQuicknav();
   renderMenuItems();
 }
 // v76: arrastar-e-soltar pra reordenar categorias (além dos botões ▲▼, que continuam
@@ -5619,7 +5652,6 @@ function itemMatches(item,q){
   return (item.name||'').toLowerCase().includes(q) || (item.desc||'').toLowerCase().includes(q);
 }
 function renderMenuItems(){
-  renderMenuCatQuicknav();
   // Modo busca: procura em TODAS as categorias, não só na selecionada
   if(menuSearchQuery){
     const results=[];
