@@ -1594,6 +1594,16 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             </select>
           </div>
           <button type="button" class="btn secondary sm" style="margin-top:8px;" onclick="testCustomerAlertSound()">▶ Testar Som</button>
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+            <label style="font-size:10px;">📤 Enviar novo som (upload)</label>
+            <div style="font-size:11px;color:var(--muted);margin:2px 0 8px;">
+              MP3, WAV, OGG ou M4A — até 6MB. Depois de enviado, o som aparece na lista abaixo e
+              pode ser escolhido no menu acima como "🎤 Personalizado".
+            </div>
+            <input type="file" id="customer-sound-upload-input" accept="audio/*" style="display:none;" onchange="uploadCustomerAlertSound(this)"/>
+            <button type="button" class="btn secondary sm" id="customer-sound-upload-btn" onclick="document.getElementById('customer-sound-upload-input').click()">📤 Escolher arquivo de áudio</button>
+            <div id="customer-sound-custom-list" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
+          </div>
         </div>      </div>
     </div>
 
@@ -3603,7 +3613,92 @@ const CUSTOMER_ALERT_SOUNDS = {
 };
 function testCustomerAlertSound(){
   const kind = document.getElementById('cfg-customer-alert-sound')?.value || 'classico';
+  playCustomerAlertSoundByKind(kind);
+}
+// v82: toca um som pelo "kind" salvo em cfg.customerAlertSound — que agora pode ser um dos 5
+// prontos (chave direta em CUSTOMER_ALERT_SOUNDS) ou "custom:<id>" apontando pra um arquivo
+// enviado por upload (cfg.customCustomerAlertSounds). Usado tanto no botão "▶ Testar Som" aqui
+// quanto, do mesmo jeito (função irmã), no app do cliente em index.html.
+function playCustomerAlertSoundByKind(kind){
+  if(String(kind||'').startsWith('custom:')){
+    const id = kind.slice(7);
+    const item = (cfg.customCustomerAlertSounds||[]).find(s=>s.id===id);
+    if(item && item.url){ try{ const a=new Audio(item.url); a.volume=alertVolume(); a.play().catch(()=>{}); }catch(e){} return; }
+    // som customizado não existe mais (foi excluído) — cai pro clássico em vez de ficar mudo
+    CUSTOMER_ALERT_SOUNDS.classico();
+    return;
+  }
   (CUSTOMER_ALERT_SOUNDS[kind]||CUSTOMER_ALERT_SOUNDS.classico)();
+}
+// v82: envia um arquivo de áudio (upload do admin) pra virar uma nova opção de som na lista —
+// reaproveita a mesma rota genérica /api/upload que já aceita áudio (mensagens de voz do
+// Atendimento usam ela também). Depois de enviado, entra em cfg.customCustomerAlertSounds e já
+// aparece no menu "Estilo do som" acima, pronto pra ser escolhido e salvo.
+async function uploadCustomerAlertSound(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const btn = document.getElementById('customer-sound-upload-btn');
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+  try{
+    const dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+    const res = await apiPost('/api/upload', { dataUrl });
+    if(!res.ok){ alert(res.data.error||'Erro ao enviar o áudio.'); return; }
+    const name = (file.name||'Som').replace(/\.[a-z0-9]+$/i,'').slice(0,40) || 'Som personalizado';
+    const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    if(!Array.isArray(cfg.customCustomerAlertSounds)) cfg.customCustomerAlertSounds = [];
+    cfg.customCustomerAlertSounds.push({ id, name, url: res.data.url });
+    // já salva sozinho — não faz sentido o admin enviar o áudio e ter que lembrar de clicar em
+    // "Salvar" só pra ele não sumir se sair da página sem querer.
+    const saveRes = await apiPost('/api/config', { cfg, menu });
+    if(!saveRes.ok){ alert(saveRes.data.error||'Áudio enviado, mas não consegui salvar a lista. Tente de novo.'); return; }
+    renderCustomerSoundCustomList();
+    populateCustomerAlertSoundOptions();
+    document.getElementById('cfg-customer-alert-sound').value = 'custom:' + id;
+    showToast('✅ Som enviado', name);
+  }catch(e){
+    alert('Não foi possível enviar o áudio. Tente um arquivo menor ou em outro formato (MP3/WAV/OGG/M4A).');
+  } finally {
+    btn.textContent = originalLabel; btn.disabled = false; input.value = '';
+  }
+}
+async function deleteCustomerAlertSound(id){
+  if(!confirm('Excluir esse som da lista? Se ele estiver escolhido como som atual, o app do cliente volta pro som Clássico.')) return;
+  cfg.customCustomerAlertSounds = (cfg.customCustomerAlertSounds||[]).filter(s=>s.id!==id);
+  if(cfg.customerAlertSound === 'custom:'+id) cfg.customerAlertSound = 'classico';
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao excluir.'); return; }
+  renderCustomerSoundCustomList();
+  populateCustomerAlertSoundOptions();
+  document.getElementById('cfg-customer-alert-sound').value = cfg.customerAlertSound;
+}
+function renderCustomerSoundCustomList(){
+  const wrap = document.getElementById('customer-sound-custom-list');
+  if(!wrap) return;
+  const list = cfg.customCustomerAlertSounds||[];
+  if(!list.length){ wrap.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhum som enviado ainda.</div>'; return; }
+  wrap.innerHTML = list.map(s => `
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">
+      <span style="flex:1;font-size:12px;color:var(--white);">🎤 ${esc(s.name)}</span>
+      <button type="button" class="btn secondary sm" onclick="playCustomerAlertSoundByKind('custom:${s.id}')" title="Ouvir">▶</button>
+      <button type="button" class="btn danger sm" onclick="deleteCustomerAlertSound('${s.id}')" title="Excluir">🗑</button>
+    </div>`).join('');
+}
+// Reconstrói o <select> com os 5 prontos + os enviados por upload — chamado ao carregar a
+// página e depois de qualquer envio/exclusão, pra lista ficar sempre em dia.
+function populateCustomerAlertSoundOptions(){
+  const sel = document.getElementById('cfg-customer-alert-sound');
+  if(!sel) return;
+  const current = sel.value;
+  const presets = ['classico','suave','dupla','sino','oriental'];
+  Array.from(sel.options).forEach(o=>{ if(!presets.includes(o.value)) o.remove(); });
+  (cfg.customCustomerAlertSounds||[]).forEach(s=>{
+    const opt = document.createElement('option');
+    opt.value = 'custom:' + s.id;
+    opt.textContent = '🎤 ' + s.name + ' (personalizado)';
+    sel.appendChild(opt);
+  });
+  if(Array.from(sel.options).some(o=>o.value===current)) sel.value = current;
 }
 
 async function advanceStatus(id){
@@ -8123,6 +8218,8 @@ function loadPrinterCentral(){
   renderStationsSettings();
   const printEl=document.getElementById('cfg-print');
   if(printEl) printEl.value=String(Number(cfg.print)||0);
+  populateCustomerAlertSoundOptions();
+  renderCustomerSoundCustomList();
   const custAlertEl=document.getElementById('cfg-customer-alert-sound');
   if(custAlertEl) custAlertEl.value=cfg.customerAlertSound||'classico';
   const fontEl=document.getElementById('print-font'); if(fontEl) fontEl.value=cfg.printFont||'monospace';

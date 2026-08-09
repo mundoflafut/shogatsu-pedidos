@@ -3709,6 +3709,19 @@ function playAlertOriental() {
 }
 function playConfirmSound() {
   const kind = (cfg && cfg.customerAlertSound) || 'classico';
+  // v82: além dos 5 sons prontos (sintetizados), agora o restaurante pode enviar um arquivo de
+  // áudio próprio em Configurações → Central de Impressão → 🎋 Aviso Sonoro do Cliente. Esses
+  // ficam salvos em cfg.customCustomerAlertSounds e o som escolhido vira "custom:<id>" em
+  // cfg.customerAlertSound — nesse caso toca o arquivo de verdade em vez de sintetizar.
+  if (String(kind).startsWith('custom:')) {
+    const id = kind.slice(7);
+    const item = ((cfg && cfg.customCustomerAlertSounds) || []).find(s => s.id === id);
+    if (item && item.url) {
+      try { new Audio(item.url).play().catch(() => {}); } catch (e) {}
+      return;
+    }
+    // som customizado não existe mais (admin excluiu) — cai pro clássico em vez de ficar mudo
+  }
   (ALERT_SOUNDS[kind] || ALERT_SOUNDS.classico).play();
 }
 // v45: quando chega uma notificação push (promoção, cupom etc.) com o site aberto na aba, o
