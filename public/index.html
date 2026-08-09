@@ -2824,10 +2824,19 @@ function getItemByKey(key) {
 function getActiveItemDiscount(key) {
   const list = cfg.announcements || [];
   const now = Date.now();
+  const catId = key.slice(0, key.lastIndexOf('-'));
   for (const a of list) {
     if (a.active === false) continue;
     if (a.expiresAt && new Date(a.expiresAt).getTime() < now) continue;
-    if (a.itemDiscount && a.itemDiscount.key === key && Number(a.itemDiscount.value) > 0) return a.itemDiscount;
+    const d = a.itemDiscount;
+    if (!d || !(Number(d.value) > 0)) continue;
+    // v78: desconto pode estar amarrado a UM prato (formato antigo v75), a VÁRIOS pratos, ou
+    // à categoria inteira — testa os três formatos.
+    const matches = d.key ? d.key === key
+      : d.mode === 'category' ? d.categoryId === catId
+      : d.mode === 'items' ? (d.keys||[]).includes(key)
+      : false;
+    if (matches) return d;
   }
   return null;
 }

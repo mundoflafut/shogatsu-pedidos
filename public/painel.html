@@ -469,8 +469,8 @@ table{max-width:100%;}
 .save-all-bar{position:sticky;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);padding:14px 20px;margin:24px -20px -20px;display:flex;align-items:center;justify-content:flex-end;gap:14px;box-shadow:0 -4px 20px rgba(0,0,0,.25);}
 .settings-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
 .card-menu-wrap{position:relative;}
-.card-menu-btn{background:none;border:none;cursor:pointer;opacity:.6;font-size:16px;padding:2px 8px;border-radius:6px;line-height:1;}
-.card-menu-btn:hover{opacity:1;background:rgba(255,255,255,.08);}
+.card-menu-btn{background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.35);color:var(--gold);cursor:pointer;opacity:1;font-size:16px;font-weight:700;padding:2px 9px;border-radius:7px;line-height:1.4;}
+.card-menu-btn:hover{background:var(--gold);color:#1a1405;border-color:var(--gold);}
 .card-menu-dropdown{position:absolute;top:26px;right:0;background:var(--card);border:1px solid var(--border2);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.5);min-width:190px;z-index:50;overflow:hidden;display:none;}
 .card-menu-dropdown.open{display:block;}
 .card-menu-item{display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;color:var(--white);font-size:12.5px;text-align:left;padding:9px 12px;cursor:pointer;transition:background .12s;}
@@ -868,8 +868,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         sonoro quando chega mensagem nova ou quando um cliente pede pra falar com atendente —
         dá pra silenciar cada conversa individualmente pelo ícone 🔔 no topo do chat.
       </div>
-      <div style="padding:0 0 10px;">
+      <div style="padding:0 0 10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button type="button" class="btn secondary sm" onclick="abrirBuscaClienteAtendimento()">🔍 Nova conversa com cliente cadastrado</button>
+        <button type="button" class="btn secondary sm" onclick="openAdminChatBgPicker()">🎨 Fundo do chat</button>
       </div>
       <div class="wa-admin-wrap" id="wa-admin-wrap">
         <div class="wa-admin-list" id="wa-admin-list"></div>
@@ -1572,6 +1573,36 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
         <div class="settings-accordion-body" id="acc-body-restaurante">
           <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 Automações</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Mesmos interruptores que aparecem no rodapé do menu lateral — só que aqui, em card,
+            fica mais fácil de ver o estado certinho (ligado/desligado) e o que cada um faz.
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">🏪 Restaurante Aberto</div>
+                <div class="store-toggle-label" id="cfg-store-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Desligado = cardápio mostra "Fechado" e não aceita pedido novo.</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-store-toggle" onchange="toggleStore(this)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📋 Aceite Automático de Pedidos</div>
+                <div class="store-toggle-label" id="cfg-auto-accept-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📅 Aceite Automático de Reservas</div>
+                <div class="store-toggle-label" id="cfg-auto-accept-rsv-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-rsv-toggle" onchange="toggleAutoAcceptReservations(this)"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
 <div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
@@ -1957,6 +1988,11 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div class="field"><label>Alerta Sonoro (pedido novo)</label>
             <select id="cfg-sound"><option value="1">✅ Ativado</option><option value="0">❌ Desativado</option></select>
           </div>
+          <div class="field"><label>🔉 Volume do alerta <span id="cfg-alert-volume-val" style="font-weight:400;color:var(--muted);">100%</span></label>
+            <input type="range" id="cfg-alert-volume" min="0" max="1" step="0.05" value="1" oninput="onAlertVolumeInput(this.value)"/>
+          </div>
+          <button type="button" class="btn secondary sm" onclick="playBeep()" style="margin-top:6px;">▶ Testar volume</button>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Vale só neste aparelho/navegador — cada computador da loja pode ter seu próprio volume.</div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🔐 Segurança</div>
@@ -2151,6 +2187,37 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="modal-footer">
       <button class="btn secondary" onclick="closeModal('item-modal')">Cancelar</button>
       <button class="btn primary" onclick="saveItem()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL 🎨 FUNDO DO CHAT DO PAINEL (admin) -->
+<div class="modal-overlay" id="admin-chatbg-modal">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title">🎨 Fundo do chat do painel</span>
+      <button class="modal-close" onclick="closeModal('admin-chatbg-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+        Só muda o fundo das conversas <b>aqui dentro do painel</b> (Mensagens → Conversas) — não
+        mexe no fundo que o cliente vê no cardápio, que é separado.
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
+        <input type="checkbox" id="admin-chatbg-enabled" onchange="toggleAdminChatBgEnabled(this.checked)"/> Fundo ativo
+      </label>
+      <div class="field"><label style="font-size:10px;">Escurecido (pra texto ficar legível)</label>
+        <input type="range" id="admin-chatbg-overlay" min="0" max="0.85" step="0.05" oninput="document.getElementById('admin-chatbg-overlay-val').textContent=Math.round(this.value*100)+'%';saveAdminChatBgOverlay(this.value)"/>
+        <span id="admin-chatbg-overlay-val" style="font-size:11px;color:var(--muted);">45%</span>
+      </div>
+      <div style="display:flex;gap:8px;margin:10px 0;">
+        <input type="file" id="admin-chatbg-file" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="uploadAdminChatBgPhoto(this)"/>
+        <button type="button" class="btn secondary sm" onclick="document.getElementById('admin-chatbg-file').click()">📤 Enviar foto</button>
+        <button type="button" class="btn secondary sm" onclick="removeAdminChatBg()">🗑 Remover</button>
+      </div>
+      <div id="admin-chatbg-status" style="font-size:11px;min-height:16px;margin-bottom:8px;"></div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">Ou escolha uma foto pronta:</div>
+      <div id="admin-chatbg-gallery" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;"></div>
     </div>
   </div>
 </div>
@@ -2980,6 +3047,25 @@ async function loadConfigAndMenu(){
   document.getElementById('store-status-text').textContent = (Number(cfg.open) ? 'Restaurante Aberto' : 'Restaurante Fechado') + (autoSched ? ' (auto)' : '');
   document.getElementById('auto-accept-toggle').checked = Boolean(Number(cfg.autoAcceptOrders));
   document.getElementById('auto-accept-status-sub').textContent = Number(cfg.autoAcceptOrders) ? 'ligado — aceita sozinho' : 'desligado';
+  applyAdminChatBackground();
+  // v78: mesmos interruptores, agora também como card em Configurações → 🏪 Restaurante
+  syncAutomationToggles();
+}
+// v78: os interruptores de automação existem em dois lugares (rodapé do menu + card em
+// Configurações) — essa função mantém os dois sempre iguais, não importa qual foi clicado.
+function syncAutomationToggles(){
+  const storeEl = document.getElementById('cfg-store-toggle');
+  if (storeEl) { storeEl.checked = Boolean(Number(cfg.open)); storeEl.disabled = !!(cfg.schedule && cfg.schedule.enabled); }
+  const autoEl = document.getElementById('cfg-auto-accept-toggle');
+  if (autoEl) autoEl.checked = Boolean(Number(cfg.autoAcceptOrders));
+  const subEl = document.getElementById('cfg-auto-accept-status-sub');
+  if (subEl) subEl.textContent = Number(cfg.autoAcceptOrders) ? '✅ Ligado — pedido novo já entra aceito.' : 'Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.';
+  const rsvEl = document.getElementById('cfg-auto-accept-rsv-toggle');
+  if (rsvEl) rsvEl.checked = Boolean(Number(cfg.autoAcceptReservations));
+  const rsvSubEl = document.getElementById('cfg-auto-accept-rsv-status-sub');
+  if (rsvSubEl) rsvSubEl.textContent = Number(cfg.autoAcceptReservations) ? '✅ Ligado — reserva nova já entra confirmada.' : 'Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".';
+  const storeSubEl = document.getElementById('cfg-store-status-sub');
+  if (storeSubEl) storeSubEl.textContent = Number(cfg.open) ? '✅ Aberto — recebendo pedidos normalmente.' : '🔴 Fechado — cardápio mostra "Fechado" e não aceita pedido novo.';
 }
 
 async function loadOrders(){
@@ -3167,6 +3253,7 @@ async function toggleStore(el){
   txt.textContent=cfg.open?'Restaurante Aberto':'Restaurante Fechado';
   const res = await apiPost('/api/config',{ cfg:{open:cfg.open}, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  syncAutomationToggles();
   showToast(cfg.open?'✅ Aberto':'❌ Fechado', cfg.open?'Restaurante está aceitando pedidos.':'Restaurante não está aceitando pedidos.');
 }
 
@@ -3179,7 +3266,18 @@ async function toggleAutoAccept(el){
   document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado';
   const res = await apiPost('/api/config',{ cfg:{autoAcceptOrders:cfg.autoAcceptOrders}, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  syncAutomationToggles();
   showToast(cfg.autoAcceptOrders?'🤖 Aceite automático ligado':'✋ Aceite automático desligado', cfg.autoAcceptOrders?'Pedidos novos já entram aceitos, sem precisar clicar em nada.':'Volta a precisar clicar em "Aceitar Pedido" pra cada um.');
+}
+// v78: liga/desliga o aceite automático de RESERVAS — mesma ideia da de pedidos, mas pra
+// reserva de mesa: quando ligado, toda reserva nova já nasce CONFIRMADA (ver POST
+// /api/reservations no server.js), sem precisar clicar em "Confirmar" no painel.
+async function toggleAutoAcceptReservations(el){
+  cfg.autoAcceptReservations = el.checked ? 1 : 0;
+  const res = await apiPost('/api/config',{ cfg:{autoAcceptReservations:cfg.autoAcceptReservations}, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; return; }
+  syncAutomationToggles();
+  showToast(cfg.autoAcceptReservations?'🤖 Aceite automático de reservas ligado':'✋ Aceite automático de reservas desligado', cfg.autoAcceptReservations?'Reservas novas já entram confirmadas, sem precisar clicar em nada.':'Volta a precisar clicar em "Confirmar" pra cada reserva.');
 }
 
 // ═══════════════════════════════════════════
@@ -3193,12 +3291,28 @@ function orderTime(iso){
   if(diff<1)return'agora';if(diff<60)return diff+'min';
   return Math.round(diff/60)+'h';
 }
+// v78: volume dos alertas sonoros (🔊 Alertas, em Configurações) — fica salvo só neste
+// aparelho/navegador (localStorage), não na loja toda, porque cada computador pode estar num
+// ambiente diferente (balcão barulhento x escritório silencioso).
+function alertVolume(){
+  const v = parseFloat(localStorage.getItem('shogatsu_alert_volume'));
+  return isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+}
+function onAlertVolumeInput(value){
+  localStorage.setItem('shogatsu_alert_volume', value);
+  document.getElementById('cfg-alert-volume-val').textContent = Math.round(value*100)+'%';
+}
+function loadAlertVolumeUI(){
+  const v = alertVolume();
+  const el = document.getElementById('cfg-alert-volume');
+  if(el){ el.value = v; document.getElementById('cfg-alert-volume-val').textContent = Math.round(v*100)+'%'; }
+}
 function playBeep(){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     [880,1100,880].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(ctx.destination);
+      o.connect(g);g.connect(_mg);
       o.frequency.value=f;g.gain.setValueAtTime(.3,ctx.currentTime+i*.15);
       g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+i*.15+.12);
       o.start(ctx.currentTime+i*.15);o.stop(ctx.currentTime+i*.15+.12);
@@ -3210,54 +3324,54 @@ function playBeep(){
 // pro admin poder ouvir e escolher em Configurações (botão "▶ Testar Som").
 const CUSTOMER_ALERT_SOUNDS = {
   classico(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     const o=ctx.createOscillator(),g=ctx.createGain();
     o.type='sine';o.frequency.setValueAtTime(880,ctx.currentTime);
     o.frequency.exponentialRampToValueAtTime(1320,ctx.currentTime+.12);
     g.gain.setValueAtTime(.15,ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.35);
-    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.35);
+    o.connect(g);g.connect(_mg);o.start();o.stop(ctx.currentTime+.35);
   }catch(e){} },
   suave(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     const o=ctx.createOscillator(),g=ctx.createGain();
     o.type='sine';o.frequency.setValueAtTime(660,ctx.currentTime);
     g.gain.setValueAtTime(.001,ctx.currentTime);
     g.gain.linearRampToValueAtTime(.12,ctx.currentTime+.05);
     g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.3);
-    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+.3);
+    o.connect(g);g.connect(_mg);o.start();o.stop(ctx.currentTime+.3);
   }catch(e){} },
   dupla(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     [700,1050].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.type='triangle';o.frequency.value=f;
       const t=ctx.currentTime+i*.16;
       g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(.16,t+.02);
       g.gain.exponentialRampToValueAtTime(.001,t+.2);
-      o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.2);
+      o.connect(g);g.connect(_mg);o.start(t);o.stop(t+.2);
     });
   }catch(e){} },
   sino(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     const now=ctx.currentTime;
     [523.25,659.25,784].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.type='sine';o.frequency.value=f;
       g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(i===0?.18:.08,now+.03);
       g.gain.exponentialRampToValueAtTime(.001,now+1.5);
-      o.connect(g);g.connect(ctx.destination);o.start(now);o.stop(now+1.5);
+      o.connect(g);g.connect(_mg);o.start(now);o.stop(now+1.5);
     });
   }catch(e){} },
   oriental(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
     const now=ctx.currentTime;
     [110,164.8,220].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.type='sine';o.frequency.value=f;
       g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(i===0?.22:.09,now+.06);
       g.gain.exponentialRampToValueAtTime(.001,now+4);
-      o.connect(g);g.connect(ctx.destination);o.start(now);o.stop(now+4);
+      o.connect(g);g.connect(_mg);o.start(now);o.stop(now+4);
     });
     [587.33,659.25,784,880].forEach((f,i)=>{
       const t=now+i*.28;
@@ -3265,7 +3379,7 @@ const CUSTOMER_ALERT_SOUNDS = {
       o.type='triangle';o.frequency.value=f;
       g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.13,t+.02);
       g.gain.exponentialRampToValueAtTime(.001,t+.9);
-      o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.9);
+      o.connect(g);g.connect(_mg);o.start(t);o.stop(t+.9);
     });
   }catch(e){} }
 };
@@ -3989,6 +4103,116 @@ async function removeChatBg(){
   renderChatBgEditor();
   statusEl.innerHTML = 'Fundo removido — voltou pro padrão do sistema.';
   setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+
+// ═══════════════════════════════════════════
+// v78: 🎨 FUNDO DO CHAT DO PAINEL (admin) — mesma ideia do fundo do Chat Express que o cliente
+// vê, só que pro chat interno (Mensagens → Conversas), guardado separado em
+// cfg.adminChatBackground. Reaproveita a mesma galeria de fotos prontas (CHATBG_GALLERY) e o
+// mesmo endpoint /api/chat/background, só que com target:'admin'.
+// ═══════════════════════════════════════════
+function openAdminChatBgPicker(){
+  openModal('admin-chatbg-modal');
+  renderAdminChatBgEditor();
+}
+function renderAdminChatBgEditor(){
+  const cb = cfg.adminChatBackground || { enabled:false, url:'', overlay:0.45 };
+  document.getElementById('admin-chatbg-enabled').checked = !!cb.enabled;
+  document.getElementById('admin-chatbg-overlay').value = (typeof cb.overlay==='number') ? cb.overlay : 0.45;
+  document.getElementById('admin-chatbg-overlay-val').textContent = Math.round(((typeof cb.overlay==='number')?cb.overlay:0.45)*100)+'%';
+  renderAdminChatBgGallery();
+  applyAdminChatBackground();
+}
+function renderAdminChatBgGallery(){
+  const cb = cfg.adminChatBackground || {};
+  const el = document.getElementById('admin-chatbg-gallery');
+  if(!el) return;
+  el.innerHTML = CHATBG_GALLERY.map(g => {
+    const active = cb.url === g.url;
+    const safeName = g.name.replace(/'/g,"\\'");
+    return `<button type="button" onclick="selectAdminChatBgPreset('${g.url}','${safeName}')"
+      style="padding:0;border-radius:10px;overflow:hidden;border:2px solid ${active?'#D32F2F':'var(--border)'};height:60px;position:relative;cursor:pointer;background:#0b0d11;">
+      <img src="${g.url}" alt="${g.name}" loading="lazy" data-retries="0" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="chatBgGalleryImgRetry(this)">
+      <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:8px;color:var(--muted);">Falha</span>
+    </button>`;
+  }).join('');
+}
+async function uploadAdminChatBgPhoto(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('admin-chatbg-status');
+  if(file.size > 5*1024*1024){ statusEl.innerHTML = '<span style="color:var(--red-lt);">Imagem muito grande (máx. 5MB).</span>'; input.value=''; return; }
+  statusEl.textContent = 'Enviando...';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const res = await apiPost('/api/chat/background', { dataUrl: reader.result, target:'admin' });
+    input.value = '';
+    if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao enviar.')+'</span>'; return; }
+    cfg.adminChatBackground = res.data.chatBackground;
+    renderAdminChatBgEditor();
+    statusEl.innerHTML = '<span style="color:var(--green);">✅ Fundo atualizado!</span>';
+    setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+  };
+  reader.readAsDataURL(file);
+}
+async function selectAdminChatBgPreset(url, name){
+  const statusEl = document.getElementById('admin-chatbg-status');
+  statusEl.textContent = 'Aplicando...';
+  const res = await apiPost('/api/chat/background', { presetUrl: url, presetName: name, target:'admin' });
+  if(!res.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao aplicar.')+'</span>'; return; }
+  cfg.adminChatBackground = res.data.chatBackground;
+  renderAdminChatBgEditor();
+  statusEl.innerHTML = '<span style="color:var(--green);">✅ Fundo aplicado!</span>';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+async function toggleAdminChatBgEnabled(checked){
+  const statusEl = document.getElementById('admin-chatbg-status');
+  const cb = cfg.adminChatBackground || {};
+  if(checked && !cb.url){
+    document.getElementById('admin-chatbg-enabled').checked = false;
+    statusEl.innerHTML = '<span style="color:var(--red-lt);">Envie uma imagem ou escolha uma da galeria antes de ativar.</span>';
+    return;
+  }
+  const res = await apiPost('/api/chat/background', { enabled: checked, target:'admin' });
+  if(!res.ok){ document.getElementById('admin-chatbg-enabled').checked = !checked; statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(res.data.error||'Erro ao salvar.')+'</span>'; return; }
+  cfg.adminChatBackground = res.data.chatBackground;
+  applyAdminChatBackground();
+  statusEl.innerHTML = checked ? '<span style="color:var(--green);">✅ Fundo ativado.</span>' : 'Fundo desativado.';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+let adminChatBgOverlaySaveTimer = null;
+function saveAdminChatBgOverlay(value){
+  clearTimeout(adminChatBgOverlaySaveTimer);
+  adminChatBgOverlaySaveTimer = setTimeout(async () => {
+    const res = await apiPost('/api/chat/background', { overlay: Number(value), target:'admin' });
+    if(res.ok){ cfg.adminChatBackground = res.data.chatBackground; applyAdminChatBackground(); }
+  }, 400);
+}
+async function removeAdminChatBg(){
+  if(!confirm('Remover a imagem de fundo do chat do painel?')) return;
+  const statusEl = document.getElementById('admin-chatbg-status');
+  const r = await fetch('/api/chat/background?target=admin', { method:'DELETE', headers: authHeaders() });
+  const data = await r.json();
+  if(!r.ok){ statusEl.innerHTML = '<span style="color:var(--red-lt);">'+(data.error||'Erro ao remover.')+'</span>'; return; }
+  cfg.adminChatBackground = data.chatBackground;
+  renderAdminChatBgEditor();
+  statusEl.innerHTML = 'Fundo removido.';
+  setTimeout(()=>{ statusEl.innerHTML=''; }, 4000);
+}
+// aplica o fundo escolhido na área de conversa do painel (chama no load do app e sempre que muda)
+function applyAdminChatBackground(){
+  const el = document.querySelector('.wa-admin-chat');
+  if(!el) return;
+  const cb = cfg.adminChatBackground;
+  if(cb && cb.enabled && cb.url){
+    const overlay = (typeof cb.overlay === 'number') ? cb.overlay : 0.45;
+    const safeUrl = String(cb.url).replace(/'/g,"%27").replace(/"/g,'&quot;');
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,${overlay}), rgba(0,0,0,${overlay})), url('${safeUrl}')`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+  } else {
+    el.style.backgroundImage = '';
+  }
 }
 
 function generateCustomQr(){
@@ -5323,12 +5547,23 @@ function openClientPreview(){ window.open('/', '_blank'); }
 // v77: BUG CORRIGIDO — a v76 tinha adicionado chips de categoria em cima da lista de itens,
 // só que isso duplicava a mesma navegação que já existe na coluna esquerda (mesmas categorias,
 // dois lugares diferentes). Removido — a coluna esquerda é a única navegação de categorias.
-// v76: um item conta como "em Promoção" se tiver um Anúncio ativo com desconto amarrado a ele
-// (ver Central de Mensagens → Anúncios), e como "Destaque" se tiver algum badge (global ou próprio).
+// v78: um item conta como "em Promoção" se algum Anúncio ativo tiver desconto amarrado a ele —
+// seja marcado item a item, seja pela categoria inteira dele (ver announcementDiscountMatches).
 function itemHasActivePromo(item, si, ii){
   const key = (menu[si] && menu[si].id) + '-' + ii;
+  const catId = menu[si] && menu[si].id;
   const now = Date.now();
-  return (cfg.announcements||[]).some(a => a.active!==false && (!a.expiresAt || new Date(a.expiresAt).getTime()>=now) && a.itemDiscount && a.itemDiscount.key===key);
+  return (cfg.announcements||[]).some(a => a.active!==false && (!a.expiresAt || new Date(a.expiresAt).getTime()>=now) && announcementDiscountMatches(a.itemDiscount, key, catId));
+}
+// v78: casa um desconto de anúncio com um item — suporta os 3 formatos:
+// modo antigo (v75, uma chave só em itemDiscount.key), modo "itens" (várias chaves) e
+// modo "categoria" (todo item daquela categoria).
+function announcementDiscountMatches(d, key, catId){
+  if(!d) return false;
+  if(d.key) return d.key === key; // formato antigo (v75), mantido funcionando
+  if(d.mode === 'category') return d.categoryId === catId;
+  if(d.mode === 'items') return (d.keys||[]).includes(key);
+  return false;
 }
 function itemHasBadge(item){
   const mode = item.badgeMode || 'global';
@@ -6718,6 +6953,7 @@ function loadSettings(){
   loadLabels();
   loadFeeSettings();
   loadCourierPaySettings();
+  loadAlertVolumeUI();
 }
 // ═══════════════════════════════════════════
 // Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
@@ -6782,6 +7018,16 @@ function loadMensagensCentral(){
   loadIaSettings();
   loadContatosImportados();
 }
+// v78: só considera válido um desconto se tiver valor E (pelo menos 1 prato marcado OU uma
+// categoria escolhida) — evita salvar um "desconto fantasma" sem nada vinculado. Também aceita
+// o formato antigo (v75, uma chave só), pra não quebrar anúncios já salvos.
+function announcementDiscountIsValid(d){
+  if(!d || !(Number(d.value) > 0)) return false;
+  if(d.key) return true; // formato antigo
+  if(d.mode==='category') return !!d.categoryId;
+  if(d.mode==='items') return Array.isArray(d.keys) && d.keys.length>0;
+  return false;
+}
 async function saveMensagensCentral(){
   cfg.coupons = couponsState.filter(c=>String(c.code||'').trim());
   cfg.announcements = announcementsState
@@ -6790,7 +7036,7 @@ async function saveMensagensCentral(){
       ...a,
       // v75: só salva o desconto se o admin realmente escolheu um prato e um valor válido —
       // evita salvar um "desconto fantasma" sem prato vinculado.
-      itemDiscount: (a.itemDiscount && a.itemDiscount.key && Number(a.itemDiscount.value) > 0) ? a.itemDiscount : null
+      itemDiscount: announcementDiscountIsValid(a.itemDiscount) ? a.itemDiscount : null
     }));
   cfg.sms = {
     accountSid: document.getElementById('sms-sid').value.trim(),
@@ -7278,6 +7524,26 @@ function menuItemOptionsHtml(selectedKey){
     }).join('') + '</optgroup>'
   ).join('');
 }
+// v78: checkboxes de item, agrupados por categoria, pra marcar VÁRIOS pratos de uma vez.
+function menuItemChecklistHtml(i, selectedKeys){
+  return (menu||[]).map(sec => `
+    <div style="margin-bottom:6px;">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:6px 0 3px;">${esc(sec.icon||'')} ${esc(sec.title||'')}</div>
+      ${(sec.items||[]).map((it,ii) => {
+        const key = sec.id + '-' + ii;
+        const checked = (selectedKeys||[]).includes(key);
+        return `<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 4px;">
+          <input type="checkbox" ${checked?'checked':''} onchange="toggleAnnouncementDiscountKey(${i},'${key}',this.checked)"/>
+          ${esc(it.name)} <span style="color:var(--muted);">(R$ ${Number(it.price).toFixed(2).replace('.',',')})</span>
+        </label>`;
+      }).join('')}
+    </div>`).join('');
+}
+function menuCategoryOptionsHtml(selectedId){
+  return '<option value="">— selecione uma categoria —</option>' + (menu||[]).map(sec =>
+    `<option value="${sec.id}" ${sec.id===selectedId?'selected':''}>${esc(sec.icon||'')} ${esc(sec.title)} (${sec.items.length} itens)</option>`
+  ).join('');
+}
 function renderAnnouncementsList(){
   const el=document.getElementById('announcements-list');
   if(!el)return;
@@ -7285,7 +7551,9 @@ function renderAnnouncementsList(){
     ? '<div style="font-size:11px;color:var(--muted);">Nenhum anúncio cadastrado ainda.</div>'
     : announcementsState.map((a,i)=>{
       const hasDiscount = !!a.itemDiscount;
-      const d = a.itemDiscount || { key:'', type:'percent', value:'' };
+      // v78: normaliza formato antigo (v75, uma chave só) pro formato novo (várias chaves)
+      const d = a.itemDiscount ? Object.assign({ mode:'items', keys: a.itemDiscount.key?[a.itemDiscount.key]:[], categoryId:'', type:'percent', value:'' }, a.itemDiscount) : { mode:'items', keys:[], categoryId:'', type:'percent', value:'' };
+      const qtd = d.mode==='category' ? (menu.find(s=>s.id===d.categoryId)?.items.length||0) : d.keys.length;
       return `
       <div class="vgroup">
         <div class="vgroup-head" style="flex-wrap:wrap;">
@@ -7298,13 +7566,21 @@ function renderAnnouncementsList(){
         <textarea placeholder="Mensagem completa do anúncio" oninput="announcementsState[${i}].message=this.value" style="width:100%;min-height:50px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--white);font-size:12px;margin-top:6px;">${a.message||''}</textarea>
         <div class="field" style="margin-top:6px;"><label style="font-size:10px;">Válido até (opcional)</label><input type="date" value="${a.expiresAt?a.expiresAt.slice(0,10):''}" onchange="announcementsState[${i}].expiresAt=this.value?new Date(this.value+'T23:59:59').toISOString():''"/></div>
         <label style="font-size:11px;display:flex;align-items:center;gap:6px;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
-          <input type="checkbox" ${hasDiscount?'checked':''} onchange="toggleAnnouncementDiscount(${i}, this.checked)"/> 🏷️ Aplicar desconto direto num item do cardápio
+          <input type="checkbox" ${hasDiscount?'checked':''} onchange="toggleAnnouncementDiscount(${i}, this.checked)"/> 🏷️ Aplicar desconto direto no cardápio
         </label>
         ${hasDiscount ? `
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:8px;">
-          <div class="field"><label style="font-size:10px;">Prato</label>
-            <select onchange="announcementsState[${i}].itemDiscount.key=this.value">${menuItemOptionsHtml(d.key)}</select>
-          </div>
+        <div style="display:flex;gap:14px;font-size:12px;margin:8px 0;">
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="disc-mode-${i}" ${d.mode==='items'?'checked':''} onchange="setAnnouncementDiscountMode(${i},'items')"/> Um ou mais pratos</label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="disc-mode-${i}" ${d.mode==='category'?'checked':''} onchange="setAnnouncementDiscountMode(${i},'category')"/> Categoria inteira</label>
+        </div>
+        ${d.mode==='category' ? `
+        <div class="field"><label style="font-size:10px;">Categoria</label>
+          <select onchange="announcementsState[${i}].itemDiscount.categoryId=this.value">${menuCategoryOptionsHtml(d.categoryId)}</select>
+        </div>` : `
+        <div style="max-height:160px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">
+          ${menuItemChecklistHtml(i, d.keys)}
+        </div>`}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
           <div class="field"><label style="font-size:10px;">Tipo</label>
             <select onchange="announcementsState[${i}].itemDiscount.type=this.value">
               <option value="percent" ${d.type==='percent'?'selected':''}>% desconto</option>
@@ -7315,14 +7591,28 @@ function renderAnnouncementsList(){
             <input type="number" min="0" step="0.01" value="${d.value||''}" placeholder="${d.type==='percent'?'ex: 15':'ex: 5.00'}" oninput="announcementsState[${i}].itemDiscount.value=parseFloat(this.value)||0"/>
           </div>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">O prato aparece com o preço riscado + preço com desconto no cardápio, enquanto este anúncio estiver ativo e não vencido.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">${qtd} prato${qtd===1?'':'s'} vão sair com preço riscado + desconto no cardápio, enquanto este anúncio estiver ativo e não vencido.</div>
         ` : ''}
       </div>`;
     }).join('');
 }
 function toggleAnnouncementDiscount(i, checked){
-  announcementsState[i].itemDiscount = checked ? { key:'', type:'percent', value:'' } : null;
+  announcementsState[i].itemDiscount = checked ? { mode:'items', keys:[], categoryId:'', type:'percent', value:'' } : null;
   renderAnnouncementsList();
+}
+function setAnnouncementDiscountMode(i, mode){
+  announcementsState[i].itemDiscount.mode = mode;
+  renderAnnouncementsList();
+}
+function toggleAnnouncementDiscountKey(i, key, checked){
+  const d = announcementsState[i].itemDiscount;
+  d.keys = d.keys || [];
+  if(checked){ if(!d.keys.includes(key)) d.keys.push(key); }
+  else { d.keys = d.keys.filter(k=>k!==key); }
+  // não precisa re-renderizar a lista inteira aqui (perderia o scroll do checklist) — só
+  // atualiza a contagem mostrada embaixo
+  const countEl = document.querySelector(`#announcements-list .vgroup:nth-child(${i+1}) div[style*="font-size:10px;color:var(--muted);margin-top:4px"]`);
+  if(countEl) countEl.textContent = `${d.keys.length} prato${d.keys.length===1?'':'s'} vão sair com preço riscado + desconto no cardápio, enquanto este anúncio estiver ativo e não vencido.`;
 }
 function addAnnouncement(){
   announcementsState.push({id:'an'+Date.now().toString(36), title:'', message:'', active:true, expiresAt:'', itemDiscount:null});
