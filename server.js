@@ -130,6 +130,7 @@ const DEFAULT_CFG = {
   chatAvatarUrl: '',
   print: 0,                     // 1 = imprime automaticamente as vias ao chegar um pedido novo
   autoAcceptOrders: 0,          // v55: 1 = pedido novo já nasce ACEITO sozinho (pula o clique em "Aceitar Pedido"), com número de ficha já atribuído — pensado pra combinar com impressão automática (vias já saem com o número certo, sem ninguém precisar tocar em nada)
+  autoAcceptReservations: 0,    // v78: 1 = reserva nova já nasce CONFIRMADA sozinha (pula o clique em "Confirmar" no painel)
   sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
   customerAlertSound: 'classico', // som tocado no app do cliente a cada aviso (classico|suave|dupla|sino|oriental)
   labels: {                     // textos dos botões/status do painel, customizáveis pelo admin
@@ -304,6 +305,9 @@ const DEFAULT_CFG = {
   // ou uma das fotos prontas da galeria (/images/chat-backgrounds/...). `overlay` é a opacidade
   // (0 a 1) do escurecido aplicado por cima da foto pra manter o texto das mensagens legível.
   chatBackground: { enabled: false, url: '', name: '', size: 0, width: 0, height: 0, date: '', overlay: 0.45 },
+  // v78: mesma ideia do fundo do Chat Express (cliente), só que pro chat interno do painel
+  // (Mensagens → Conversas) — cada um pode ter sua própria foto de fundo, independente.
+  adminChatBackground: { enabled: false, url: '', name: '', size: 0, width: 0, height: 0, date: '', overlay: 0.45 },
   // ── Cardápio do Rodízio Popular (página pública cardapio-rodizio-popular.html) — v39:
   // antes esses dados ficavam fixos dentro do próprio HTML; agora vêm daqui, editáveis pela
   // aba "🔗 QR Code & Links" do painel, sem precisar mexer em nenhum arquivo.
@@ -596,6 +600,7 @@ function readConfig() {
     rodizioPopular: { ...DEFAULT_CFG.rodizioPopular, ...(data.cfg.rodizioPopular || {}) },
     splash: { ...DEFAULT_CFG.splash, ...(data.cfg.splash || {}), photos: Array.isArray(data.cfg.splash && data.cfg.splash.photos) ? data.cfg.splash.photos : DEFAULT_CFG.splash.photos },
     chatBackground: { ...DEFAULT_CFG.chatBackground, ...(data.cfg.chatBackground || {}) },
+    adminChatBackground: { ...DEFAULT_CFG.adminChatBackground, ...(data.cfg.adminChatBackground || {}) },
     // v73
     placeholderPhoto: { ...DEFAULT_CFG.placeholderPhoto, ...(data.cfg.placeholderPhoto || {}) },
     globalBadge: { ...DEFAULT_CFG.globalBadge, ...(data.cfg.globalBadge || {}) },
@@ -1411,6 +1416,7 @@ const server = http.createServer(async (req, res) => {
             photos: Array.isArray(body.cfg && body.cfg.splash && body.cfg.splash.photos) ? body.cfg.splash.photos : current.cfg.splash.photos
           },
           chatBackground: { ...current.cfg.chatBackground, ...(body.cfg && body.cfg.chatBackground || {}) },
+          adminChatBackground: { ...current.cfg.adminChatBackground, ...(body.cfg && body.cfg.adminChatBackground || {}) },
           // v73
           placeholderPhoto: { ...current.cfg.placeholderPhoto, ...(body.cfg && body.cfg.placeholderPhoto || {}) },
           globalBadge: { ...current.cfg.globalBadge, ...(body.cfg && body.cfg.globalBadge || {}) },
@@ -1988,10 +1994,13 @@ const server = http.createServer(async (req, res) => {
   // ═══════════════════════════════════════════════════════════════════════
 
   // ── GET /api/chat/background — devolve o fundo atual (não tem segredo nenhum aqui dentro,
-  // então fica público — tanto o painel quanto o cardápio do cliente podem chamar direto). ──
+  // então fica público — tanto o painel quanto o cardápio do cliente podem chamar direto).
+  // v78: ?target=admin devolve o fundo do chat interno do painel; sem isso (ou target=client),
+  // devolve o fundo do Chat Express que o cliente vê — são independentes. ──
   if (pathname === '/api/chat/background' && req.method === 'GET') {
     const { cfg } = readConfig();
-    return sendJSON(res, 200, { chatBackground: cfg.chatBackground });
+    const key = query.target === 'admin' ? 'adminChatBackground' : 'chatBackground';
+    return sendJSON(res, 200, { chatBackground: cfg[key] });
   }
 
   // ── POST /api/chat/background — envia uma foto nova, escolhe uma da galeria pronta, ou só
@@ -1999,9 +2008,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/chat/background' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra alterar o fundo do chat.' });
     try {
-      const { dataUrl, presetUrl, presetName, enabled, overlay } = await readBody(req, 8e6);
+      const { dataUrl, presetUrl, presetName, enabled, overlay, target } = await readBody(req, 8e6);
+      const cfgKey = target === 'admin' ? 'adminChatBackground' : 'chatBackground';
       const current = readConfig();
-      const prevBg = current.cfg.chatBackground || DEFAULT_CFG.chatBackground;
+      const prevBg = current.cfg[cfgKey] || DEFAULT_CFG[cfgKey];
       let next = { ...prevBg };
 
       if (dataUrl) {
@@ -2046,7 +2056,7 @@ const server = http.createServer(async (req, res) => {
       if (typeof overlay === 'number' && overlay >= 0 && overlay <= 1) next.overlay = overlay;
       if (next.enabled && !next.url) return sendJSON(res, 400, { error: 'Envie uma imagem ou escolha uma da galeria antes de ativar.' });
 
-      const merged = { cfg: { ...current.cfg, chatBackground: next }, menu: current.menu };
+      const merged = { cfg: { ...current.cfg, [cfgKey]: next }, menu: current.menu };
       writeJSON(CONFIG_FILE, merged);
       broadcast('config-updated', {});
       publicBroadcast('menu-updated', {}); // reaproveita o mesmo aviso que o cardápio já escuta pra recarregar config
@@ -2058,14 +2068,15 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/chat/background' && req.method === 'DELETE') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra alterar o fundo do chat.' });
     try {
+      const cfgKey = query.target === 'admin' ? 'adminChatBackground' : 'chatBackground';
       const current = readConfig();
-      const prevBg = current.cfg.chatBackground || DEFAULT_CFG.chatBackground;
+      const prevBg = current.cfg[cfgKey] || DEFAULT_CFG[cfgKey];
       if (prevBg.url && prevBg.url.startsWith('/uploads/')) {
         const oldPath = path.join(UPLOADS_DIR, prevBg.url.slice('/uploads/'.length));
         fs.unlink(oldPath, () => {});
       }
-      const reset = { ...DEFAULT_CFG.chatBackground };
-      const merged = { cfg: { ...current.cfg, chatBackground: reset }, menu: current.menu };
+      const reset = { ...DEFAULT_CFG[cfgKey] };
+      const merged = { cfg: { ...current.cfg, [cfgKey]: reset }, menu: current.menu };
       writeJSON(CONFIG_FILE, merged);
       broadcast('config-updated', {});
       publicBroadcast('menu-updated', {});
@@ -3333,7 +3344,10 @@ function estimateDeliveryWindow(order, cfg) {
       const reservation = {
         id: 'RS' + Date.now().toString(36).toUpperCase(),
         createdAt: new Date().toISOString(),
-        status: 'pendente', // pendente → confirmada / recusada / cancelada
+        // v78: aceite automático de reservas — mesma ideia do aceite automático de pedidos
+        // (Configurações → 🏪 Restaurante → 🤖 Automações). Quando ligado, a reserva já nasce
+        // confirmada, sem precisar ninguém clicar em "Confirmar" no painel.
+        status: cfg.autoAcceptReservations ? 'confirmada' : 'pendente',
         name, phone, people, date, time,
         notes: String(body.notes || '').slice(0, 200),
         storeReply: '' // v33: mensagem da loja pro cliente (aparece na tela de acompanhamento)
