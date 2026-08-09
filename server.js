@@ -139,7 +139,8 @@ const DEFAULT_CFG = {
   autoAcceptOrders: 0,          // v55: 1 = pedido novo já nasce ACEITO sozinho (pula o clique em "Aceitar Pedido"), com número de ficha já atribuído — pensado pra combinar com impressão automática (vias já saem com o número certo, sem ninguém precisar tocar em nada)
   autoAcceptReservations: 0,    // v78: 1 = reserva nova já nasce CONFIRMADA sozinha (pula o clique em "Confirmar" no painel)
   sound: 1,                     // 1 = toca alerta sonoro ao chegar pedido novo
-  customerAlertSound: 'classico', // som tocado no app do cliente a cada aviso (classico|suave|dupla|sino|oriental)
+  customerAlertSound: 'classico', // som tocado no app do cliente a cada aviso — pode ser um dos 5 prontos (classico|suave|dupla|sino|oriental) ou "custom:<id>" apontando pra um item de customCustomerAlertSounds
+  customCustomerAlertSounds: [],  // v82: sons enviados pelo admin (upload) — cada item { id, name, url }, url vem de POST /api/upload (áudio)
   labels: {                     // textos dos botões/status do painel, customizáveis pelo admin
     actionNovo: 'Aceitar Pedido',
     actionPrep: 'Marcar Pronto',
