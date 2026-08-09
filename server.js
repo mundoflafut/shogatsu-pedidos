@@ -24,6 +24,13 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push-subs.json');
+// v79: inscrições push do PAINEL (loja) — separadas das inscrições dos CLIENTES (PUSH_SUBS_FILE).
+// Cada aparelho que ativa (PC da loja, celular do dono, etc.) vira uma entrada aqui; quando chega
+// pedido novo, manda pra TODAS ao mesmo tempo — é isso que resolve "alerta simultâneo PC + celular".
+const ADMIN_PUSH_SUBS_FILE = path.join(DATA_DIR, 'admin-push-subs.json');
+// v79: campanhas de push AGENDADAS/RECORRENTES (uma vez, diária, semanal ou mensal) — ver
+// checkScheduledPush() perto do fim do arquivo, que roda a cada minuto.
+const SCHEDULED_PUSH_FILE = path.join(DATA_DIR, 'scheduled-push.json');
 const COURIERS_FILE = path.join(DATA_DIR, 'couriers.json'); // v32: pré-cadastro de motoboys
 // v43: Shogatsu Custos, antes um programa separado, agora integrado direto no painel —
 // mesma pasta de dados, mesmo login, mesma sessão.
@@ -366,6 +373,8 @@ if (!fs.existsSync(ORDERS_FILE)) fs.writeFileSync(ORDERS_FILE, '[]');
 if (!fs.existsSync(CUSTOMERS_FILE)) fs.writeFileSync(CUSTOMERS_FILE, '[]');
 if (!fs.existsSync(RESERVATIONS_FILE)) fs.writeFileSync(RESERVATIONS_FILE, '[]');
 if (!fs.existsSync(PUSH_SUBS_FILE)) fs.writeFileSync(PUSH_SUBS_FILE, '[]');
+if (!fs.existsSync(ADMIN_PUSH_SUBS_FILE)) fs.writeFileSync(ADMIN_PUSH_SUBS_FILE, '[]');
+if (!fs.existsSync(SCHEDULED_PUSH_FILE)) fs.writeFileSync(SCHEDULED_PUSH_FILE, '[]');
 if (!fs.existsSync(COURIERS_FILE)) fs.writeFileSync(COURIERS_FILE, '[]');
 if (!fs.existsSync(INGREDIENTES_FILE)) fs.writeFileSync(INGREDIENTES_FILE, '[]');
 if (!fs.existsSync(FICHAS_TECNICAS_FILE)) fs.writeFileSync(FICHAS_TECNICAS_FILE, '[]');
@@ -411,7 +420,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -936,6 +945,26 @@ const PUSH_STATUS_MESSAGES = {
   entregue: (o, cfg) => ({ title: cfg.name, body: '✅ Pedido entregue! Obrigado pela preferência.' }),
   cancelado: (o, cfg) => ({ title: cfg.name, body: `⛔ Seu pedido foi cancelado. Motivo: ${o.cancelReason || 'não informado'}.` })
 };
+// v79: manda uma notificação push pra TODOS os aparelhos da LOJA que ativaram o alerta (PC do
+// balcão, celular do dono, tablet da cozinha etc. — cada um vira uma inscrição separada em
+// ADMIN_PUSH_SUBS_FILE). É isso que garante o alerta chegar simultâneo em todos, mesmo com a
+// aba/app fechado — nunca trava nem derruba quem chamou (resolve sozinho, sem rejeitar).
+async function sendAdminPush(payload) {
+  try {
+    const { cfg } = readConfig();
+    if (!cfg.vapid || !cfg.vapid.publicKey || !cfg.vapid.privateKeyJwk) return { sent: 0, failed: 0 };
+    let subs = readJSON(ADMIN_PUSH_SUBS_FILE);
+    if (!subs.length) return { sent: 0, failed: 0 };
+    let sent = 0, failed = 0;
+    const expired = [];
+    for (const sub of subs) {
+      const r = await webpush.sendWebPush(sub, payload, cfg.vapid, cfg.vapid.subject);
+      if (r.ok) sent++; else { failed++; if (r.expired) expired.push(sub.endpoint); }
+    }
+    if (expired.length) writeJSON(ADMIN_PUSH_SUBS_FILE, subs.filter(s => !expired.includes(s.endpoint)));
+    return { sent, failed };
+  } catch (e) { return { sent: 0, failed: 0 }; }
+}
 // Usa https puro (sem dependências) fazendo POST form-urlencoded com Basic Auth.
 function sendSMS(toPhone, body, smsCfg) {
   return new Promise((resolve, reject) => {
@@ -3118,6 +3147,135 @@ function estimateDeliveryWindow(order, cfg) {
   }
 
   // ═══════════════════════════════════════════
+  // v79: PUSH DA LOJA (painel) — alerta de pedido/reserva novo simultâneo em PC + celular.
+  // Reaproveita a mesma infraestrutura VAPID/webpush.js dos clientes, só que com uma lista de
+  // inscrições separada (ADMIN_PUSH_SUBS_FILE): cada aparelho da loja que ativa vira 1 entrada,
+  // e sendAdminPush() (definida lá em cima) manda pra todas elas ao mesmo tempo.
+  // ═══════════════════════════════════════════
+  // ── POST /api/admin/push/subscribe — este aparelho (painel) passa a receber alerta push ──
+  if (pathname === '/api/admin/push/subscribe' && req.method === 'POST') {
+    const session = getSession(getToken(req, query));
+    if (!session) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { subscription, deviceLabel } = await readBody(req);
+      if (!subscription || !subscription.endpoint || !subscription.keys) return sendJSON(res, 400, { error: 'Inscrição inválida.' });
+      const subs = readJSON(ADMIN_PUSH_SUBS_FILE);
+      const existing = subs.findIndex(s => s.endpoint === subscription.endpoint);
+      const entry = {
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+        deviceLabel: String(deviceLabel || '').slice(0, 60) || 'Aparelho sem nome',
+        addedBy: session.username || '',
+        createdAt: existing === -1 ? new Date().toISOString() : subs[existing].createdAt,
+        lastSeenAt: new Date().toISOString()
+      };
+      if (existing === -1) subs.push(entry); else subs[existing] = entry;
+      writeJSON(ADMIN_PUSH_SUBS_FILE, subs);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/admin/push/unsubscribe ──
+  if (pathname === '/api/admin/push/unsubscribe' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { endpoint } = await readBody(req);
+      const subs = readJSON(ADMIN_PUSH_SUBS_FILE).filter(s => s.endpoint !== endpoint);
+      writeJSON(ADMIN_PUSH_SUBS_FILE, subs);
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── GET /api/admin/push/subs — lista os aparelhos da loja com alerta push ativado ──
+  if (pathname === '/api/admin/push/subs' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const subs = readJSON(ADMIN_PUSH_SUBS_FILE).map(s => ({ endpoint: s.endpoint, deviceLabel: s.deviceLabel, addedBy: s.addedBy, createdAt: s.createdAt }));
+    return sendJSON(res, 200, { subs });
+  }
+  // ── POST /api/admin/push/test — manda uma notificação de teste pra todos os aparelhos ativados ──
+  if (pathname === '/api/admin/push/test' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const r = await sendAdminPush({ title: '🔔 Teste de alerta', body: 'Se você recebeu isso, o alerta push está funcionando neste aparelho!', url: '/painel.html', icon: '/icon-192.png', sound: 'oriental', tag: 'shogatsu-teste-push' });
+    return sendJSON(res, 200, { ok: true, ...r });
+  }
+
+  // ═══════════════════════════════════════════
+  // v79: NOTIFICAÇÕES PUSH AGENDADAS/RECORRENTES — campanha pros CLIENTES (mesma lista de
+  // inscritos do "Enviar Notificação Push" de sempre), só que programada pra sair sozinha numa
+  // data/hora escolhida, e opcionalmente se repetir (diária/semanal/mensal) sem precisar
+  // reagendar toda vez. O disparo de verdade acontece em checkScheduledPush(), perto do fim
+  // deste arquivo, que roda a cada 1 minuto.
+  // ═══════════════════════════════════════════
+  // ── GET /api/admin/scheduled-push — lista os agendamentos ──
+  if (pathname === '/api/admin/scheduled-push' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    return sendJSON(res, 200, { items: readJSON(SCHEDULED_PUSH_FILE) });
+  }
+  // ── POST /api/admin/scheduled-push — cria um agendamento novo ──
+  if (pathname === '/api/admin/scheduled-push' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const { title, message, image, url: targetUrl, phones, sendAll, sendAt, recurrence } = await readBody(req);
+      const msg = String(message || '').slice(0, 200).trim();
+      if (!msg) return sendJSON(res, 400, { error: 'Escreva a mensagem da notificação.' });
+      const when = new Date(sendAt);
+      if (isNaN(when.getTime())) return sendJSON(res, 400, { error: 'Escolha data e horário válidos.' });
+      const rec = ['none', 'daily', 'weekly', 'monthly'].includes(recurrence) ? recurrence : 'none';
+      const list = readJSON(SCHEDULED_PUSH_FILE);
+      const item = {
+        id: 'AG' + Date.now().toString(36).toUpperCase(),
+        title: String(title || '').slice(0, 80).trim(),
+        message: msg,
+        image: image ? String(image).slice(0, 500) : '',
+        url: targetUrl ? String(targetUrl).slice(0, 200) : '/',
+        phones: (!sendAll && Array.isArray(phones)) ? phones.map(normalizePhone) : null, // null = todos os inscritos
+        sendAll: !!sendAll,
+        recurrence: rec,
+        active: true,
+        nextSendAt: when.toISOString(),
+        lastSentAt: null,
+        sentCount: 0,
+        createdAt: new Date().toISOString(),
+        createdBy: getSession(getToken(req, query))?.username || ''
+      };
+      list.push(item);
+      writeJSON(SCHEDULED_PUSH_FILE, list);
+      return sendJSON(res, 201, { ok: true, item });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── PUT /api/admin/scheduled-push/:id — edita ou pausa/reativa um agendamento ──
+  if (pathname.match(/^\/api\/admin\/scheduled-push\/[^/]+$/) && req.method === 'PUT') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const id = decodeURIComponent(pathname.split('/').pop());
+      const list = readJSON(SCHEDULED_PUSH_FILE);
+      const item = list.find(i => i.id === id);
+      if (!item) return sendJSON(res, 404, { error: 'Agendamento não encontrado.' });
+      const body = await readBody(req);
+      if (body.title !== undefined) item.title = String(body.title).slice(0, 80).trim();
+      if (body.message !== undefined) item.message = String(body.message).slice(0, 200).trim();
+      if (body.image !== undefined) item.image = String(body.image).slice(0, 500);
+      if (body.url !== undefined) item.url = String(body.url).slice(0, 200);
+      if (body.sendAll !== undefined) item.sendAll = !!body.sendAll;
+      if (body.phones !== undefined) item.phones = (!item.sendAll && Array.isArray(body.phones)) ? body.phones.map(normalizePhone) : null;
+      if (body.recurrence !== undefined && ['none', 'daily', 'weekly', 'monthly'].includes(body.recurrence)) item.recurrence = body.recurrence;
+      if (body.sendAt !== undefined) {
+        const when = new Date(body.sendAt);
+        if (!isNaN(when.getTime())) item.nextSendAt = when.toISOString();
+      }
+      if (body.active !== undefined) item.active = !!body.active;
+      writeJSON(SCHEDULED_PUSH_FILE, list);
+      return sendJSON(res, 200, { ok: true, item });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── DELETE /api/admin/scheduled-push/:id ──
+  if (pathname.match(/^\/api\/admin\/scheduled-push\/[^/]+$/) && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const id = decodeURIComponent(pathname.split('/').pop());
+    const list = readJSON(SCHEDULED_PUSH_FILE).filter(i => i.id !== id);
+    writeJSON(SCHEDULED_PUSH_FILE, list);
+    return sendJSON(res, 200, { ok: true });
+  }
+
+  // ═══════════════════════════════════════════
   // CUSTOS — cadastro de ingredientes e ficha técnica (v43: integrado no painel,
   // antes era o programa separado "shogatsu-custos")
   // ═══════════════════════════════════════════
@@ -3355,6 +3513,15 @@ function estimateDeliveryWindow(order, cfg) {
       list.unshift(reservation);
       writeJSON(RESERVATIONS_FILE, list);
       broadcast('new-reservation', reservation); // v39: avisa o painel em tempo real (som + toast), igual já acontece com pedido novo
+      // v79: mesmo alerta push simultâneo (PC + celular) que os pedidos novos já disparam.
+      sendAdminPush({
+        title: '🪑 Nova reserva!',
+        body: `${reservation.name} · ${reservation.people} pessoa(s) · ${reservation.date} às ${reservation.time}`,
+        url: '/painel.html',
+        icon: '/icon-192.png',
+        sound: 'oriental',
+        tag: 'shogatsu-nova-reserva'
+      });
       return sendJSON(res, 201, { ok: true, reservation });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
@@ -3582,6 +3749,17 @@ function estimateDeliveryWindow(order, cfg) {
       }
 
       broadcast('new-order', order);
+      // v79: alerta push pra loja em todos os aparelhos ativados (PC + celular simultâneo) —
+      // além do som/SSE de quem já está com o painel aberto na tela. Não trava a resposta ao
+      // cliente: dispara e segue (a função nunca rejeita, então não precisa de .catch aqui).
+      sendAdminPush({
+        title: '🔔 Novo pedido!',
+        body: `${order.name || 'Cliente'} · ${order.mode === 'delivery' ? 'Delivery' : 'Retirada'} · R$ ${Number(order.total || 0).toFixed(2)}`,
+        url: '/painel.html',
+        icon: '/icon-192.png',
+        sound: 'oriental',
+        tag: 'shogatsu-novo-pedido'
+      });
       return sendJSON(res, 201, { ok: true, order });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
@@ -3969,6 +4147,64 @@ function estimateDeliveryWindow(order, cfg) {
 
   res.writeHead(404); res.end('Not found');
 });
+
+// v79: calcula a PRÓXIMA data de envio de uma campanha recorrente, a partir da última data
+// programada (não da hora atual) — assim o horário do dia sempre fica igual ao que foi
+// escolhido no agendamento, mesmo que o servidor demore um pouco pra rodar o checador.
+function computeNextSend(fromISO, recurrence) {
+  const d = new Date(fromISO);
+  if (recurrence === 'daily') d.setDate(d.getDate() + 1);
+  else if (recurrence === 'weekly') d.setDate(d.getDate() + 7);
+  else if (recurrence === 'monthly') d.setMonth(d.getMonth() + 1);
+  return d.toISOString();
+}
+// v79: roda a cada 1 minuto — dispara qualquer campanha agendada cuja hora já chegou. Uma
+// campanha "uma vez" desativa sozinha depois de enviar; uma recorrente calcula e agenda a
+// próxima ocorrência automaticamente (diária/semanal/mensal), sem precisar reagendar na mão.
+async function checkScheduledPush() {
+  try {
+    const list = readJSON(SCHEDULED_PUSH_FILE);
+    if (!list.length) return;
+    const { cfg } = readConfig();
+    if (!cfg.vapid || !cfg.vapid.publicKey || !cfg.vapid.privateKeyJwk) return;
+    const now = Date.now();
+    let changed = false;
+    for (const item of list) {
+      if (!item.active || !item.nextSendAt) continue;
+      if (new Date(item.nextSendAt).getTime() > now) continue;
+      changed = true;
+      let subs = readJSON(PUSH_SUBS_FILE);
+      const segment = Array.isArray(item.phones) && item.phones.length ? new Set(item.phones) : null;
+      const targets = segment ? subs.filter(s => segment.has(s.phone)) : subs;
+      if (targets.length) {
+        const payload = {
+          title: item.title || cfg.name || 'Shogatsu',
+          body: item.message,
+          url: item.url || '/',
+          icon: '/icon-192.png',
+          image: item.image || undefined,
+          sound: 'oriental',
+          tag: 'shogatsu-agendada-' + item.id
+        };
+        const expired = [];
+        for (const sub of targets) {
+          const r = await webpush.sendWebPush(sub, payload, cfg.vapid, cfg.vapid.subject);
+          if (r.expired) expired.push(sub.endpoint);
+        }
+        if (expired.length) writeJSON(PUSH_SUBS_FILE, subs.filter(s => !expired.includes(s.endpoint)));
+      }
+      item.lastSentAt = new Date().toISOString();
+      item.sentCount = (item.sentCount || 0) + 1;
+      if (item.recurrence && item.recurrence !== 'none') {
+        item.nextSendAt = computeNextSend(item.nextSendAt, item.recurrence);
+      } else {
+        item.active = false;
+      }
+    }
+    if (changed) writeJSON(SCHEDULED_PUSH_FILE, list);
+  } catch (e) { console.error('⚠️  Checador de push agendado:', e.message); }
+}
+setInterval(checkScheduledPush, 60 * 1000);
 
 restoreFromSupabase().finally(() => {
   loadSessionsFromDisk(); // v60: depois de restaurar do Supabase (se configurado), carrega sessões válidas pra memória
