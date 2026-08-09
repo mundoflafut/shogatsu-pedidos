@@ -1577,6 +1577,9 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div class="field"><label>Imprimir ao Receber Pedido</label>
             <select id="cfg-print"><option value="0">❌ Desativado</option><option value="1">✅ Ativado</option></select>
           </div>
+          <div id="print-agent-status-box" style="margin-top:10px;font-size:11px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
+            Verificando Agente Local de Impressão...
+          </div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
@@ -8218,6 +8221,8 @@ function loadPrinterCentral(){
   renderStationsSettings();
   const printEl=document.getElementById('cfg-print');
   if(printEl) printEl.value=String(Number(cfg.print)||0);
+  refreshPrintAgentStatus();
+  if(!window._printAgentStatusInterval) window._printAgentStatusInterval = setInterval(refreshPrintAgentStatus, 30000);
   populateCustomerAlertSoundOptions();
   renderCustomerSoundCustomList();
   const custAlertEl=document.getElementById('cfg-customer-alert-sound');
@@ -8226,6 +8231,32 @@ function loadPrinterCentral(){
   const sizeEl=document.getElementById('print-size'); if(sizeEl) sizeEl.value=cfg.printSize||14;
   const colorEl=document.getElementById('print-color'); if(colorEl) colorEl.value=cfg.printColor||'#000000';
   updatePrintFontPreview();
+}
+// v82: mostra se tem algum Agente Local de Impressão conectado agora — resolve de vez a dúvida
+// "a impressão automática está mesmo ativa ou não?" sem precisar abrir o print-agent.log no
+// computador físico da loja. Atualiza sozinho a cada 30s enquanto essa página estiver aberta.
+async function refreshPrintAgentStatus(){
+  const box = document.getElementById('print-agent-status-box');
+  if(!box) return;
+  try{
+    const res = await apiGet('/api/print-agent/status');
+    if(!res.ok){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; return; }
+    const { online, agents, coveredStations } = res.data;
+    if(!online){
+      box.style.borderColor = '#c0392b';
+      box.innerHTML = '❌ <b>Nenhum Agente Local de Impressão conectado agora.</b><br>'+
+        'Pedidos com vias em modo "🤖 Automática" não vão imprimir sozinhos (nem no botão '+
+        '"🖨 Testar") até o programa <code>print-agent.js</code> estar rodando, ligado num '+
+        'computador da loja. Veja print-agent/README.md.';
+      return;
+    }
+    box.style.borderColor = '#2e7d32';
+    const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
+    const covered = (coveredStations||[]).map(s=>stationLabels[s]||s).join(', ') || '—';
+    const detail = (agents||[]).map(a => (a.printers||[]).map(p => `${esc(p.label)} → ${(p.stations||[]).map(s=>stationLabels[s]||s).join(', ')||'—'}`).join('; ')).filter(Boolean).join(' | ');
+    box.innerHTML = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
+      (detail ? `<br><span style="color:var(--muted);">${esc(detail)}</span>` : '');
+  }catch(e){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; }
 }
 async function savePrinterCentral(){
   const printEl=document.getElementById('cfg-print');

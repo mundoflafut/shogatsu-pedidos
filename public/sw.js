@@ -115,30 +115,44 @@ self.addEventListener('fetch', e => {
 // vibração) mesmo substituindo uma tag existente. As tags de pedido/reserva também passaram a
 // levar o ID do pedido/reserva (ver server.js), então nem chegam a colidir na prática — isso
 // aqui é a segunda camada de proteção, pro caso de algum outro aviso repetir a mesma tag.
+// v82: BUG CORRIGIDO ("notificação push parou de chegar" — regressão da v81) — a partir da
+// v81 o `silent` passou a vir por aparelho (`!!data.silent`), mas a API de notificações do
+// navegador PROÍBE `silent:true` junto com `vibrate` — chamar showNotification() com essa
+// combinação lança um TypeError na hora (é assim na especificação, não é um detalhe de
+// implementação de um navegador só). Como esse throw acontece de forma síncrona, dentro do
+// próprio evento 'push' (não dentro de uma Promise), ele nunca era pego por nenhum catch — o
+// service worker falhava o evento inteiro e NENHUMA notificação aparecia, pra nenhum aparelho,
+// sempre que esse aparelho estivesse com "🔇 Silenciar som do sistema" ativado. Corrigido
+// tirando `vibrate` da lista de opções quando `silent` é true (que já é, por definição, quando
+// não faz sentido vibrar mesmo).
 self.addEventListener('push', e => {
   let data = { title: 'Shogatsu', body: 'Você tem uma novidade!', url: '/' };
   try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* usa os valores padrão acima */ }
+  const isSilent = !!data.silent;
+  const notifOptions = {
+    body: data.body,
+    icon: data.icon || '/icon-192.png',
+    image: data.image || undefined, // v45: banner grande, estilo apps de delivery (iFood etc)
+    badge: '/icon-72.png',
+    data: { url: data.url || '/' },
+    // v81: o volume do som do sistema é controlado pelo próprio aparelho (Android/iOS/
+    // navegador) — não existe jeito, pela API padrão do navegador, de definir um volume
+    // customizado pra notificação. O que dá pra controlar é só ligar/desligar esse som:
+    // quando o admin ativa "🔇 Silenciar som do sistema neste aparelho" (Configurações →
+    // 🔔 Notificações Push), o servidor manda `silent:true` só pra esse aparelho, e quem
+    // avisa nele é o som do próprio painel (que aí sim respeita o volume configurado) —
+    // funciona enquanto o painel estiver aberto nesse aparelho.
+    silent: isSilent,
+    requireInteraction: false,
+    renotify: true,
+    tag: data.tag || 'shogatsu-update'
+  };
+  // v82: só adiciona `vibrate` quando NÃO é silencioso — combinar os dois é proibido pela API
+  // (ver comentário acima) e o navegador nem chega a mostrar a notificação se isso acontecer.
+  if (!isSilent) notifOptions.vibrate = [200, 100, 200, 100, 200];
   e.waitUntil(
     Promise.all([
-      self.registration.showNotification(data.title, {
-        body: data.body,
-        icon: data.icon || '/icon-192.png',
-        image: data.image || undefined, // v45: banner grande, estilo apps de delivery (iFood etc)
-        badge: '/icon-72.png',
-        data: { url: data.url || '/' },
-        // v81: o volume do som do sistema é controlado pelo próprio aparelho (Android/iOS/
-        // navegador) — não existe jeito, pela API padrão do navegador, de definir um volume
-        // customizado pra notificação. O que dá pra controlar é só ligar/desligar esse som:
-        // quando o admin ativa "🔇 Silenciar som do sistema neste aparelho" (Configurações →
-        // 🔔 Notificações Push), o servidor manda `silent:true` só pra esse aparelho, e quem
-        // avisa nele é o som do próprio painel (que aí sim respeita o volume configurado) —
-        // funciona enquanto o painel estiver aberto nesse aparelho.
-        silent: !!data.silent,
-        vibrate: [200, 100, 200, 100, 200],
-        requireInteraction: false,
-        renotify: true,
-        tag: data.tag || 'shogatsu-update'
-      }),
+      self.registration.showNotification(data.title, notifOptions),
       // v45: quem já está com o site/painel aberto na hora não depende só do som do sistema —
       // avisa a página pra tocar o sino oriental sintetizado (ver index.html/painel.html).
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
