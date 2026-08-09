@@ -104,6 +104,17 @@ self.addEventListener('fetch', e => {
 // anexar um arquivo de áudio próprio numa Notification (isso é decidido pelo sistema
 // operacional) — o que dá pra garantir é NÃO silenciar (silent:false, que já é o padrão, mas
 // deixamos explícito) e adicionar vibração no celular, que funciona junto com o som do sistema.
+// v81: BUG CORRIGIDO ("alerta push simultâneo às vezes não chega em nenhum aparelho") — o
+// pedido novo e a reserva nova sempre usavam a MESMA `tag` fixa pra toda notificação daquele
+// tipo (ex: sempre "shogatsu-novo-pedido"). Isso é intencional pro navegador AGRUPAR/SUBSTITUIR
+// notificações com a mesma tag — só que sem `renotify:true`, substituir uma notificação que
+// ainda não foi vista/dispensada acontece EM SILÊNCIO: sem som, sem vibração, sem a tela
+// acender de novo. Numa loja corrida, se o alerta anterior ainda está lá parado na tela do
+// celular, o próximo pedido literalmente "chega" (a notificação existe, o navegador confirma
+// 201/OK), só que ninguém percebe. `renotify:true` faz o navegador sempre re-alertar (som +
+// vibração) mesmo substituindo uma tag existente. As tags de pedido/reserva também passaram a
+// levar o ID do pedido/reserva (ver server.js), então nem chegam a colidir na prática — isso
+// aqui é a segunda camada de proteção, pro caso de algum outro aviso repetir a mesma tag.
 self.addEventListener('push', e => {
   let data = { title: 'Shogatsu', body: 'Você tem uma novidade!', url: '/' };
   try { if (e.data) data = { ...data, ...e.data.json() }; } catch (err) { /* usa os valores padrão acima */ }
@@ -115,9 +126,17 @@ self.addEventListener('push', e => {
         image: data.image || undefined, // v45: banner grande, estilo apps de delivery (iFood etc)
         badge: '/icon-72.png',
         data: { url: data.url || '/' },
-        silent: false,
+        // v81: o volume do som do sistema é controlado pelo próprio aparelho (Android/iOS/
+        // navegador) — não existe jeito, pela API padrão do navegador, de definir um volume
+        // customizado pra notificação. O que dá pra controlar é só ligar/desligar esse som:
+        // quando o admin ativa "🔇 Silenciar som do sistema neste aparelho" (Configurações →
+        // 🔔 Notificações Push), o servidor manda `silent:true` só pra esse aparelho, e quem
+        // avisa nele é o som do próprio painel (que aí sim respeita o volume configurado) —
+        // funciona enquanto o painel estiver aberto nesse aparelho.
+        silent: !!data.silent,
         vibrate: [200, 100, 200, 100, 200],
         requireInteraction: false,
+        renotify: true,
         tag: data.tag || 'shogatsu-update'
       }),
       // v45: quem já está com o site/painel aberto na hora não depende só do som do sistema —
@@ -138,4 +157,48 @@ self.addEventListener('notificationclick', e => {
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
+});
+
+// v80: BUG CORRIGIDO ("notificação push parou de chegar no celular") — navegadores (Chrome no
+// Android é o caso mais comum) podem invalidar/trocar a inscrição push sozinhos em segundo
+// plano (rotação de segurança do próprio serviço de push do Google/Mozilla), sem avisar a
+// página. Sem tratar isso, o navegador AINDA MOSTRA "notificações ativadas" no app, mas o
+// endpoint salvo no servidor virou inválido — as notificações somem de vez, silenciosamente,
+// sem nenhum erro visível pra ninguém. O evento abaixo é o jeito padrão de reagir a isso: gera
+// uma inscrição nova sozinho e manda pro servidor atualizar, sem o cliente precisar desativar e
+// reativar manualmente. Funciona tanto pro chat/pedidos do cliente quanto pro alerta do painel —
+// cada lado grava, na hora que ativa, um "recibo" (cache) com os dados que precisa reenviar; aqui
+// só lemos esse recibo de volta.
+self.addEventListener('pushsubscriptionchange', e => {
+  e.waitUntil((async () => {
+    try {
+      const cache = await caches.open('shogatsu-push-meta');
+      const oldOptions = e.oldSubscription ? e.oldSubscription.options : null;
+      let applicationServerKey = oldOptions && oldOptions.applicationServerKey;
+      if (!applicationServerKey) {
+        const keyRes = await fetch('/api/push/vapid-public-key');
+        const { publicKey } = await keyRes.json();
+        if (!publicKey) return;
+        const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+        const base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw = atob(base64);
+        applicationServerKey = Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+      }
+      const newSub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+      const clienteMeta = await cache.match('/__push-meta__/cliente');
+      if (clienteMeta) {
+        const meta = await clienteMeta.json();
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: newSub.toJSON(), phone: meta.phone || '' }) }).catch(() => {});
+      }
+      const adminMeta = await cache.match('/__push-meta__/admin');
+      if (adminMeta) {
+        const meta = await adminMeta.json();
+        await fetch('/api/admin/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(meta.token ? { Authorization: 'Bearer ' + meta.token } : {}) },
+          body: JSON.stringify({ subscription: newSub.toJSON(), deviceLabel: meta.deviceLabel || 'Aparelho' })
+        }).catch(() => {});
+      }
+    } catch (err) { /* se falhar, o alerta simplesmente para de chegar nesse aparelho até reativar na mão — não quebra nada mais */ }
+  })());
 });

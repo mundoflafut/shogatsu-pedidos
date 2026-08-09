@@ -2149,7 +2149,7 @@ async function garantirConversaIa(){
     // renderConversaIa() — nunca chamada nesse caminho (conversa nova). Agora reflete o modo
     // real assim que a conversa é criada.
     atualizaHeaderIa(iaModoAtual, false);
-    document.getElementById('ia-mensagens').innerHTML = `<div class="wa-sys">${iaModoAtual==='humano' ? 'Olá! Escreva sua mensagem que um atendente já vai te responder por aqui.' : 'Olá! Pergunte algo ou escolha uma das opções abaixo.'}</div>`;
+    document.getElementById('ia-mensagens').innerHTML = `<div class="wa-sys">${iaModoAtual==='humano' ? 'Olá! Escreva sua mensagem que um atendente já vai te responder por aqui.' : 'Olá! Pergunte algo, peça pra eu te mostrar o cardápio, ou escolha uma das opções abaixo.'}</div>`;
     renderFaqRapidaIa();
     // v60 — BUG CORRIGIDO (mensagem do atendente não chegava sozinha): o polling só era ligado
     // no caminho de conversa JÁ EXISTENTE — numa conversa nova que já nasce em modo humano, o
@@ -2179,15 +2179,23 @@ function renderConversaIa(conversa){
     html += renderBolhaIa(m);
   });
   if(digitandoAtendente) html += `<div class="wa-typing-row"><span></span><span></span><span></span></div>`;
-  el.innerHTML = html || '<div class="wa-sys">Olá! Pergunte algo ou escolha uma das opções abaixo.</div>';
+  el.innerHTML = html || '<div class="wa-sys">Olá! Pergunte algo, peça pra eu te mostrar o cardápio, ou escolha uma das opções abaixo.</div>';
   if(jaEstavaNoFim) el.scrollTop = el.scrollHeight;
+}
+// v80: chip fixo "🍣 Ver o cardápio" — pedido explícito pra IA sempre oferecer a opção do
+// cliente pedir as opções do cardápio direto pra ela, sem precisar digitar. Aparece sempre (não
+// depende de nenhuma FAQ cadastrada) enquanto a conversa estiver em modo IA.
+function perguntarCardapioIa(){
+  document.getElementById('ia-pergunta').value = 'Pode me mostrar as opções do cardápio e me ajudar a escolher?';
+  enviarDuvidaIa();
 }
 function renderFaqRapidaIa(){
   const el = document.getElementById('ia-faq-rapida');
   if(!el) return;
+  if(iaModoAtual==='humano'){ el.innerHTML=''; return; }
   const faq = (cfg.ia && cfg.ia.faq) || [];
-  if(!faq.length || iaModoAtual==='humano'){ el.innerHTML=''; return; }
-  el.innerHTML = faq.slice(0,6).map((f,i)=>`<button onclick="perguntarFaqRapida(${i})" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--border,#444);background:transparent;color:inherit;cursor:pointer;flex-shrink:0;">${escIa(f.pergunta)}</button>`).join('');
+  const chipCardapio = `<button onclick="perguntarCardapioIa()" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--gold,#c9a84c);background:rgba(201,168,76,.12);color:inherit;cursor:pointer;flex-shrink:0;font-weight:600;">🍣 Ver o cardápio</button>`;
+  el.innerHTML = chipCardapio + faq.slice(0,6).map((f,i)=>`<button onclick="perguntarFaqRapida(${i})" style="white-space:nowrap;font-size:11px;padding:6px 10px;border-radius:14px;border:1px solid var(--border,#444);background:transparent;color:inherit;cursor:pointer;flex-shrink:0;">${escIa(f.pergunta)}</button>`).join('');
 }
 function perguntarFaqRapida(i){
   const faq = (cfg.ia && cfg.ia.faq) || [];
@@ -3972,6 +3980,7 @@ async function togglePushSubscription() {
     if (existing) {
       await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: existing.endpoint }) }).catch(() => {});
       await existing.unsubscribe();
+      if ('caches' in window) caches.open('shogatsu-push-meta').then(c => c.delete('/__push-meta__/cliente')).catch(() => {});
       showMiniToast('🔕 Notificações desativadas.');
       updatePushButtonState();
       return;
@@ -3986,6 +3995,13 @@ async function togglePushSubscription() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription: sub.toJSON(), phone: customer ? customer.phone : '' })
     });
+    // v80: grava um "recibo" no Cache Storage com os dados que o Service Worker precisa pra
+    // reinscrever sozinho caso o navegador troque a inscrição em segundo plano (ver
+    // 'pushsubscriptionchange' em sw.js) — é a causa mais comum de "notificação parou de chegar
+    // no celular do nada" sem esse tratamento.
+    if ('caches' in window) {
+      caches.open('shogatsu-push-meta').then(c => c.put('/__push-meta__/cliente', new Response(JSON.stringify({ phone: customer ? customer.phone : '' })))).catch(() => {});
+    }
     showMiniToast('🔔 Notificações ativadas! Você vai receber nossas promoções.');
     updatePushButtonState();
   } catch (e) { showMiniToast('Não foi possível ativar as notificações agora.'); }

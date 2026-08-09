@@ -1030,6 +1030,36 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             alcança quem já ativou as notificações em "Minha Conta" no cardápio.
             <span id="push-subs-count" style="display:block;margin-top:6px;color:var(--gold);"></span>
           </div>
+
+          <!-- v81: movido pra cá (antes ficava espalhado dentro do card 🔊 Alertas) — tudo que é
+               push agora mora num lugar só. Isso aqui é o alerta DA LOJA (avisa o balcão de
+               pedido/reserva/atendente chamado); o formulário logo abaixo é o alerta PRO
+               CLIENTE (promoções/cupons). -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;background:rgba(255,255,255,.02);">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📱💻 Alerta da loja — pedido/reserva/atendente (PC + celular simultâneo)</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+              Diferente do formulário abaixo (que avisa o CLIENTE), isto aqui avisa A LOJA: toca em
+              todos os aparelhos que ativarem, mesmo com o painel fechado — igual toca no celular
+              quando chega mensagem. Ative em cada aparelho que deve avisar (o PC do balcão, o
+              celular do dono, um tablet da cozinha...).
+            </div>
+            <button type="button" class="btn success sm" id="admin-push-toggle-btn" onclick="toggleAdminPushSubscription()">🔔 Ativar alerta push neste aparelho</button>
+            <button type="button" class="btn secondary sm" onclick="testAdminPush()" style="margin-left:6px;">▶ Testar</button>
+            <div id="admin-push-status" style="font-size:11px;margin-top:8px;color:var(--muted);"></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:11px;margin-top:10px;">
+              <input type="checkbox" id="admin-push-silent" onchange="toggleAdminPushSilent(this.checked)"/>
+              🔇 Silenciar som do sistema neste aparelho
+            </label>
+            <div style="font-size:10px;color:var(--muted);margin:4px 0 2px 24px;">
+              O volume do som do sistema é do próprio aparelho — não dá pra controlar por aqui
+              (limitação do navegador). Marcando esta opção, este aparelho para de tocar o som do
+              sistema e passa a depender só do som do painel (🔊 Alertas → volume), que TOCA
+              enquanto o painel estiver aberto aqui. Não marque em aparelhos onde o painel costuma
+              ficar fechado — nesses, o som do sistema é o único jeito de avisar.
+            </div>
+            <div id="admin-push-devices" style="margin-top:10px;"></div>
+          </div>
+
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;">
             <input type="checkbox" id="push-send-all"/> 📢 Enviar pra TODOS os inscritos (ignora a lista abaixo — inclui quem ativou sem ter conta)
           </label>
@@ -1053,19 +1083,24 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📅 Agendar em vez de enviar agora</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
             Programa a mensagem acima (título, texto, imagem e destinatários) pra sair sozinha numa
-            data/hora escolhida — só uma vez, ou repetindo automaticamente (todo dia, toda semana ou
-            todo mês), sem precisar reagendar.
+            data/hora escolhida — só uma vez, várias vezes no mesmo dia (de X em X horas), ou
+            repetindo automaticamente (todo dia, toda semana ou todo mês), sem precisar reagendar.
           </div>
           <div class="field-row">
             <div class="field"><label style="font-size:10px;">Data e hora do envio</label><input type="datetime-local" id="push-schedule-at"/></div>
             <div class="field"><label style="font-size:10px;">Repetir</label>
-              <select id="push-schedule-recurrence">
+              <select id="push-schedule-recurrence" onchange="document.getElementById('push-schedule-interval-wrap').style.display=this.value==='hourly'?'':'none';">
                 <option value="none">Só uma vez</option>
+                <option value="hourly">🔁 Várias vezes ao dia</option>
                 <option value="daily">Todo dia</option>
                 <option value="weekly">Toda semana</option>
                 <option value="monthly">Todo mês</option>
               </select>
             </div>
+          </div>
+          <div class="field" id="push-schedule-interval-wrap" style="display:none;margin-top:6px;">
+            <label style="font-size:10px;">Repetir a cada quantas horas (a partir do primeiro envio, no mesmo dia)</label>
+            <input type="number" id="push-schedule-interval-hours" min="0.1" step="0.5" value="4" style="max-width:120px;"/>
           </div>
           <button class="btn secondary" style="margin-top:6px;" onclick="createScheduledPush()">📅 Agendar essa notificação</button>
           <div id="push-schedule-status" style="font-size:12px;margin-top:8px;"></div>
@@ -2014,19 +2049,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <input type="range" id="cfg-alert-volume" min="0" max="1" step="0.05" value="1" oninput="onAlertVolumeInput(this.value)"/>
           </div>
           <button type="button" class="btn secondary sm" onclick="playBeep()" style="margin-top:6px;">▶ Testar volume</button>
-          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Vale só neste aparelho/navegador — cada computador da loja pode ter seu próprio volume.</div>
-          <hr style="border-color:var(--border);margin:16px 0;">
-          <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📱💻 Alerta push simultâneo (PC + celular)</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-            O som acima só toca com o painel <b>aberto na tela</b>. Ativando aqui, este aparelho passa a
-            receber uma notificação push de verdade (pedido novo e reserva nova) <b>mesmo com o painel
-            fechado</b> — igual toca no celular quando chega mensagem. Ative em cada aparelho que deve
-            avisar (o PC do balcão, o celular do dono, um tablet da cozinha...) — todos tocam ao mesmo tempo.
-          </div>
-          <button type="button" class="btn success sm" id="admin-push-toggle-btn" onclick="toggleAdminPushSubscription()">🔔 Ativar alerta push neste aparelho</button>
-          <button type="button" class="btn secondary sm" onclick="testAdminPush()" style="margin-left:6px;">▶ Testar</button>
-          <div id="admin-push-status" style="font-size:11px;margin-top:8px;color:var(--muted);"></div>
-          <div id="admin-push-devices" style="margin-top:10px;"></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Vale só neste aparelho/navegador — cada computador da loja pode ter seu próprio volume. Esse é o mesmo volume usado pelo alerta push da loja (Configurações → 🔔 Notificações Push) quando o painel está aberto neste aparelho.</div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🔐 Segurança</div>
@@ -3027,6 +3050,11 @@ function applyCardState(card, state){
   if (state.pinned && card.parentElement) card.parentElement.prepend(card);
   card.style.opacity = state.hidden ? '.35' : '';
   card.style.pointerEvents = state.hidden ? 'none' : '';
+  // BUG CORRIGIDO (v80): "pointerEvents:none" no card inteiro travava também o próprio botão
+  // "⋮ Mais opções" (que é filho do card) — depois de "Ocultar/Mostrar conteúdo" uma vez, o
+  // menu ficava impossível de clicar de novo pra reverter, parecia travado/bugado. Agora o
+  // título (onde mora o "⋮") sempre continua clicável, mesmo com o resto do card oculto.
+  if (titleEl) titleEl.style.pointerEvents = 'auto';
 }
 
 function handleCardControlClick(card, cardId, act){
@@ -3353,7 +3381,7 @@ function loadAlertVolumeUI(){
 }
 function playBeep(){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     [880,1100,880].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.connect(g);g.connect(_mg);
@@ -3390,9 +3418,11 @@ function adminDeviceLabel(){
 }
 async function updateAdminPushButtonState(){
   const btn = document.getElementById('admin-push-toggle-btn');
+  const silentChk = document.getElementById('admin-push-silent');
   if(!btn) return;
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
     btn.disabled = true; btn.textContent = '🔕 Este navegador não suporta notificações push';
+    if(silentChk) silentChk.disabled = true;
     return;
   }
   try{
@@ -3400,6 +3430,20 @@ async function updateAdminPushButtonState(){
     const sub = await reg.pushManager.getSubscription();
     btn.textContent = sub ? '🔕 Desativar alerta push neste aparelho' : '🔔 Ativar alerta push neste aparelho';
     btn.className = sub ? 'btn secondary sm' : 'btn success sm';
+    // v81: reflete se ESTE aparelho já está marcado como "silenciar som do sistema" (preferência
+    // salva por aparelho — ver toggleAdminPushSilent).
+    if(silentChk){
+      silentChk.disabled = !sub;
+      if(sub){
+        try{
+          const data = await apiGet('/api/admin/push/subs');
+          const mine = Array.isArray(data?.subs) ? data.subs.find(s=>s.endpoint===sub.endpoint) : null;
+          silentChk.checked = !!(mine && mine.silent);
+        }catch(e){ /* deixa como estava */ }
+      } else {
+        silentChk.checked = false;
+      }
+    }
   }catch(e){ /* mantém o texto padrão do botão */ }
 }
 async function toggleAdminPushSubscription(){
@@ -3415,6 +3459,7 @@ async function toggleAdminPushSubscription(){
     if(existing){
       await apiPost('/api/admin/push/unsubscribe', { endpoint: existing.endpoint });
       await existing.unsubscribe();
+      if ('caches' in window) caches.open('shogatsu-push-meta').then(c => c.delete('/__push-meta__/admin')).catch(() => {});
       statusEl.style.color='var(--muted)'; statusEl.textContent='🔕 Alerta push desativado neste aparelho.';
       updateAdminPushButtonState(); loadAdminPushDevices();
       return;
@@ -3425,11 +3470,36 @@ async function toggleAdminPushSubscription(){
     const { publicKey } = await keyRes.json();
     if(!publicKey){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Notificações push indisponíveis no momento.'; return; }
     const sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8ArrayAdmin(publicKey) });
-    const res = await apiPost('/api/admin/push/subscribe', { subscription: sub.toJSON(), deviceLabel: adminDeviceLabel() });
+    const silentChk = document.getElementById('admin-push-silent');
+    const res = await apiPost('/api/admin/push/subscribe', { subscription: sub.toJSON(), deviceLabel: adminDeviceLabel(), silent: !!(silentChk && silentChk.checked) });
     if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao ativar.'; return; }
+    // v80: mesmo "recibo" de reinscrição automática usado no site do cliente (ver sw.js,
+    // evento 'pushsubscriptionchange') — sem isso, se o navegador trocar a inscrição sozinho em
+    // segundo plano, o alerta do painel para de chegar nesse aparelho sem nenhum aviso. Guarda
+    // também o token, porque essa rota exige login e o Service Worker roda sem sessão de página.
+    if ('caches' in window) {
+      caches.open('shogatsu-push-meta').then(c => c.put('/__push-meta__/admin', new Response(JSON.stringify({ deviceLabel: adminDeviceLabel(), token })))).catch(() => {});
+    }
     statusEl.style.color='#50c878'; statusEl.textContent='🔔 Alerta push ativado! Este aparelho agora avisa mesmo com o painel fechado.';
     updateAdminPushButtonState(); loadAdminPushDevices();
   }catch(e){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Não foi possível ativar agora: '+(e.message||'erro desconhecido'); }
+}
+// v81: liga/desliga o som do sistema pra ESTE aparelho (preferência salva junto da inscrição
+// push dele, ver /api/admin/push/subscribe). Não cria uma inscrição nova — só reenvia a mesma
+// já ativa com o "silent" atualizado.
+async function toggleAdminPushSilent(checked){
+  const statusEl = document.getElementById('admin-push-status');
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(!sub){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Ative o alerta push neste aparelho primeiro.'; document.getElementById('admin-push-silent').checked=false; return; }
+    const res = await apiPost('/api/admin/push/subscribe', { subscription: sub.toJSON(), deviceLabel: adminDeviceLabel(), silent: !!checked });
+    if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao salvar.'; return; }
+    statusEl.style.color='#50c878';
+    statusEl.textContent = checked
+      ? '🔇 Som do sistema silenciado neste aparelho — agora depende do painel estar aberto pra avisar.'
+      : '🔔 Som do sistema reativado neste aparelho.';
+  }catch(e){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Não foi possível salvar agora: '+(e.message||'erro desconhecido'); }
 }
 function urlBase64ToUint8ArrayAdmin(base64String){
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -3447,7 +3517,7 @@ async function loadAdminPushDevices(){
   if(!subs.length){ el.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhum aparelho com alerta ativado ainda.</div>'; return; }
   el.innerHTML = `<div style="font-size:10px;color:var(--muted);margin-bottom:6px;">${subs.length} aparelho(s) recebendo alerta agora:</div>` +
     subs.map(s=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:11px;">
-      <span>📲 ${esc(s.deviceLabel)}${s.addedBy?` <span style="color:var(--muted);">· ${esc(s.addedBy)}</span>`:''}</span>
+      <span>📲 ${esc(s.deviceLabel)}${s.silent?' 🔇':''}${s.addedBy?` <span style="color:var(--muted);">· ${esc(s.addedBy)}</span>`:''}</span>
       <button type="button" class="btn secondary sm" onclick="removeAdminPushDevice('${s.endpoint.replace(/'/g,"\\'")}')">Remover</button>
     </div>`).join('');
 }
@@ -3472,7 +3542,7 @@ async function testAdminPush(){
 // pro admin poder ouvir e escolher em Configurações (botão "▶ Testar Som").
 const CUSTOMER_ALERT_SOUNDS = {
   classico(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     const o=ctx.createOscillator(),g=ctx.createGain();
     o.type='sine';o.frequency.setValueAtTime(880,ctx.currentTime);
     o.frequency.exponentialRampToValueAtTime(1320,ctx.currentTime+.12);
@@ -3481,7 +3551,7 @@ const CUSTOMER_ALERT_SOUNDS = {
     o.connect(g);g.connect(_mg);o.start();o.stop(ctx.currentTime+.35);
   }catch(e){} },
   suave(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     const o=ctx.createOscillator(),g=ctx.createGain();
     o.type='sine';o.frequency.setValueAtTime(660,ctx.currentTime);
     g.gain.setValueAtTime(.001,ctx.currentTime);
@@ -3490,7 +3560,7 @@ const CUSTOMER_ALERT_SOUNDS = {
     o.connect(g);g.connect(_mg);o.start();o.stop(ctx.currentTime+.3);
   }catch(e){} },
   dupla(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     [700,1050].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.type='triangle';o.frequency.value=f;
@@ -3501,7 +3571,7 @@ const CUSTOMER_ALERT_SOUNDS = {
     });
   }catch(e){} },
   sino(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     const now=ctx.currentTime;
     [523.25,659.25,784].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
@@ -3512,7 +3582,7 @@ const CUSTOMER_ALERT_SOUNDS = {
     });
   }catch(e){} },
   oriental(){ try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(_mg);
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
     const now=ctx.currentTime;
     [110,164.8,220].forEach((f,i)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
@@ -7874,20 +7944,29 @@ async function createScheduledPush(){
   const image = document.getElementById('push-image').value.trim();
   const sendAt = document.getElementById('push-schedule-at').value;
   const recurrence = document.getElementById('push-schedule-recurrence').value;
+  const intervalMinutes = recurrence==='hourly' ? Math.round((parseFloat(document.getElementById('push-schedule-interval-hours').value)||4)*60) : undefined;
   if(!sendAll && (!phones || !phones.length)){ alert('Selecione pelo menos um cliente, ou marque "Enviar pra todos os inscritos".'); return; }
   if(!message){ alert('Escreva a mensagem da notificação.'); return; }
   if(!sendAt){ alert('Escolha a data e hora do envio.'); return; }
+  if(recurrence==='hourly' && (!intervalMinutes || intervalMinutes<5)){ alert('Escolha um intervalo de repetição válido (mínimo 5 minutos).'); return; }
   statusEl.style.color='var(--muted)'; statusEl.textContent='Agendando...';
   const res = await apiPost('/api/admin/scheduled-push', {
     title, message, image, sendAll, phones,
-    sendAt: new Date(sendAt).toISOString(), recurrence
+    sendAt: new Date(sendAt).toISOString(), recurrence, intervalMinutes
   });
   if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao agendar.'; return; }
   statusEl.style.color='#50c878'; statusEl.textContent='📅 Notificação agendada com sucesso!';
   document.getElementById('push-schedule-at').value='';
   loadScheduledPushList();
 }
-const RECURRENCE_LABEL = { none:'uma vez', daily:'todo dia', weekly:'toda semana', monthly:'todo mês' };
+const RECURRENCE_LABEL = { none:'uma vez', hourly:'várias vezes ao dia', daily:'todo dia', weekly:'toda semana', monthly:'todo mês' };
+function recurrenceLabel(it){
+  if(it.recurrence==='hourly'){
+    const h = (it.intervalMinutes||240)/60;
+    return `a cada ${h % 1 === 0 ? h : h.toFixed(1)}h`;
+  }
+  return RECURRENCE_LABEL[it.recurrence] || 'uma vez';
+}
 async function loadScheduledPushList(){
   const el = document.getElementById('scheduled-push-list');
   if(!el) return;
@@ -7904,7 +7983,7 @@ async function loadScheduledPushList(){
           <div style="font-weight:600;">${esc(it.title||'(sem título)')}</div>
           <div style="color:var(--muted);margin-top:2px;">${esc(it.message)}</div>
           <div style="color:var(--gold);margin-top:4px;">
-            ${it.active ? `⏰ Próximo envio: ${next}` : '⏸ Pausado'} · 🔁 ${RECURRENCE_LABEL[it.recurrence]||'uma vez'} · 👥 ${dest}
+            ${it.active ? `⏰ Próximo envio: ${next}` : '⏸ Pausado'} · 🔁 ${recurrenceLabel(it)} · 👥 ${dest}
             ${it.sentCount ? ` · enviado ${it.sentCount}x` : ''}
           </div>
         </div>
