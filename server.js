@@ -1139,7 +1139,11 @@ function perguntarIA(historicoMensagens, iaCfg, cfg, menu) {
   const sistema = `Você é o atendimento automático do restaurante "${cfg.name}", conversando com um cliente ` +
     `no próprio site de pedidos. Responda curto, simpático, em português do Brasil, sem inventar informação ` +
     `que você não tem (se não souber, sugira o botão "Falar com atendente"). Se a pergunta do cliente bater com ` +
-    `alguma das Perguntas Frequentes abaixo, use aquela resposta como base.\n\n` +
+    `alguma das Perguntas Frequentes abaixo, use aquela resposta como base. Você já tem a lista completa do ` +
+    `cardápio abaixo — sempre que o cliente pedir "o cardápio", "opções", "o que vocês têm" ou parecer indeciso ` +
+    `sobre o que pedir, liste diretamente os pratos (com preço) e, se fizer sentido, recomende 2-3 opções mais ` +
+    `pedidas ou combine com o que ele descreveu gostar — nunca apenas mande ele olhar o cardápio na tela sem ` +
+    `ajudar, já que você tem essa informação em mãos.\n\n` +
     `Perguntas Frequentes cadastradas:\n${faqTexto || '(nenhuma)'}\n\n` +
     `Cardápio atual:\n${itensTexto || '(cardápio vazio no momento)'}\n\n` +
     `Horário: ${cfg.days}, ${cfg.hours}. Taxa de entrega: R$ ${Number(cfg.fee || 0).toFixed(2)}. Pedido mínimo: R$ ${Number(cfg.min || 0).toFixed(2)}.`;
@@ -1767,6 +1771,17 @@ const server = http.createServer(async (req, res) => {
     conversa.mensagens.push({ de: 'sistema', texto: 'Cliente pediu pra falar com um atendente.', ts: new Date().toISOString() });
     conversa.ultimaAtividade = new Date().toISOString();
     salvarAtendimentos(todas);
+    // v80: mesmo alerta push simultâneo (PC + celular, mesmo com o painel/app fechado) que já
+    // avisa pedido novo e reserva nova — agora também dispara quando um cliente pede pra falar
+    // com um atendente humano, pra quem for chamado saber na hora, numa tela, mesmo de longe.
+    sendAdminPush({
+      title: '🙋 Cliente chamando atendente!',
+      body: `${conversa.nomeCliente || 'Um cliente'} está esperando atendimento humano no Chat Express.`,
+      url: '/painel.html',
+      icon: '/icon-192.png',
+      sound: 'oriental',
+      tag: 'shogatsu-atendimento-humano-' + conversaHumanoMatch[1]
+    });
     return sendJSON(res, 200, { conversa });
   }
   // Painel — listar e responder conversas
@@ -3213,12 +3228,16 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/admin/scheduled-push' && req.method === 'POST') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
     try {
-      const { title, message, image, url: targetUrl, phones, sendAll, sendAt, recurrence } = await readBody(req);
+      const { title, message, image, url: targetUrl, phones, sendAll, sendAt, recurrence, intervalMinutes } = await readBody(req);
       const msg = String(message || '').slice(0, 200).trim();
       if (!msg) return sendJSON(res, 400, { error: 'Escreva a mensagem da notificação.' });
       const when = new Date(sendAt);
       if (isNaN(when.getTime())) return sendJSON(res, 400, { error: 'Escolha data e horário válidos.' });
-      const rec = ['none', 'daily', 'weekly', 'monthly'].includes(recurrence) ? recurrence : 'none';
+      // v80: "hourly" = repetir VÁRIAS VEZES AO DIA (não só 1x/dia) — intervalMinutes define de
+      // quanto em quanto tempo repete (ex: a cada 4h = 240). Antes só dava pra repetir 1x/dia
+      // no mínimo (diária/semanal/mensal); agora dá pra reenviar várias vezes no mesmo dia.
+      const rec = ['none', 'hourly', 'daily', 'weekly', 'monthly'].includes(recurrence) ? recurrence : 'none';
+      const interval = rec === 'hourly' ? Math.max(5, Math.min(1440, Math.round(Number(intervalMinutes)) || 240)) : null;
       const list = readJSON(SCHEDULED_PUSH_FILE);
       const item = {
         id: 'AG' + Date.now().toString(36).toUpperCase(),
@@ -3229,6 +3248,7 @@ function estimateDeliveryWindow(order, cfg) {
         phones: (!sendAll && Array.isArray(phones)) ? phones.map(normalizePhone) : null, // null = todos os inscritos
         sendAll: !!sendAll,
         recurrence: rec,
+        intervalMinutes: interval,
         active: true,
         nextSendAt: when.toISOString(),
         lastSentAt: null,
@@ -3256,7 +3276,8 @@ function estimateDeliveryWindow(order, cfg) {
       if (body.url !== undefined) item.url = String(body.url).slice(0, 200);
       if (body.sendAll !== undefined) item.sendAll = !!body.sendAll;
       if (body.phones !== undefined) item.phones = (!item.sendAll && Array.isArray(body.phones)) ? body.phones.map(normalizePhone) : null;
-      if (body.recurrence !== undefined && ['none', 'daily', 'weekly', 'monthly'].includes(body.recurrence)) item.recurrence = body.recurrence;
+      if (body.recurrence !== undefined && ['none', 'hourly', 'daily', 'weekly', 'monthly'].includes(body.recurrence)) item.recurrence = body.recurrence;
+      if (body.intervalMinutes !== undefined) item.intervalMinutes = item.recurrence === 'hourly' ? Math.max(5, Math.min(1440, Math.round(Number(body.intervalMinutes)) || 240)) : null;
       if (body.sendAt !== undefined) {
         const when = new Date(body.sendAt);
         if (!isNaN(when.getTime())) item.nextSendAt = when.toISOString();
@@ -4151,9 +4172,12 @@ function estimateDeliveryWindow(order, cfg) {
 // v79: calcula a PRÓXIMA data de envio de uma campanha recorrente, a partir da última data
 // programada (não da hora atual) — assim o horário do dia sempre fica igual ao que foi
 // escolhido no agendamento, mesmo que o servidor demore um pouco pra rodar o checador.
-function computeNextSend(fromISO, recurrence) {
+function computeNextSend(fromISO, recurrence, intervalMinutes) {
   const d = new Date(fromISO);
-  if (recurrence === 'daily') d.setDate(d.getDate() + 1);
+  // v80: "hourly" repete VÁRIAS VEZES NO MESMO DIA, de X em X minutos (intervalMinutes) —
+  // as outras opções (daily/weekly/monthly) continuam no máximo 1x por dia.
+  if (recurrence === 'hourly') d.setMinutes(d.getMinutes() + (Number(intervalMinutes) || 240));
+  else if (recurrence === 'daily') d.setDate(d.getDate() + 1);
   else if (recurrence === 'weekly') d.setDate(d.getDate() + 7);
   else if (recurrence === 'monthly') d.setMonth(d.getMonth() + 1);
   return d.toISOString();
@@ -4196,7 +4220,7 @@ async function checkScheduledPush() {
       item.lastSentAt = new Date().toISOString();
       item.sentCount = (item.sentCount || 0) + 1;
       if (item.recurrence && item.recurrence !== 'none') {
-        item.nextSendAt = computeNextSend(item.nextSendAt, item.recurrence);
+        item.nextSendAt = computeNextSend(item.nextSendAt, item.recurrence, item.intervalMinutes);
       } else {
         item.active = false;
       }
