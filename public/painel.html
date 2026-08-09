@@ -1049,6 +1049,28 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="push-customers-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando clientes...</div>
           <button class="btn success" style="margin-top:10px;" onclick="sendPushCampaign()">📤 Enviar Notificação Push</button>
           <div id="push-send-status" style="font-size:12px;margin-top:8px;"></div>
+          <hr style="border-color:var(--border);margin:16px 0;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📅 Agendar em vez de enviar agora</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            Programa a mensagem acima (título, texto, imagem e destinatários) pra sair sozinha numa
+            data/hora escolhida — só uma vez, ou repetindo automaticamente (todo dia, toda semana ou
+            todo mês), sem precisar reagendar.
+          </div>
+          <div class="field-row">
+            <div class="field"><label style="font-size:10px;">Data e hora do envio</label><input type="datetime-local" id="push-schedule-at"/></div>
+            <div class="field"><label style="font-size:10px;">Repetir</label>
+              <select id="push-schedule-recurrence">
+                <option value="none">Só uma vez</option>
+                <option value="daily">Todo dia</option>
+                <option value="weekly">Toda semana</option>
+                <option value="monthly">Todo mês</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn secondary" style="margin-top:6px;" onclick="createScheduledPush()">📅 Agendar essa notificação</button>
+          <div id="push-schedule-status" style="font-size:12px;margin-top:8px;"></div>
+          <div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">Agendamentos ativos</div>
+          <div id="scheduled-push-list" style="border:1px solid var(--border);border-radius:8px;padding:8px;">Carregando...</div>
         </div>
 <div class="settings-card" style="grid-column:1/-1;">
           <div class="settings-card-title">🤖 Atendimento — IA e Perguntas Frequentes</div>
@@ -1993,6 +2015,18 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <button type="button" class="btn secondary sm" onclick="playBeep()" style="margin-top:6px;">▶ Testar volume</button>
           <div style="font-size:10px;color:var(--muted);margin-top:6px;">Vale só neste aparelho/navegador — cada computador da loja pode ter seu próprio volume.</div>
+          <hr style="border-color:var(--border);margin:16px 0;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📱💻 Alerta push simultâneo (PC + celular)</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+            O som acima só toca com o painel <b>aberto na tela</b>. Ativando aqui, este aparelho passa a
+            receber uma notificação push de verdade (pedido novo e reserva nova) <b>mesmo com o painel
+            fechado</b> — igual toca no celular quando chega mensagem. Ative em cada aparelho que deve
+            avisar (o PC do balcão, o celular do dono, um tablet da cozinha...) — todos tocam ao mesmo tempo.
+          </div>
+          <button type="button" class="btn success sm" id="admin-push-toggle-btn" onclick="toggleAdminPushSubscription()">🔔 Ativar alerta push neste aparelho</button>
+          <button type="button" class="btn secondary sm" onclick="testAdminPush()" style="margin-left:6px;">▶ Testar</button>
+          <div id="admin-push-status" style="font-size:11px;margin-top:8px;color:var(--muted);"></div>
+          <div id="admin-push-devices" style="margin-top:10px;"></div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🔐 Segurança</div>
@@ -2619,6 +2653,16 @@ async function apiPatch(path, body){
   const r = await fetch(path, { method:'PATCH', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body||{}) });
   if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
   return { ok:r.ok, status:r.status, data: await r.json() };
+}
+async function apiPut(path, body){
+  const r = await fetch(path, { method:'PUT', headers: authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body||{}) });
+  if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
+  return { ok:r.ok, status:r.status, data: await r.json() };
+}
+async function apiDelete(path){
+  const r = await fetch(path, { method:'DELETE', headers: authHeaders() });
+  if(r.status===401){ if(token) doLogout(); throw new Error('unauthorized'); }
+  return { ok:r.ok, status:r.status, data: await r.json().catch(()=>({})) };
 }
 
 async function doLogin(){
@@ -3318,6 +3362,110 @@ function playBeep(){
       o.start(ctx.currentTime+i*.15);o.stop(ctx.currentTime+i*.15+.12);
     });
   }catch(e){}
+}
+
+// ═══════════════════════════════════════════
+// v79: ALERTA PUSH DA LOJA — PC + celular simultâneo (funciona com o painel fechado).
+// Reaproveita o mesmo Service Worker/chave VAPID do site do cliente, só que numa lista de
+// inscrições própria do painel (endpoints /api/admin/push/*). Cada aparelho que ativa
+// (este PC, um celular, um tablet) vira uma inscrição separada, e o servidor manda pra
+// todas ao mesmo tempo quando chega pedido ou reserva nova (ver server.js, sendAdminPush).
+// ═══════════════════════════════════════════
+function adminDeviceLabel(){
+  // Tenta um nome que ajude a reconhecer o aparelho na lista (ex: "Windows · Chrome"),
+  // sem precisar perguntar nada pro usuário.
+  const ua = navigator.userAgent || '';
+  let os = 'Aparelho';
+  if(/Android/i.test(ua)) os='Android';
+  else if(/iPhone|iPad|iPod/i.test(ua)) os='iPhone/iPad';
+  else if(/Windows/i.test(ua)) os='Windows';
+  else if(/Macintosh/i.test(ua)) os='Mac';
+  else if(/Linux/i.test(ua)) os='Linux';
+  let browser = 'Navegador';
+  if(/Edg\//i.test(ua)) browser='Edge';
+  else if(/Chrome\//i.test(ua)) browser='Chrome';
+  else if(/Firefox\//i.test(ua)) browser='Firefox';
+  else if(/Safari\//i.test(ua)) browser='Safari';
+  return `${os} · ${browser}`;
+}
+async function updateAdminPushButtonState(){
+  const btn = document.getElementById('admin-push-toggle-btn');
+  if(!btn) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    btn.disabled = true; btn.textContent = '🔕 Este navegador não suporta notificações push';
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    btn.textContent = sub ? '🔕 Desativar alerta push neste aparelho' : '🔔 Ativar alerta push neste aparelho';
+    btn.className = sub ? 'btn secondary sm' : 'btn success sm';
+  }catch(e){ /* mantém o texto padrão do botão */ }
+}
+async function toggleAdminPushSubscription(){
+  const btn = document.getElementById('admin-push-toggle-btn');
+  const statusEl = document.getElementById('admin-push-status');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    statusEl.style.color='var(--red-lt)'; statusEl.textContent='Este navegador não suporta notificações push.';
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if(existing){
+      await apiPost('/api/admin/push/unsubscribe', { endpoint: existing.endpoint });
+      await existing.unsubscribe();
+      statusEl.style.color='var(--muted)'; statusEl.textContent='🔕 Alerta push desativado neste aparelho.';
+      updateAdminPushButtonState(); loadAdminPushDevices();
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Permissão de notificações negada pelo navegador.'; return; }
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { publicKey } = await keyRes.json();
+    if(!publicKey){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Notificações push indisponíveis no momento.'; return; }
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8ArrayAdmin(publicKey) });
+    const res = await apiPost('/api/admin/push/subscribe', { subscription: sub.toJSON(), deviceLabel: adminDeviceLabel() });
+    if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao ativar.'; return; }
+    statusEl.style.color='#50c878'; statusEl.textContent='🔔 Alerta push ativado! Este aparelho agora avisa mesmo com o painel fechado.';
+    updateAdminPushButtonState(); loadAdminPushDevices();
+  }catch(e){ statusEl.style.color='var(--red-lt)'; statusEl.textContent='Não foi possível ativar agora: '+(e.message||'erro desconhecido'); }
+}
+function urlBase64ToUint8ArrayAdmin(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function loadAdminPushDevices(){
+  const el = document.getElementById('admin-push-devices');
+  if(!el) return;
+  let data;
+  try{ data = await apiGet('/api/admin/push/subs'); }catch(e){ return; }
+  if(!Array.isArray(data?.subs)) return;
+  const subs = data.subs;
+  if(!subs.length){ el.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhum aparelho com alerta ativado ainda.</div>'; return; }
+  el.innerHTML = `<div style="font-size:10px;color:var(--muted);margin-bottom:6px;">${subs.length} aparelho(s) recebendo alerta agora:</div>` +
+    subs.map(s=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:11px;">
+      <span>📲 ${esc(s.deviceLabel)}${s.addedBy?` <span style="color:var(--muted);">· ${esc(s.addedBy)}</span>`:''}</span>
+      <button type="button" class="btn secondary sm" onclick="removeAdminPushDevice('${s.endpoint.replace(/'/g,"\\'")}')">Remover</button>
+    </div>`).join('');
+}
+async function removeAdminPushDevice(endpoint){
+  if(!confirm('Remover este aparelho da lista de alerta push?')) return;
+  await apiPost('/api/admin/push/unsubscribe', { endpoint });
+  loadAdminPushDevices();
+  updateAdminPushButtonState();
+}
+async function testAdminPush(){
+  const statusEl = document.getElementById('admin-push-status');
+  statusEl.style.color='var(--muted)'; statusEl.textContent='Enviando teste...';
+  const res = await apiPost('/api/admin/push/test', {});
+  if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao testar.'; return; }
+  const d = res.data;
+  if(!d.sent && !d.failed){ statusEl.style.color='var(--orange)'; statusEl.textContent='Nenhum aparelho ativado ainda — ative o alerta push acima primeiro.'; return; }
+  statusEl.style.color = d.failed>0 ? 'var(--orange)' : '#50c878';
+  statusEl.textContent = `✅ Teste enviado pra ${d.sent} aparelho(s)${d.failed>0?`, ⚠️ ${d.failed} falharam`:''}.`;
 }
 
 // v40: mesma biblioteca de 5 avisos sonoros usada no cardápio do cliente — aqui só
@@ -6954,6 +7102,8 @@ function loadSettings(){
   loadFeeSettings();
   loadCourierPaySettings();
   loadAlertVolumeUI();
+  updateAdminPushButtonState();
+  loadAdminPushDevices();
 }
 // ═══════════════════════════════════════════
 // Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
@@ -7628,6 +7778,7 @@ function loadSmsSettings(){
   const waNotifyEl=document.getElementById('sms-whatsapp-notify'); if(waNotifyEl) waNotifyEl.checked=!!cfg.sms?.notifyWhatsApp;
   loadPromoCustomers();
   loadPushSubsCount();
+  loadScheduledPushList();
 }
 async function loadPromoCustomers(){
   const res = await apiGet('/api/admin/customers');
@@ -7706,6 +7857,73 @@ async function sendPushCampaign(){
   statusEl.style.color = d.failed>0 ? 'var(--orange)' : '#50c878';
   statusEl.textContent = `✅ ${d.sent} enviado(s)${d.failed>0?`, ⚠️ ${d.failed} falharam`:''} de ${d.total} inscrito(s).`;
   loadPushSubsCount();
+}
+
+// ═══════════════════════════════════════════
+// v79: NOTIFICAÇÕES PUSH AGENDADAS/RECORRENTES — reaproveita os mesmos campos da campanha
+// (título, mensagem, imagem, destinatários) logo acima, só que programada pra sair sozinha.
+// O disparo de verdade acontece no servidor (checkScheduledPush em server.js, a cada minuto) —
+// então funciona mesmo com o painel fechado, igual o alerta push simultâneo.
+// ═══════════════════════════════════════════
+async function createScheduledPush(){
+  const statusEl = document.getElementById('push-schedule-status');
+  const sendAll = document.getElementById('push-send-all').checked;
+  const phones = sendAll ? null : [...document.querySelectorAll('.push-cust-chk:checked')].map(el=>el.dataset.phone);
+  const title = document.getElementById('push-title').value.trim();
+  const message = document.getElementById('push-message').value.trim();
+  const image = document.getElementById('push-image').value.trim();
+  const sendAt = document.getElementById('push-schedule-at').value;
+  const recurrence = document.getElementById('push-schedule-recurrence').value;
+  if(!sendAll && (!phones || !phones.length)){ alert('Selecione pelo menos um cliente, ou marque "Enviar pra todos os inscritos".'); return; }
+  if(!message){ alert('Escreva a mensagem da notificação.'); return; }
+  if(!sendAt){ alert('Escolha a data e hora do envio.'); return; }
+  statusEl.style.color='var(--muted)'; statusEl.textContent='Agendando...';
+  const res = await apiPost('/api/admin/scheduled-push', {
+    title, message, image, sendAll, phones,
+    sendAt: new Date(sendAt).toISOString(), recurrence
+  });
+  if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao agendar.'; return; }
+  statusEl.style.color='#50c878'; statusEl.textContent='📅 Notificação agendada com sucesso!';
+  document.getElementById('push-schedule-at').value='';
+  loadScheduledPushList();
+}
+const RECURRENCE_LABEL = { none:'uma vez', daily:'todo dia', weekly:'toda semana', monthly:'todo mês' };
+async function loadScheduledPushList(){
+  const el = document.getElementById('scheduled-push-list');
+  if(!el) return;
+  let data;
+  try{ data = await apiGet('/api/admin/scheduled-push'); }catch(e){ return; }
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if(!items.length){ el.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhuma notificação agendada.</div>'; return; }
+  el.innerHTML = items.slice().sort((a,b)=>new Date(a.nextSendAt||0)-new Date(b.nextSendAt||0)).map(it=>{
+    const next = it.nextSendAt ? new Date(it.nextSendAt).toLocaleString('pt-BR') : '—';
+    const dest = it.sendAll ? 'todos os inscritos' : `${(it.phones||[]).length} cliente(s)`;
+    return `<div style="padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;font-size:11px;${it.active?'':'opacity:.5;'}">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${esc(it.title||'(sem título)')}</div>
+          <div style="color:var(--muted);margin-top:2px;">${esc(it.message)}</div>
+          <div style="color:var(--gold);margin-top:4px;">
+            ${it.active ? `⏰ Próximo envio: ${next}` : '⏸ Pausado'} · 🔁 ${RECURRENCE_LABEL[it.recurrence]||'uma vez'} · 👥 ${dest}
+            ${it.sentCount ? ` · enviado ${it.sentCount}x` : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button type="button" class="btn secondary sm" onclick="toggleScheduledPush('${it.id}',${!it.active})">${it.active?'Pausar':'Reativar'}</button>
+          <button type="button" class="btn secondary sm" onclick="deleteScheduledPush('${it.id}')">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function toggleScheduledPush(id, active){
+  await apiPut('/api/admin/scheduled-push/'+encodeURIComponent(id), { active });
+  loadScheduledPushList();
+}
+async function deleteScheduledPush(id){
+  if(!confirm('Excluir este agendamento?')) return;
+  await apiDelete('/api/admin/scheduled-push/'+encodeURIComponent(id));
+  loadScheduledPushList();
 }
 
 function updatePrintFontPreview(){
