@@ -712,6 +712,21 @@ function broadcast(event, data) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) { try { res.write(payload); } catch (e) {} }
 }
+// v82: rastreio de Agentes Locais de Impressão conectados — criado pra responder de vez a
+// "impressão automática não funciona nem manual, nem no teste": antes disso era impossível o
+// admin saber, só olhando o painel, se o print-agent.js sequer estava rodando/conectado no
+// computador da loja — a única forma de descobrir era abrir o print-agent.log no computador
+// físico. Agora o próprio agente avisa o servidor (POST /api/print-agent/announce, logo após
+// logar e de novo a cada ~45s como "sinal de vida") e o painel mostra um aviso ✅/❌ bem visível
+// em Central de Impressão. Guardado só em memória (não precisa persistir): cada entrada expira
+// sozinha (ver PRINT_AGENT_TTL_MS) se o agente cair sem avisar (queda de luz, processo morto).
+const printAgents = new Map(); // agentId -> { label, stations, printers, lastSeen }
+const PRINT_AGENT_TTL_MS = 90 * 1000; // sem novo aviso em 90s, considera o agente offline
+function getOnlinePrintAgents() {
+  const now = Date.now();
+  for (const [id, a] of printAgents) { if (now - a.lastSeen > PRINT_AGENT_TTL_MS) printAgents.delete(id); }
+  return [...printAgents.values()];
+}
 
 // ─── Clientes conectados via SSE no SITE DO CLIENTE (só avisa "cardápio mudou",
 // nunca manda dados de pedido/cliente — canal público, sem autenticação) ───
@@ -2740,6 +2755,35 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try { return sendJSON(res, 200, { log: readJSON(PRINT_LOG_FILE) }); }
     catch (e) { return sendJSON(res, 200, { log: [] }); }
+  }
+
+  // ── POST /api/print-agent/announce — o Agente Local avisa "estou vivo" (v82) ──
+  // Chamado pelo print-agent.js logo após conectar e depois a cada ~45s. Não precisa de nenhum
+  // dado sensível: só label/vias de cada impressora configurada nele, pra o painel poder
+  // mostrar "✅ Agente conectado (Caixa USB → caixa; Sushibar Rede → sushibar,bar)".
+  if (pathname === '/api/print-agent/announce' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { agentId, printers } = await readBody(req);
+      if (!agentId) return sendJSON(res, 400, { error: 'agentId obrigatório.' });
+      printAgents.set(String(agentId), {
+        printers: Array.isArray(printers) ? printers.slice(0, 20).map(p => ({
+          label: String(p.label || 'Impressora').slice(0, 60),
+          stations: Array.isArray(p.stations) ? p.stations.slice(0, 20) : []
+        })) : [],
+        lastSeen: Date.now()
+      });
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── GET /api/print-agent/status — o painel consulta pra mostrar se tem algum Agente Local
+  // conectado agora, e quais vias cada um cobre (v82) ──
+  if (pathname === '/api/print-agent/status' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const agents = getOnlinePrintAgents();
+    const coveredStations = [...new Set(agents.flatMap(a => a.printers.flatMap(p => p.stations)))];
+    return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations });
   }
 
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
