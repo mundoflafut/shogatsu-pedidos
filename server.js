@@ -958,7 +958,12 @@ async function sendAdminPush(payload) {
     let sent = 0, failed = 0;
     const expired = [];
     for (const sub of subs) {
-      const r = await webpush.sendWebPush(sub, payload, cfg.vapid, cfg.vapid.subject);
+      // v81: `silent` agora é por aparelho (cada um escolhe em Configurações → 🔔 Notificações
+      // Push → "🔇 Silenciar som do sistema neste aparelho"), não mais fixo pra todo mundo —
+      // por isso o payload é montado de novo pra cada inscrição, em vez de mandar o mesmo
+      // objeto pra todas.
+      const perDevicePayload = { ...payload, silent: !!sub.silent };
+      const r = await webpush.sendWebPush(sub, perDevicePayload, cfg.vapid, cfg.vapid.subject);
       if (r.ok) sent++; else { failed++; if (r.expired) expired.push(sub.endpoint); }
     }
     if (expired.length) writeJSON(ADMIN_PUSH_SUBS_FILE, subs.filter(s => !expired.includes(s.endpoint)));
@@ -3172,7 +3177,7 @@ function estimateDeliveryWindow(order, cfg) {
     const session = getSession(getToken(req, query));
     if (!session) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { subscription, deviceLabel } = await readBody(req);
+      const { subscription, deviceLabel, silent } = await readBody(req);
       if (!subscription || !subscription.endpoint || !subscription.keys) return sendJSON(res, 400, { error: 'Inscrição inválida.' });
       const subs = readJSON(ADMIN_PUSH_SUBS_FILE);
       const existing = subs.findIndex(s => s.endpoint === subscription.endpoint);
@@ -3181,6 +3186,11 @@ function estimateDeliveryWindow(order, cfg) {
         keys: subscription.keys,
         deviceLabel: String(deviceLabel || '').slice(0, 60) || 'Aparelho sem nome',
         addedBy: session.username || '',
+        // v81: preferência por aparelho — não manda o som do sistema (silent:true), porque
+        // esse aparelho já toca o som configurado do painel enquanto está aberto. Se não vier
+        // no corpo da requisição, mantém o que já estava salvo (evita resetar sozinho num
+        // reenvio de rotina, ex: pushsubscriptionchange).
+        silent: typeof silent === 'boolean' ? silent : (existing !== -1 ? !!subs[existing].silent : false),
         createdAt: existing === -1 ? new Date().toISOString() : subs[existing].createdAt,
         lastSeenAt: new Date().toISOString()
       };
@@ -3202,7 +3212,7 @@ function estimateDeliveryWindow(order, cfg) {
   // ── GET /api/admin/push/subs — lista os aparelhos da loja com alerta push ativado ──
   if (pathname === '/api/admin/push/subs' && req.method === 'GET') {
     if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    const subs = readJSON(ADMIN_PUSH_SUBS_FILE).map(s => ({ endpoint: s.endpoint, deviceLabel: s.deviceLabel, addedBy: s.addedBy, createdAt: s.createdAt }));
+    const subs = readJSON(ADMIN_PUSH_SUBS_FILE).map(s => ({ endpoint: s.endpoint, deviceLabel: s.deviceLabel, addedBy: s.addedBy, createdAt: s.createdAt, silent: !!s.silent }));
     return sendJSON(res, 200, { subs });
   }
   // ── POST /api/admin/push/test — manda uma notificação de teste pra todos os aparelhos ativados ──
@@ -3541,7 +3551,8 @@ function estimateDeliveryWindow(order, cfg) {
         url: '/painel.html',
         icon: '/icon-192.png',
         sound: 'oriental',
-        tag: 'shogatsu-nova-reserva'
+        // v81: tag por reserva — mesma correção do pedido novo, ver comentário lá em cima.
+        tag: 'shogatsu-nova-reserva-' + reservation.id
       });
       return sendJSON(res, 201, { ok: true, reservation });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
@@ -3779,7 +3790,12 @@ function estimateDeliveryWindow(order, cfg) {
         url: '/painel.html',
         icon: '/icon-192.png',
         sound: 'oriental',
-        tag: 'shogatsu-novo-pedido'
+        // v81: BUG CORRIGIDO — tag por pedido (antes era sempre a mesma "shogatsu-novo-pedido"
+        // pra todo pedido novo). Com a mesma tag, um segundo pedido chegando antes do primeiro
+        // alerta ser visto SUBSTITUÍA o anterior na tela — e substituição de notificação com a
+        // mesma tag não re-toca som/vibração por padrão, então na prática o alerta "sumia" sem
+        // avisar ninguém. Agora cada pedido empilha o próprio alerta.
+        tag: 'shogatsu-novo-pedido-' + order.id
       });
       return sendJSON(res, 201, { ok: true, order });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
