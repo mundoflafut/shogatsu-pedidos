@@ -48,6 +48,24 @@ body[data-theme="light"] .drawer,body[data-theme="light"] .screen{box-shadow:0 1
 html{overflow-x:hidden;overflow-x:clip;overflow-y:visible;width:100%;}
 img{max-width:100%;}
 body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;overflow-x:clip;overflow-y:visible;}
+/* v83 — BUG CORRIGIDO ("cabeçalho não flutua no iOS ao rolar o cardápio"): o Safari (iOS e
+   macOS) tem um bug documentado (confirmado nos fóruns de desenvolvedor da própria Apple,
+   ainda sem correção até a versão testada) onde "overflow-x: clip" também clipa o eixo Y por
+   engano, mesmo com "overflow-y: visible" explícito — em navegadores baseados em Chromium/
+   Firefox isso não acontece, só no WebKit. Esse clipe indevido do eixo Y é o que quebrava o
+   header/barra de categorias "sticky" só no iPhone: o elemento continuava tecnicamente
+   "grudado" no CSS, mas ficava visualmente cortado/escondido atrás do conteúdo ao rolar.
+   `@supports (-webkit-touch-callout: none)` é um jeito confiável de mirar só em Safari/iOS
+   (essa propriedade só existe lá), sem afetar Chrome/Firefox/Edge — nesses o "clip" da v63
+   continua valendo normalmente. Essa regra vem DEPOIS das de cima de propósito — em CSS, com
+   mesma especificidade, quem vem depois no arquivo vence, então só assim ela realmente
+   substitui o "clip" em vez de ser sobrescrita por ele. Troca só nesse caso pra "hidden" (sem
+   travar o eixo Y em "visible" explícito, deixando o padrão do navegador cuidar disso), que é
+   a combinação que não aciona esse bug específico do WebKit. */
+@supports (-webkit-touch-callout: none) {
+  html{overflow-x:hidden;overflow-y:visible;}
+  body{overflow-x:hidden;overflow-y:visible;}
+}
 a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
 
@@ -1733,6 +1751,7 @@ async function doLogin() {
     saveCustomerSession();
     updateAccountUI();
     openAccountScreen();
+    syncPushSubscriptionPhone(customer.phone); // v82: fecha o mesmo gap pra quem loga numa conta já existente
   } catch (e) { statusEl.textContent = 'Erro de conexão.'; }
 }
 
@@ -3293,6 +3312,17 @@ async function placeOrder() {
     setPlaceBtnState('idle');
     return;
   }
+  // v82 — BUG CORRIGIDO ("cliente não recebe notificação push de status do pedido"): a
+  // inscrição push só grava o telefone no momento em que o cliente clica em "Ativar
+  // Notificações" (togglePushSubscription, em Configurações/Minha Conta) — se nesse momento
+  // ele ainda não tinha telefone salvo (visitante, primeira visita, ativou antes de fazer
+  // login), a inscrição ficava com phone:'' pra sempre. Só que o aviso de status do pedido
+  // (server.js, PUSH_STATUS_MESSAGES) só manda push pra quem tem phone EXATAMENTE igual ao do
+  // pedido — então, mesmo com notificações "ativadas" no aparelho, nada nunca chegava. Agora,
+  // toda vez que um pedido é enviado com sucesso, re-sincroniza o telefone da inscrição push
+  // já existente (se houver) com o telefone desse pedido — silencioso, não bloqueia nem avisa
+  // nada em caso de falha.
+  syncPushSubscriptionPhone(phone);
 
   // Cria a conta do cliente, se ele marcou a opção de salvar os dados
   if (!customer && mode === 'delivery' && document.getElementById('f-save-account').checked) {
@@ -3972,6 +4002,25 @@ function urlBase64ToUint8Array(base64String) {
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+// v82: mantém o telefone da inscrição push sincronizado com o telefone real do cliente — sem
+// isso, quem ativa notificações antes de ter telefone salvo nunca recebe aviso de status de
+// pedido nenhum (ver comentário em cima da chamada, na função de enviar pedido). Só faz nada se
+// o navegador não suportar push ou se o cliente nunca ativou notificações nesse aparelho.
+async function syncPushSubscriptionPhone(phone) {
+  if (!phone || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return; // não tem notificações ativadas nesse aparelho — nada a sincronizar
+    await fetch('/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON(), phone })
+    });
+    if ('caches' in window) {
+      caches.open('shogatsu-push-meta').then(c => c.put('/__push-meta__/cliente', new Response(JSON.stringify({ phone })))).catch(() => {});
+    }
+  } catch (e) { /* silencioso — não trava o fluxo do pedido por causa disso */ }
 }
 async function updatePushButtonState() {
   const btn = document.getElementById('account-push-btn');

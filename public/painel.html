@@ -1580,6 +1580,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="print-agent-status-box" style="margin-top:10px;font-size:11px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
             Verificando Agente Local de Impressão...
           </div>
+          <div class="field" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="cfg-print-terminal" style="width:16px;height:16px;" onchange="localStorage.setItem('shogatsu_print_terminal', this.checked?'1':'0')"/>
+            <label for="cfg-print-terminal" style="font-size:11px;margin:0;">🖥️ Este computador é o Terminal de Impressão (imprime sozinho as vias em modo "Navegador" pedidas de OUTRO aparelho, como o celular)</label>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;margin-left:24px;">
+            Só marca isso no computador que fica de fato ligado na impressora, com o painel aberto o tempo todo (ex.: PC do caixa). Não marca no celular — essa opção é só pra você poder clicar em Imprimir/Reimprimir do celular como se fosse um controle remoto, e o PC imprimir sozinho.
+          </div>
           <div style="margin-top:14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;">
               <label style="font-size:10px;">⚠️ Últimas falhas de impressão</label>
@@ -2633,6 +2640,10 @@ let userRole = localStorage.getItem('shog_role') || 'admin';
 let userName = localStorage.getItem('shog_user') || '';
 let cfg = {};
 let menu = [];
+// v83: identifica esta aba/aparelho especificamente — só serve pra evitar imprimir 2x quando
+// ESTE MESMO computador clicou em Imprimir e também está marcado como Terminal de Impressão
+// (ver evento 'print-order-remote', mais abaixo). Novo a cada vez que a página é aberta.
+const DEVICE_SESSION_ID = 'dev' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 let orders = [];
 let activeCatIdx = 0;
 let orderFilter = 'todos';
@@ -3257,6 +3268,21 @@ function connectSSE(){
     const stLabel = (cfg.stations && cfg.stations[r.station] && cfg.stations[r.station].label) || r.station;
     if(r.ok) showToast('🖨 Impresso!', `Via "${stLabel}" do pedido ${r.orderId} imprimiu com sucesso no computador da loja.`, 4000);
     else showToast('⚠️ Falha ao imprimir', `Via "${stLabel}" do pedido ${r.orderId} não imprimiu: ${r.error||'erro desconhecido'}. Veja o log do Agente Local.`, 7000);
+  });
+  // v83: "app no celular como controle remoto" — quando alguém clica em Imprimir numa via
+  // "Navegador" a partir de QUALQUER aparelho (normalmente o celular), o servidor avisa esse
+  // evento pra todos os painéis conectados. Só reage quem tiver marcado ESTE computador como
+  // "🖥️ Terminal de Impressão" (Central de Impressão) — assim um celular usado só de controle
+  // remoto não tenta abrir janela de impressão nele mesmo, e o PC que está de fato ligado na
+  // impressora imprime sozinho. `originId` evita imprimir 2x no mesmo aparelho que clicou (que
+  // já imprime pelo fluxo normal, local, em printOrder()).
+  evtSource.addEventListener('print-order-remote', e=>{
+    const r = JSON.parse(e.data);
+    if(r.originId && r.originId===DEVICE_SESSION_ID) return; // este aparelho já imprimiu pelo fluxo normal
+    if(localStorage.getItem('shogatsu_print_terminal')!=='1') return; // este aparelho não é o terminal de impressão
+    let win = window.open('', '_blank', 'width=380,height=600');
+    if(win) win.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>');
+    openBrowserTicket(r.order, r.station, r.deliveryWindow, win).catch(()=>{});
   });
 }
 
@@ -4835,7 +4861,7 @@ async function printOrder(id, ev, stations, isAuto){
   try{
     if(directStations.length){
       const results = await Promise.all(directStations.map(st =>
-        apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto }).then(res => ({ st, res }))
+        apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID }).then(res => ({ st, res }))
       ));
       for(const { st, res } of results){
         if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
@@ -4846,7 +4872,7 @@ async function printOrder(id, ev, stations, isAuto){
       }
     }
     for(const st of otherStations){
-      const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto });
+      const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID });
       if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
       const d = res.data;
       if(d.skipped) continue; // essa via não tem itens desse pedido (ou está desativada) — pula sem incomodar
@@ -8228,6 +8254,8 @@ function loadPrinterCentral(){
   renderStationsSettings();
   const printEl=document.getElementById('cfg-print');
   if(printEl) printEl.value=String(Number(cfg.print)||0);
+  const termEl=document.getElementById('cfg-print-terminal');
+  if(termEl) termEl.checked = localStorage.getItem('shogatsu_print_terminal')==='1';
   refreshPrintAgentStatus();
   loadPrintFailureLog();
   if(!window._printAgentStatusInterval) window._printAgentStatusInterval = setInterval(refreshPrintAgentStatus, 30000);
@@ -8250,6 +8278,7 @@ async function refreshPrintAgentStatus(){
     const res = await apiGet('/api/print-agent/status');
     if(!res.ok){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; return; }
     const { online, agents, coveredStations } = res.data;
+    const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
     if(!online){
       box.style.borderColor = '#c0392b';
       box.innerHTML = '❌ <b>Nenhum Agente Local de Impressão conectado agora.</b><br>'+
@@ -8259,11 +8288,26 @@ async function refreshPrintAgentStatus(){
       return;
     }
     box.style.borderColor = '#2e7d32';
-    const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
     const covered = (coveredStations||[]).map(s=>stationLabels[s]||s).join(', ') || '—';
     const detail = (agents||[]).map(a => (a.printers||[]).map(p => `${esc(p.label)} → ${(p.stations||[]).map(s=>stationLabels[s]||s).join(', ')||'—'}`).join('; ')).filter(Boolean).join(' | ');
-    box.innerHTML = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
+    let html = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
       (detail ? `<br><span style="color:var(--muted);">${esc(detail)}</span>` : '');
+    // v83 — diagnóstico direto pro caso mais comum ("via X marcada Automática mas não
+    // imprime"): compara as vias ATIVAS + em modo Automática (cfg.stations) contra as vias que
+    // algum agente conectado realmente cobre (coveredStations). Se uma via estiver nos dois
+    // primeiros mas faltando no segundo, é 100% certeza que o config.json do agente não tem
+    // essa via em NENHUMA impressora — antes disso, isso só aparecia (talvez) no
+    // print-agent.log, exigindo acesso físico ao computador da loja pra descobrir.
+    const missing = Object.keys(cfg.stations||{}).filter(st => {
+      const s = cfg.stations[st];
+      return s && s.active !== false && s.method === 'automatica' && !(coveredStations||[]).includes(st);
+    });
+    if(missing.length){
+      box.style.borderColor = '#c0392b';
+      html += `<br><br>⚠️ <b>${missing.map(s=>esc(stationLabels[s]||s)).join(', ')} está(ão) em modo Automática e ativa(s), mas NENHUM agente conectado cobre essa(s) via(s).</b><br>`+
+        `Isso explica direto por que ela(s) não imprime(m) nem no teste manual, mesmo com o agente rodando. Correção: no computador que roda o print-agent, abra <code>print-agent/config.json</code> e adicione a via que falta (ex.: <code>"sushibar"</code>) na lista <code>"stations"</code> de alguma impressora — pode ser a mesma impressora física do caixa/cozinha, ou uma nova entrada, se for uma impressora separada. Depois reinicie o agente (feche e abra <code>node print-agent.js</code> de novo).`;
+    }
+    box.innerHTML = html;
   }catch(e){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; }
 }
 // v82: mostra as falhas de impressão registradas em print-log.json — agora alimentado tanto
