@@ -71,3 +71,34 @@ listadas, batendo com o que foi mandado.
   imprimir sozinho ao chegar pedido novo, me manda as últimas linhas do `print-agent.log` logo
   depois de um pedido de teste — aí eu vejo se o agente RECEBEU o pedido (e travou na
   impressora) ou nem chegou a receber.
+
+---
+
+## 🔔 v82.2 — segundo bug real de push encontrado: telefone da inscrição nunca sincronizava
+Achei mais uma causa concreta pra "cliente não recebe notificação push de status do pedido"
+(diferente do bug do `silent`+`vibrate` da v82.1 — esse é sobre o aviso automático de status,
+tipo "seu pedido está pronto"):
+
+O aviso de status só é enviado pra quem tem, na inscrição push, um telefone **igual** ao do
+pedido (`server.js`, comparação exata de string). Só que o telefone da inscrição só era
+gravado no exato momento em que o cliente clicava em "Ativar Notificações" — se nesse momento
+ele ainda não tinha telefone salvo (visitante na primeira visita, ativou antes de fazer login
+ou de completar o cadastro), a inscrição ficava com telefone vazio **pra sempre**. Depois disso,
+mesmo fazendo pedidos com telefone preenchido normalmente, o telefone da inscrição nunca era
+atualizado — então "notificações ativadas" no aparelho, mas nenhum aviso de status jamais
+chegava, silenciosamente, sem erro nenhum em lugar nenhum.
+
+Corrigido em `public/index.html`: agora, toda vez que um pedido é enviado com sucesso E toda
+vez que o cliente loga numa conta existente, o telefone da inscrição push (se houver uma ativa
+nesse aparelho) é ressincronizado automaticamente com o telefone atual — silencioso, não
+interrompe nem avisa nada se falhar.
+
+**Isso, somado à correção do `silent`+`vibrate` da v82.1, cobre as duas causas mais prováveis**
+de "cliente não recebe notificação": a v82.1 resolve pra quem tinha o som do sistema
+silenciado; essa aqui resolve pra quem ativou notificações antes de ter telefone associado
+(o caso mais comum, na prática, já que muita gente clica em "Ativar Notificações" assim que o
+navegador pergunta, antes de preencher qualquer dado).
+
+**Teste recomendado:** um cliente que JÁ tem notificações "ativadas" só passa a receber depois
+de fazer UM pedido novo (é isso que dispara a sincronização) — pedidos antigos, feitos antes
+dessa correção, não retroagem.

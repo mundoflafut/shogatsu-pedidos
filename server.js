@@ -2790,7 +2790,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/print' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { orderId, station, auto } = await readBody(req);
+      const { orderId, station, auto, originId } = await readBody(req);
       const { cfg } = readConfig();
       // v49 — BUG CORRIGIDO ("impressora não imprime" em vias novas): essa checagem só aceitava
       // as 4 vias originais — qualquer via nova (delivery, expedição, ou uma via customizada
@@ -2832,6 +2832,16 @@ function estimateDeliveryWindow(order, cfg) {
         if (caixaReady) { printerCfg = caixaCfg; usedCaixaFallback = true; }
       }
       if (printerCfg.method === 'navegador') {
+        // v83: "app no celular como controle remoto" — clicar em Imprimir no celular só
+        // abria a janela de impressão NO PRÓPRIO CELULAR (inútil, celular não tem a impressora
+        // térmica ligada nele). Agora, além de responder pro aparelho que clicou (que continua
+        // imprimindo normalmente, se ele mesmo estiver com um terminal aberto), avisa por SSE
+        // TODOS os outros paineis abertos — qualquer computador marcado como "🖥️ Terminal de
+        // Impressão" (Central de Impressão → checkbox, fica salvo só naquele aparelho) escuta
+        // esse aviso e imprime sozinho, sem ninguém precisar tocar em nada nele. `originId`
+        // evita o aparelho que clicou imprimir a MESMA via duas vezes (uma pelo fluxo normal,
+        // outra pelo aviso remoto que ele mesmo geraria).
+        if (!auto) broadcast('print-order-remote', { order, station: st, deliveryWindow, originId: originId || undefined });
         // O navegador do cliente (painel) monta e imprime o ticket — servidor só confirma os dados.
         return sendJSON(res, 200, { ok: true, printed: false, order, station: st, method: 'navegador', deliveryWindow });
       }
