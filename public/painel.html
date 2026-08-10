@@ -1580,6 +1580,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="print-agent-status-box" style="margin-top:10px;font-size:11px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
             Verificando Agente Local de Impressão...
           </div>
+          <div style="margin-top:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <label style="font-size:10px;">⚠️ Últimas falhas de impressão</label>
+              <button type="button" class="btn secondary sm" onclick="loadPrintFailureLog()">🔄 Atualizar</button>
+            </div>
+            <div id="print-failure-log-list" style="margin-top:6px;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🎋 Aviso Sonoro do Cliente</div>
@@ -8222,6 +8229,7 @@ function loadPrinterCentral(){
   const printEl=document.getElementById('cfg-print');
   if(printEl) printEl.value=String(Number(cfg.print)||0);
   refreshPrintAgentStatus();
+  loadPrintFailureLog();
   if(!window._printAgentStatusInterval) window._printAgentStatusInterval = setInterval(refreshPrintAgentStatus, 30000);
   populateCustomerAlertSoundOptions();
   renderCustomerSoundCustomList();
@@ -8257,6 +8265,28 @@ async function refreshPrintAgentStatus(){
     box.innerHTML = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
       (detail ? `<br><span style="color:var(--muted);">${esc(detail)}</span>` : '');
   }catch(e){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; }
+}
+// v82: mostra as falhas de impressão registradas em print-log.json — agora alimentado tanto
+// por reimpressão manual quanto pela impressão automática (ver comentário em printOrder(), no
+// print-agent.js). É o jeito de ver "por que a via X falhou" sem precisar abrir o
+// print-agent.log direto no computador da loja.
+async function loadPrintFailureLog(){
+  const box = document.getElementById('print-failure-log-list');
+  if(!box) return;
+  box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Carregando...</div>';
+  try{
+    const res = await apiGet('/api/print-log');
+    if(!res.ok){ box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Não consegui carregar.</div>'; return; }
+    const log = res.data.log || [];
+    if(!log.length){ box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhuma falha registrada. 🎉</div>'; return; }
+    const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
+    box.innerHTML = log.slice(0,20).map(l => `
+      <div style="background:var(--bg);border:1px solid #c0392b55;border-radius:8px;padding:6px 10px;font-size:11px;">
+        <b>${esc(stationLabels[l.station]||l.station)}</b> — pedido ${esc(l.orderId)}<br>
+        <span style="color:var(--muted);">${esc(l.error||'Falha desconhecida')}</span><br>
+        <span style="color:var(--muted);font-size:10px;">${new Date(l.ts).toLocaleString('pt-BR')}</span>
+      </div>`).join('');
+  }catch(e){ box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Não consegui carregar.</div>'; }
 }
 async function savePrinterCentral(){
   const printEl=document.getElementById('cfg-print');
