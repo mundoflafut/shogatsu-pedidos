@@ -1193,7 +1193,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <div style="padding:8px 14px 0;border-bottom:1px solid var(--border);display:flex;gap:6px;">
             <button type="button" class="btn sm" id="menu-tabbtn-itens" onclick="switchMenuMainTab('itens')" style="border-radius:6px 6px 0 0;">📋 Edição</button>
-            <button type="button" class="btn sm secondary" id="menu-tabbtn-photos" onclick="switchMenuMainTab('photos')" style="border-radius:6px 6px 0 0;">🖼 Fotos Provisórias &amp; Badges</button>
+            <button type="button" class="btn sm secondary" id="menu-tabbtn-photos" onclick="switchMenuMainTab('photos')" style="border-radius:6px 6px 0 0;">🏷 Badge Global</button>
           </div>
           <div id="menu-tab-content-itens">
             <div style="padding:10px 14px;border-bottom:1px solid var(--border);">
@@ -2253,7 +2253,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         <div class="field"><label>Badge (destaque)</label><input id="item-badge" placeholder="ex: 🔥 Destaque  ou  👑 Premium"/></div>
       </div>
       <div class="field" style="margin-top:-4px;">
-        <label style="font-size:10px;">🏷 Badge deste item <span style="font-weight:400;color:var(--muted);">(configurado em Cardápio → 🖼 Fotos Provisórias &amp; Badges)</span></label>
+        <label style="font-size:10px;">🏷 Badge deste item <span style="font-weight:400;color:var(--muted);">(configurado em Cardápio → 🏷 Badge Global)</span></label>
         <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;margin-top:4px;">
           <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="item-badgemode" value="global" id="item-badgemode-global"/> Herdar Badge Global</label>
           <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="item-badgemode" value="manual" id="item-badgemode-manual"/> Personalizar (usa o texto acima)</label>
@@ -3222,7 +3222,18 @@ function connectSSE(){
     if(Number(cfg.sound)!==0) playBeep();
     showToast('🔔 Novo Pedido!', `${o.id} — ${o.name} — R$ ${Number(o.total).toFixed(2).replace('.',',')}`, 6000);
     refreshCurrentPage();
-    if(Number(cfg.print)) printOrder(o.id);
+    // v84 — BUG CORRIGIDO ("impressora não imprime em todas as estações, principalmente em
+    // pedido real"): faltava passar isAuto=true aqui. Sem isso, quando um pedido novo chegava
+    // com "imprimir automaticamente" ligado, este painel chamava /api/print pra cada via com
+    // auto:false — e o servidor (ver POST /api/print, "v55") entendia isso como um clique
+    // MANUAL de reimpressão e mandava um SEGUNDO aviso "print-order" pro Agente Local, que já
+    // tinha imprimido esse mesmo pedido sozinho pelo evento "new-order" direto. Duas
+    // impressões quase simultâneas na MESMA impressora física (uma pelo caminho automático,
+    // outra por esse disparo duplicado) podiam colidir e derrubar/corromper uma das vias —
+    // por isso pedidos de teste (uma única chamada) sempre funcionavam, mas pedidos reais
+    // vindos de cliente (que passam por aqui) às vezes perdiam via. Passando isAuto=true, o
+    // servidor pula o aviso duplicado, exatamente como já era a intenção original.
+    if(Number(cfg.print)) printOrder(o.id, null, null, true);
   });
   // v39: alerta de nova reserva (novidade pedida) — mesmo som + toast do pedido novo, e
   // atualiza o contador da aba Reservas na hora, mesmo se o operador estiver em outra aba.
@@ -4805,6 +4816,16 @@ function stationIcon(key){
   return (cfg && cfg.stations && cfg.stations[key] && cfg.stations[key].icon) || (DEFAULT_STATION_META[key]&&DEFAULT_STATION_META[key].icon) || '📠';
 }
 const payLabelsPrint = { pix:'PIX', credito:'Cartão de Crédito', debito:'Cartão de Débito', dinheiro:'Dinheiro' };
+// v84 — BUG CORRIGIDO ("cliente marca opção de pagamento deve aparecer como pagamento na
+// entrega"): PIX é pago antes (gateway/confirmação manual); dinheiro/crédito/débito num
+// pedido delivery são sempre cobrados na hora da entrega — mostrar só "Dinheiro" ou "Cartão
+// de Crédito" cru deixava a equipe/motoboy sem saber que ainda precisa cobrar. Agora qualquer
+// forma que não seja PIX ganha o sufixo "(Pagamento na Entrega)" ou "(Pagamento na Retirada)".
+function payMethodDisplay(order){
+  const base = payLabelsPrint[order.payMethod] || order.payMethod || '—';
+  if(!order.payMethod || order.payMethod==='pix') return base;
+  return base + (order.mode==='delivery' ? ' (Pagamento na Entrega)' : ' (Pagamento na Retirada)');
+}
 
 // v60: registra que estamos esperando o Agente Local confirmar (ou falhar) a impressão de uma
 // via específica — se a confirmação (evento 'print-result', ver connectSSE) não chegar em 15s,
@@ -4989,7 +5010,7 @@ function buildPlainTicketLines(order, station, deliveryWindow){
     L.push(HR);
     L.push({text:`TOTAL  ${money(order.total)}`, bold:true, size:12});
     L.push(HR2);
-    L.push('Pagamento: '+(order.payMethod||'-'));
+    L.push('Pagamento: '+payMethodDisplay(order));
   } else {
     L.push({text:stationLabel(station).toUpperCase(), bold:true, center:true});
     L.push('VIA DE PRODUCAO');
@@ -5048,7 +5069,7 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     ${(order.discount>0||order.couponCode)?`<div class="t-item" style="color:#a9873c;"><span>🎟️ Cupom ${esc(order.couponCode||'')}</span><span>-${money(order.discount||0)}</span></div>`:''}
     <div class="t-hr"></div>
     <div class="t-item t-total"><span>TOTAL</span><span>${money(order.total)}</span></div>
-    <div class="t-row" style="margin-top:8px;">Pagamento: ${payLabelsPrint[order.payMethod]||order.payMethod||'—'}${order.troco?` (troco para ${esc(order.troco)})`:''}</div>
+    <div class="t-row" style="margin-top:8px;">Pagamento: ${esc(payMethodDisplay(order))}${order.troco?` (troco para ${esc(order.troco)})`:''}</div>
   ` : `
     <div class="t-block-title">ITENS DA ${stationLabel(station).toUpperCase()}</div>
     ${items.map(i=>`<div class="t-bullet-item">• ${i.qty}x ${esc(i.name)}</div>`).join('')}
@@ -5477,7 +5498,7 @@ function renderOrdersList(){
       ${o.obs?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Obs: ${esc(o.obs)}</div>`:''}
       ${o.status==='cancelado'&&o.cancelReason?`<div style="font-size:11px;color:var(--red-lt);margin-top:4px;">Cancelado ${o.cancelledBy==='cliente'?'pelo cliente':'pela loja'} · Motivo: ${o.cancelReason}</div>`:''}
       <div class="order-footer" style="margin-top:8px;">
-        <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')} · ${o.payMethod||'—'}</span>
+        <span class="order-total">R$ ${Number(o.total).toFixed(2).replace('.',',')} · ${esc(payMethodDisplay(o))}</span>
         <span class="order-mode ${o.mode}">${o.mode==='delivery'?'🛵 Delivery':'🏪 Retirada'}</span>
         ${o.payMethod==='pix' ? (o.paid ? `<span style="color:#4ade80;font-size:11px;">✅ Pago${o.paidVia==='gateway'?' (auto)':''}</span>` : `<span style="color:var(--muted);font-size:11px;">⏳ PIX pendente</span>`) : ''}
       </div>
@@ -5989,7 +6010,15 @@ function setupCatDragDrop(){
 }
 
 // ═══════════════════════════════════════════
-// v73: 🖼 FOTOS PROVISÓRIAS & BADGES — foto/selo global aplicados a todo o cardápio
+// v73: 🏷 BADGE GLOBAL — selo global aplicado a todo o cardápio
+// v84 — FERRAMENTA REMOVIDA ("Foto Provisória Global"): essa aba tinha DUAS ferramentas —
+// Foto Provisória Global e Badge Global. A foto provisória era uma ferramenta DUPLICADA: cada
+// prato já tem seu próprio upload de foto individual (campo "Foto do Prato" na aba Edição, ver
+// modal de item), então ter uma segunda ferramenta de upload de imagem só pra cobrir os pratos
+// sem foto confundia o admin sobre qual usar. Removida por completo (aqui, no editor do
+// cardápio, e também a aplicação dela no cardápio do cliente em index.html) — restou só o
+// Badge Global, que é uma ferramenta diferente (selo/etiqueta, não é upload de imagem) e não
+// tem equivalente duplicado em nenhum outro lugar do sistema.
 // ═══════════════════════════════════════════
 function switchMenuMainTab(tab){
   document.getElementById('menu-tabbtn-itens').className = 'btn sm' + (tab==='itens'?'':' secondary');
@@ -6002,68 +6031,18 @@ function switchMenuMainTab(tab){
 let phBadgeState = null;
 function initPhBadgeState(){
   phBadgeState = {
-    photo: Object.assign({ enabled:false, url:'', position:'esquerda', mode:'cortar', radius:'medio' }, JSON.parse(JSON.stringify(cfg.placeholderPhoto||{}))),
     badge: Object.assign({ enabled:false, text:'Mais vendido', icon:'🔥', bgColor:'#c0392b', textColor:'#ffffff', fontSize:11, fontWeight:700, opacity:100, borderEnabled:false, borderColor:'#ffffff', borderRadius:6, padding:6, shadow:true, position:'canto-superior-esquerdo' }, JSON.parse(JSON.stringify(cfg.globalBadge||{})))
   };
 }
 
-const PH_RADIUS_MAP = { nenhum:'0px', pequeno:'6px', medio:'12px', grande:'20px' };
-const PH_FIT_MAP = { preencher:'fill', ajustar:'contain', cortar:'cover' };
-
 function renderPlaceholderBadgePanel(){
   if(!phBadgeState) initPhBadgeState();
   const el = document.getElementById('menu-tab-content-photos');
-  const p = phBadgeState.photo, b = phBadgeState.badge;
+  const b = phBadgeState.badge;
   el.innerHTML = `
     <div style="padding:16px;display:flex;flex-direction:column;gap:18px;max-width:900px;">
       <div style="font-size:11px;color:var(--muted);">
-        Ferramentas globais que valem pro cardápio inteiro — sem mexer item por item. A aba de edição normal continua exatamente igual.
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-card-title">🖼 Foto Provisória Global</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-          Esta imagem será exibida automaticamente em todos os produtos que ainda não possuem foto cadastrada.
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="width:100px;height:100px;flex:0 0 auto;border-radius:10px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);">
-            ${p.url ? `<img src="${p.url.replace(/"/g,'&quot;')}" style="width:100%;height:100%;object-fit:cover;" alt="Foto provisória"/>` : `<span style="font-size:26px;color:var(--muted);">🖼️</span>`}
-          </div>
-          <div style="flex:1;min-width:220px;">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-              <input type="file" accept="image/png,image/jpeg,image/webp" id="ph-photo-file" style="display:none;" onchange="uploadPlaceholderPhoto(this)"/>
-              <button type="button" class="btn secondary sm" onclick="document.getElementById('ph-photo-file').click()">📷 ${p.url?'Alterar Foto':'Selecionar Foto'}</button>
-              <button type="button" class="btn secondary sm" onclick="removePlaceholderPhoto()">🗑 Remover Foto</button>
-              <button type="button" class="btn ${p.enabled?'success':'secondary'} sm" onclick="togglePlaceholderPhoto()">${p.enabled?'✅ Ativada (clique p/ desativar)':'⏸ Ativar Foto Provisória'}</button>
-            </div>
-            <span id="ph-photo-status" style="font-size:11px;color:var(--muted);"></span>
-            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Quando um produto recebe uma foto manual, ele para de usar esta automaticamente — a foto manual nunca é substituída.</div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px;">
-          <div class="field"><label style="font-size:10px;">Posição</label>
-            <select onchange="phUpdateField('photo','position',this.value)">
-              <option value="esquerda" ${p.position==='esquerda'?'selected':''}>Esquerda</option>
-              <option value="direita" ${p.position==='direita'?'selected':''}>Direita</option>
-              <option value="acima" ${p.position==='acima'?'selected':''}>Acima</option>
-            </select>
-          </div>
-          <div class="field"><label style="font-size:10px;">Modo da imagem</label>
-            <select onchange="phUpdateField('photo','mode',this.value)">
-              <option value="preencher" ${p.mode==='preencher'?'selected':''}>Preencher</option>
-              <option value="ajustar" ${p.mode==='ajustar'?'selected':''}>Ajustar</option>
-              <option value="cortar" ${p.mode==='cortar'?'selected':''}>Cortar</option>
-            </select>
-          </div>
-          <div class="field"><label style="font-size:10px;">Arredondamento</label>
-            <select onchange="phUpdateField('photo','radius',this.value)">
-              <option value="nenhum" ${p.radius==='nenhum'?'selected':''}>Nenhum</option>
-              <option value="pequeno" ${p.radius==='pequeno'?'selected':''}>Pequeno</option>
-              <option value="medio" ${p.radius==='medio'?'selected':''}>Médio</option>
-              <option value="grande" ${p.radius==='grande'?'selected':''}>Grande</option>
-            </select>
-          </div>
-        </div>
+        Ferramenta global que vale pro cardápio inteiro — sem mexer item por item. A aba de edição normal continua exatamente igual.
       </div>
 
       <div class="settings-card">
@@ -6117,7 +6096,7 @@ function renderPlaceholderBadgePanel(){
       </div>
 
       <div>
-        <button class="btn primary" onclick="savePlaceholderBadgeSettings()">💾 Salvar Fotos Provisórias &amp; Badges</button>
+        <button class="btn primary" onclick="savePlaceholderBadgeSettings()">💾 Salvar Badge Global</button>
       </div>
     </div>`;
   updatePhPreview();
@@ -6126,30 +6105,6 @@ function renderPlaceholderBadgePanel(){
 function phUpdateField(group, field, value){
   phBadgeState[group][field] = value;
   updatePhPreview();
-}
-function togglePlaceholderPhoto(){ phBadgeState.photo.enabled = !phBadgeState.photo.enabled; renderPlaceholderBadgePanel(); }
-function removePlaceholderPhoto(){ phBadgeState.photo.url=''; phBadgeState.photo.enabled=false; renderPlaceholderBadgePanel(); }
-
-async function uploadPlaceholderPhoto(input){
-  const file = input.files && input.files[0];
-  if(!file) return;
-  const statusEl = document.getElementById('ph-photo-status');
-  if(statusEl) statusEl.textContent = 'Enviando...';
-  try{
-    let dataUrl;
-    try{ dataUrl = await compressImageFile(file); }
-    catch(e){ dataUrl = await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
-    const res = await apiPost('/api/upload', { dataUrl });
-    if(!res.ok){ if(statusEl) statusEl.textContent=''; alert(res.data.error||'Erro ao enviar a foto.'); return; }
-    phBadgeState.photo.url = res.data.url;
-    phBadgeState.photo.enabled = true;
-    renderPlaceholderBadgePanel();
-  }catch(e){
-    if(statusEl) statusEl.textContent='';
-    alert('Não foi possível enviar a foto. Tente uma imagem menor ou em outro formato (PNG/JPG/WEBP).');
-  }finally{
-    input.value='';
-  }
 }
 
 function phBadgeHTML(b){
@@ -6161,14 +6116,10 @@ function phBadgeHTML(b){
 function updatePhPreview(){
   const wrap = document.getElementById('ph-preview-wrap');
   if(!wrap) return;
-  const p = phBadgeState.photo, b = phBadgeState.badge;
-  const radius = PH_RADIUS_MAP[p.radius] || '12px';
-  const fit = PH_FIT_MAP[p.mode] || 'cover';
-  const photoBox = p.url
-    ? `<div style="width:90px;height:90px;flex:0 0 auto;border-radius:${radius};overflow:hidden;background:#222;">
-        <img src="${p.url.replace(/"/g,'&quot;')}" style="width:100%;height:100%;object-fit:${fit};display:block;"/>
-      </div>`
-    : `<div style="width:90px;height:90px;flex:0 0 auto;border-radius:${radius};background:#1c1c1c;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);">🍽️</div>`;
+  const b = phBadgeState.badge;
+  // v84: sem mais Foto Provisória — a caixa de foto na pré-visualização agora é sempre o
+  // placeholder genérico (mesmo estilo do cardápio real quando um prato ainda não tem foto).
+  const photoBox = `<div style="width:90px;height:90px;flex:0 0 auto;border-radius:12px;background:#1c1c1c;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted);">🍽️</div>`;
 
   const aboveBadge = b.position==='acima-foto' ? `<div style="margin-bottom:6px;">${phBadgeHTML(b)}</div>` : '';
   const belowBadge = b.position==='abaixo-foto' ? `<div style="margin-top:6px;">${phBadgeHTML(b)}</div>` : '';
@@ -6185,30 +6136,19 @@ function updatePhPreview(){
     <div style="font-size:11px;color:var(--muted);margin-top:2px;">10 sashimis de salmão, 5 sashimis haddock, 5 sashimis peixe branco...</div>
     <div style="font-weight:700;color:var(--green-lt);margin-top:6px;">R$ 159,90</div>`;
 
-  let inner;
-  if(p.position==='acima'){
-    inner = `${aboveBadge}${photoBlock}${belowBadge}<div style="margin-top:8px;">${nameBlock}</div>`;
-  } else if(p.position==='direita'){
-    inner = `<div style="display:flex;gap:12px;align-items:flex-start;">
-      <div style="flex:1;">${nameBlock}</div>
-      <div>${aboveBadge}${photoBlock}${belowBadge}</div>
-    </div>`;
-  } else {
-    inner = `<div style="display:flex;gap:12px;align-items:flex-start;">
+  const inner = `<div style="display:flex;gap:12px;align-items:flex-start;">
       <div>${aboveBadge}${photoBlock}${belowBadge}</div>
       <div style="flex:1;">${nameBlock}</div>
     </div>`;
-  }
 
   wrap.innerHTML = `<div style="position:relative;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;width:100%;max-width:360px;">${cornerBadge}${inner}</div>`;
 }
 
 async function savePlaceholderBadgeSettings(){
-  cfg.placeholderPhoto = { ...phBadgeState.photo };
   cfg.globalBadge = { ...phBadgeState.badge };
   const res = await apiPost('/api/config', { cfg, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
-  showToast('✅ Salvo!', 'Foto provisória e badge global atualizados — já valem pro cardápio.');
+  showToast('✅ Salvo!', 'Badge global atualizado — já vale pro cardápio.');
 }
 
 function selectCat(i){activeCatIdx=i;document.getElementById('menu-search').value='';menuSearchQuery='';renderMenuEditor();}
@@ -6280,7 +6220,9 @@ function menuItemCardHTML(sec,si,item,ii,allowReorder){
   const vCount=(item.variants||[]).length;
   const unavailable = item.available===false;
   const promo = itemHasActivePromo(item, si, ii);
-  const photoUrl = item.image || ((cfg.placeholderPhoto&&cfg.placeholderPhoto.enabled&&cfg.placeholderPhoto.url) ? cfg.placeholderPhoto.url : '');
+  // v84: ferramenta "Foto Provisória Global" removida (duplicava o upload de foto do próprio
+  // item) — o card mostra o placeholder genérico quando o prato não tem foto própria.
+  const photoUrl = item.image || '';
   const catTag = !allowReorder ? `<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">${sec.icon} ${esc(sec.title)}</div>` : '';
   return `
       <div class="mi-card" draggable="${allowReorder?'true':'false'}" data-item-idx="${allowReorder?ii:''}">
@@ -6821,7 +6763,7 @@ async function renderReports(){
       <td>${esc(o.name)}</td>
       <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${itemsText(o)}</td>
       <td style="font-weight:600;color:var(--green-lt)">R$ ${Number(o.total).toFixed(2).replace('.',',')}</td>
-      <td>${o.payMethod||'—'}</td>
+      <td>${esc(payMethodDisplay(o))}</td>
       <td>${o.mode==='delivery'?'🛵 Delivery':'🏪 Retirada'}</td>
       <td><span class="status-badge ${statusClass[st]}">${statusLabel[st]}</span></td>
       <td style="font-size:11px;color:var(--muted)">${new Date(o.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</td>

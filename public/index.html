@@ -2601,16 +2601,11 @@ function applyTheme() {
 // v68: prato sem foto ainda — mostra a logo da loja como imagem provisória (em vez de só o
 // emoji da categoria), com object-fit:contain pra nunca cortar. É só provisório: assim que o
 // prato ganha uma foto de verdade no painel, ela substitui isso automaticamente.
-const PH_FIT_MAP = { preencher:'fill', ajustar:'contain', cortar:'cover' };
-const PH_RADIUS_MAP = { nenhum:'0px', pequeno:'6px', medio:'12px', grande:'20px' };
-// v73: foto provisória global — usada quando o prato não tem foto própria cadastrada
+// v84 — FERRAMENTA REMOVIDA ("Foto Provisória Global"): era uma segunda ferramenta de upload
+// de imagem duplicando o upload de foto que cada prato já tem individualmente (Cardápio →
+// Edição → Foto do Prato). Removida do editor (painel.html) e da aplicação aqui — um prato
+// sem foto própria cai direto pro fallback da logo da loja (ou o ícone da categoria).
 function itemPlaceholderHtml(icon){
-  const ph = cfg.placeholderPhoto;
-  if (ph && ph.enabled && ph.url) {
-    const fit = PH_FIT_MAP[ph.mode] || 'cover';
-    const radius = PH_RADIUS_MAP[ph.radius] || '4px';
-    return `<img src="${ph.url}" alt="Foto do prato" style="width:100%;height:100%;object-fit:${fit};border-radius:${radius};">`;
-  }
   if (cfg.logoUrl) return `<img src="${cfg.logoUrl}" alt="Foto ainda não cadastrada" style="width:62%;height:62%;object-fit:contain;opacity:.5;margin:auto;">`;
   return icon;
 }
