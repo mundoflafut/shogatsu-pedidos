@@ -1,0 +1,49 @@
+SHOGATSU - INSTALADOR DO AGENTE LOCAL DE IMPRESSAO
+====================================================
+
+O QUE ISSO FAZ
+---------------
+Deixa este computador imprimindo os pedidos sozinho, direto na(s)
+impressora(s), sem precisar de extensao de navegador e sem cair na
+tela de impressao do Windows. E o metodo mais confiavel de
+impressao automatica.
+
+COMO USAR
+---------
+1. Extraia esta pasta inteira (nao rode de dentro do ZIP).
+2. De dois cliques em INSTALAR.bat
+   - Se o Windows perguntar algo tipo "O editor nao foi verificado,
+     deseja mesmo executar?", clique em "Mais informacoes" -> "Executar
+     assim mesmo". Isso aparece porque este arquivo foi feito sob
+     medida para o seu restaurante, sem certificado digital pago -
+     nao e virus.
+3. Ele vai:
+   - Conferir/instalar o Node.js se precisar
+   - Instalar o que falta para falar com a impressora
+   - Perguntar o endereco do painel, usuario e senha
+   - Abrir o config.json no Bloco de Notas para voce conferir os
+     dados de CADA impressora (nome USB ou IP de rede, e quais
+     estacoes ela cobre: caixa, cozinha, sushibar)
+   - Deixar tudo configurado para ligar sozinho sempre que o
+     Windows abrir
+
+4. No final, abra o painel Shogatsu no navegador, va em
+   Configuracoes -> card "Impressao Automatica" e confira se aparece
+   um V verde com "Agente Local conectado" listando Caixa, Cozinha
+   e Sushibar.
+
+5. Pode desligar ou remover a extensao antiga "Shogatsu - Impressao
+   Automatica" do Chrome - ela nao e mais necessaria e so causa o
+   erro de pop-up bloqueado neste computador.
+
+OUTROS ARQUIVOS DESTA PASTA
+----------------------------
+REINICIAR-AGENTE.bat  - usa se a impressao parar de responder
+VER-LOGS.bat          - abre o arquivo de log pra ver o que aconteceu
+DESINSTALAR.bat        - desliga e remove o agente deste computador
+
+SE ALGO DER ERRADO
+-------------------
+Manda um print da janela preta que aparece durante o INSTALAR.bat,
+ou o conteudo do print-agent.log (VER-LOGS.bat), que da pra descobrir
+o que faltou.
