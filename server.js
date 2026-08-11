@@ -1197,6 +1197,20 @@ const ESC = {
   feed: '\n\n\n'
 };
 
+// v84 — BUG CORRIGIDO ("cliente marca opção de pagamento deve aparecer como pagamento na
+// entrega"): PIX é pago ANTES (pelo gateway/confirmação manual), mas dinheiro/crédito/débito
+// escolhidos num pedido delivery são sempre cobrados só na hora da entrega — a comanda (e o
+// painel) mostravam só "Dinheiro"/"Cartão de Crédito" cru, sem deixar claro isso pro motoboy/
+// caixa, que às vezes achava que já tinha sido pago. Agora qualquer forma que não seja PIX
+// ganha o sufixo "(PAGAMENTO NA ENTREGA)" ou "(PAGAMENTO NA RETIRADA)", dependendo do modo do
+// pedido — usado em toda comanda impressa (rede/USB/Agente Local) e no painel.
+const PAY_METHOD_LABELS = { pix: 'PIX', credito: 'Cartão de Crédito', debito: 'Cartão de Débito', dinheiro: 'Dinheiro' };
+function payMethodTicketLabel(order) {
+  const base = PAY_METHOD_LABELS[order.payMethod] || order.payMethod || '-';
+  if (!order.payMethod || order.payMethod === 'pix') return base;
+  return base + (order.mode === 'delivery' ? ' (PAGAMENTO NA ENTREGA)' : ' (PAGAMENTO NA RETIRADA)');
+}
+
 // Monta o texto puro do ticket (usado tanto na pré-visualização quanto na impressão real).
 // Impressoras térmicas não suportam fontes (só o hardware da própria impressora), mas
 // suportam alternar entre tamanho normal e "letra grande" — usamos isso pra respeitar
@@ -2929,7 +2943,7 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push(HR);
         lines.push(ESC.boldOn + ESC.doubleOn + rightAlignRow('TOTAL', money(order.total)) + ESC.doubleOff + ESC.boldOff);
         lines.push(HR2);
-        lines.push('Pagamento: ' + order.payMethod + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
+        lines.push('Pagamento: ' + payMethodTicketLabel(order) + (order.troco ? ' (troco para ' + order.troco + ')' : ''));
         lines.push(ESC.center + 'Obrigado pela preferencia!' + ESC.left);
         if (cfg.siteUrl) lines.push(ESC.center + cfg.siteUrl + ESC.left);
       } else {
