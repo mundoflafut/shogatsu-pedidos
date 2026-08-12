@@ -727,6 +727,21 @@ function getOnlinePrintAgents() {
   for (const [id, a] of printAgents) { if (now - a.lastSeen > PRINT_AGENT_TTL_MS) printAgents.delete(id); }
   return [...printAgents.values()];
 }
+// v85: mesmo rastreio de "sinal de vida" acima, mas pro método "🖥 Navegador" — até aqui, um
+// computador marcado como "🖥️ Terminal de Impressão" (Configurações → Central de Impressão)
+// guardava isso só no PRÓPRIO localStorage, sem avisar o servidor. Resultado: uma via em modo
+// Navegador podia ficar sem NENHUM terminal marcado de verdade (ex.: computador do Sushibar
+// nunca teve a caixinha marcada, ou o painel ficou fechado) e ninguém no admin descobria —
+// os pedidos só ficavam "sem imprimir" silenciosamente. Agora cada painel marcado como
+// terminal avisa o servidor a cada ~45s (ver DEVICE_SESSION_ID/updatePrintTerminalHeartbeat no
+// painel.html) e o admin vê "0 terminais conectados" na Central de Impressão.
+const printTerminals = new Map(); // terminalId -> { lastSeen }
+const PRINT_TERMINAL_TTL_MS = 90 * 1000;
+function getOnlinePrintTerminalsCount() {
+  const now = Date.now();
+  for (const [id, t] of printTerminals) { if (now - t.lastSeen > PRINT_TERMINAL_TTL_MS) printTerminals.delete(id); }
+  return printTerminals.size;
+}
 
 // ─── Clientes conectados via SSE no SITE DO CLIENTE (só avisa "cardápio mudou",
 // nunca manda dados de pedido/cliente — canal público, sem autenticação) ───
@@ -2791,13 +2806,27 @@ function estimateDeliveryWindow(order, cfg) {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
+  // ── POST /api/print-terminal/announce — um painel marcado como "🖥️ Terminal de Impressão"
+  // avisa "estou vivo" (v85), no mesmo espírito do /api/print-agent/announce acima. Chamado
+  // pelo painel.html a cada ~45s enquanto a caixinha estiver marcada e a página aberta.
+  if (pathname === '/api/print-terminal/announce' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { terminalId } = await readBody(req);
+      if (!terminalId) return sendJSON(res, 400, { error: 'terminalId obrigatório.' });
+      printTerminals.set(String(terminalId), { lastSeen: Date.now() });
+      return sendJSON(res, 200, { ok: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
   // ── GET /api/print-agent/status — o painel consulta pra mostrar se tem algum Agente Local
-  // conectado agora, e quais vias cada um cobre (v82) ──
+  // conectado agora, e quais vias cada um cobre (v82); agora também informa quantos
+  // Terminais de Impressão (modo Navegador) estão de fato ativos agora (v85) ──
   if (pathname === '/api/print-agent/status' && req.method === 'GET') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const agents = getOnlinePrintAgents();
     const coveredStations = [...new Set(agents.flatMap(a => a.printers.flatMap(p => p.stations)))];
-    return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations });
+    return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations, terminalsOnline: getOnlinePrintTerminalsCount() });
   }
 
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
