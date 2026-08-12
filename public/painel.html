@@ -1581,7 +1581,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             Verificando Agente Local de Impressão...
           </div>
           <div class="field" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" id="cfg-print-terminal" style="width:16px;height:16px;" onchange="localStorage.setItem('shogatsu_print_terminal', this.checked?'1':'0')"/>
+            <input type="checkbox" id="cfg-print-terminal" style="width:16px;height:16px;" onchange="localStorage.setItem('shogatsu_print_terminal', this.checked?'1':'0'); updatePrintTerminalHeartbeat();"/>
             <label for="cfg-print-terminal" style="font-size:11px;margin:0;">🖥️ Este computador é o Terminal de Impressão (imprime sozinho as vias em modo "Navegador" pedidas de OUTRO aparelho, como o celular)</label>
           </div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px;margin-left:24px;">
@@ -2644,6 +2644,24 @@ let menu = [];
 // ESTE MESMO computador clicou em Imprimir e também está marcado como Terminal de Impressão
 // (ver evento 'print-order-remote', mais abaixo). Novo a cada vez que a página é aberta.
 const DEVICE_SESSION_ID = 'dev' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+// v85: enquanto ESTE computador estiver marcado como "🖥️ Terminal de Impressão", avisa o
+// servidor a cada ~45s (mesmo padrão do Agente Local, ver announce/getOnlinePrintTerminalsCount
+// no server.js) — assim a Central de Impressão consegue mostrar "0 terminais conectados" em vez
+// de só descobrir que uma via em modo Navegador ficou sem imprimir quando o cliente reclamar.
+let printTerminalHeartbeatInterval = null;
+function updatePrintTerminalHeartbeat(){
+  const isTerminal = localStorage.getItem('shogatsu_print_terminal')==='1';
+  if(isTerminal && token){
+    if(!printTerminalHeartbeatInterval){
+      const ping = ()=>{ apiPost('/api/print-terminal/announce', { terminalId: DEVICE_SESSION_ID }).catch(()=>{}); };
+      ping();
+      printTerminalHeartbeatInterval = setInterval(ping, 45000);
+    }
+  } else if(printTerminalHeartbeatInterval){
+    clearInterval(printTerminalHeartbeatInterval);
+    printTerminalHeartbeatInterval = null;
+  }
+}
 let orders = [];
 let activeCatIdx = 0;
 let orderFilter = 'todos';
@@ -2760,6 +2778,7 @@ async function boot(){
   applyRoleUI();
   goPage('pedidos');
   connectSSE();
+  updatePrintTerminalHeartbeat();
   loadReservations();
   setInterval(loadReservations, 30000);
   setupCardControls();
@@ -8219,17 +8238,29 @@ async function refreshPrintAgentStatus(){
   try{
     const res = await apiGet('/api/print-agent/status');
     if(!res.ok){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; return; }
-    const { online, agents, coveredStations } = res.data;
+    const { online, agents, coveredStations, terminalsOnline } = res.data;
     const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
+    // v85: vias ativas em modo "🖥 Navegador" — essas dependem de algum computador estar
+    // marcado como Terminal de Impressão E com o painel aberto; se nenhum terminal está
+    // conectado agora, essas vias NÃO vão imprimir sozinhas em pedido nenhum.
+    const navegadorAtivas = Object.keys(cfg.stations||{}).filter(st => {
+      const s = cfg.stations[st];
+      return s && s.active !== false && s.method === 'navegador';
+    });
+    const noTerminalWarning = (navegadorAtivas.length && !terminalsOnline)
+      ? `<br><br>⚠️ <b>${navegadorAtivas.map(s=>esc(stationLabels[s]||s)).join(', ')} está(ão) em modo "🖥 Navegador", mas nenhum computador está marcado como Terminal de Impressão agora (0 conectados).</b><br>`+
+        `Correção: no computador que fica perto dessa(s) via(s), abra Configurações → 🖨 Central de Impressão e marque "🖥️ Este computador é o Terminal de Impressão" — deixe o painel aberto e logado nele. (Ou, se preferir zero cliques, troque a via pra "🤖 Automática", já que há Agente Local cobrindo.)`
+      : '';
     if(!online){
       box.style.borderColor = '#c0392b';
       box.innerHTML = '❌ <b>Nenhum Agente Local de Impressão conectado agora.</b><br>'+
         'Pedidos com vias em modo "🤖 Automática" não vão imprimir sozinhos (nem no botão '+
         '"🖨 Testar") até o programa <code>print-agent.js</code> estar rodando, ligado num '+
-        'computador da loja. Veja print-agent/README.md.';
+        'computador da loja. Veja print-agent/README.md.'+noTerminalWarning;
+      if(noTerminalWarning) box.style.borderColor = '#c0392b';
       return;
     }
-    box.style.borderColor = '#2e7d32';
+    box.style.borderColor = noTerminalWarning ? '#c0392b' : '#2e7d32';
     const covered = (coveredStations||[]).map(s=>stationLabels[s]||s).join(', ') || '—';
     const detail = (agents||[]).map(a => (a.printers||[]).map(p => `${esc(p.label)} → ${(p.stations||[]).map(s=>stationLabels[s]||s).join(', ')||'—'}`).join('; ')).filter(Boolean).join(' | ');
     let html = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
@@ -8249,6 +8280,7 @@ async function refreshPrintAgentStatus(){
       html += `<br><br>⚠️ <b>${missing.map(s=>esc(stationLabels[s]||s)).join(', ')} está(ão) em modo Automática e ativa(s), mas NENHUM agente conectado cobre essa(s) via(s).</b><br>`+
         `Isso explica direto por que ela(s) não imprime(m) nem no teste manual, mesmo com o agente rodando. Correção: no computador que roda o print-agent, abra <code>print-agent/config.json</code> e adicione a via que falta (ex.: <code>"sushibar"</code>) na lista <code>"stations"</code> de alguma impressora — pode ser a mesma impressora física do caixa/cozinha, ou uma nova entrada, se for uma impressora separada. Depois reinicie o agente (feche e abra <code>node print-agent.js</code> de novo).`;
     }
+    if(noTerminalWarning){ html += noTerminalWarning; box.style.borderColor = '#c0392b'; }
     box.innerHTML = html;
   }catch(e){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; }
 }
