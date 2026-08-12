@@ -1,0 +1,46 @@
+[2026-08-12T03:42:30.986Z] 🍣 Agente de impressão iniciando...
+[2026-08-12T03:42:30.990Z] 🖨️  1 impressora(s) configurada(s):
+[2026-08-12T03:42:30.990Z]    • Impressora Única (USB) → vias: caixa, cozinha, sushibar (printer:MP-4200 TH)
+[2026-08-12T03:42:31.332Z] 🔑 Login OK (caixa).
+[2026-08-12T03:42:31.334Z] 📡 Conectando ao servidor em tempo real...
+[2026-08-12T03:42:31.593Z] ✅ Conectado — aguardando pedidos novos.
+[2026-08-12T03:42:39.469Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPIVRTD (TESTE).
+[2026-08-12T03:42:57.906Z] ✅ Pedido SGMSPIVRTD — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:42:57.911Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPIVES2 (Bruno Mendes).
+[2026-08-12T03:42:58.479Z] ✅ Pedido SGMSPIVES2 — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:42:58.484Z] 🖨️  Impressão sob demanda pedida pra via "cozinha" — pedido SGMSPIVES2 (Bruno Mendes).
+[2026-08-12T03:42:59.010Z] ✅ Pedido SGMSPIVES2 — via "cozinha" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:43:07.767Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPIVRTD (TESTE).
+[2026-08-12T03:43:08.423Z] ✅ Pedido SGMSPIVRTD — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:43:35.161Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPIVRTD (TESTE).
+[2026-08-12T03:43:35.783Z] ✅ Pedido SGMSPIVRTD — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:43:47.669Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPIPMR8 (TESTE).
+[2026-08-12T03:43:48.295Z] ✅ Pedido SGMSPIPMR8 — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:44:02.032Z] 🆕 Pedido novo recebido: SGMSPJOUJ5 (Ana Clara)
+[2026-08-12T03:44:02.689Z] ✅ Pedido SGMSPJOUJ5 — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:44:03.511Z] ✅ Pedido SGMSPJOUJ5 — via "cozinha" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:44:03.715Z] ℹ️  Pedido SGMSPJOUJ5 — via "sushibar" sem itens dessa via, nada impresso.
+[2026-08-12T03:44:22.978Z] 🆕 Pedido novo recebido: SGMSPJPANZ (TESTE)
+[2026-08-12T03:44:23.646Z] ✅ Pedido SGMSPJPANZ — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:44:23.925Z] ℹ️  Pedido SGMSPJPANZ — via "cozinha" sem itens dessa via, nada impresso.
+[2026-08-12T03:44:23.926Z] ℹ️  Pedido SGMSPJPANZ — via "sushibar" sem itens dessa via, nada impresso.
+[2026-08-12T03:50:30.400Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPJPANZ (TESTE).
+[2026-08-12T03:50:31.049Z] ✅ Pedido SGMSPJPANZ — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:50:37.627Z] 🆕 Pedido novo recebido: SGMSPJXBC3 (Helena Rocha)
+[2026-08-12T03:50:38.238Z] ✅ Pedido SGMSPJXBC3 — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:50:39.024Z] ✅ Pedido SGMSPJXBC3 — via "cozinha" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:50:39.230Z] ℹ️  Pedido SGMSPJXBC3 — via "sushibar" sem itens dessa via, nada impresso.
+[2026-08-12T03:55:25.866Z] 🍣 Agente de impressão iniciando...
+[2026-08-12T03:55:25.867Z] 🖨️  1 impressora(s) configurada(s):
+[2026-08-12T03:55:25.868Z]    • Impressora Única (USB) → vias: caixa, cozinha, sushibar (printer:MP-4200 TH)
+[2026-08-12T03:55:26.158Z] 🔑 Login OK (caixa).
+[2026-08-12T03:55:26.161Z] 📡 Conectando ao servidor em tempo real...
+[2026-08-12T03:55:26.386Z] ✅ Conectado — aguardando pedidos novos.
+[2026-08-12T03:56:32.582Z] 🖨️  Impressão sob demanda pedida pra via "caixa" — pedido SGMSPJXBC3 (Helena Rocha).
+[2026-08-12T03:56:33.341Z] ✅ Pedido SGMSPJXBC3 — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:56:33.347Z] 🖨️  Impressão sob demanda pedida pra via "cozinha" — pedido SGMSPJXBC3 (Helena Rocha).
+[2026-08-12T03:56:34.002Z] ✅ Pedido SGMSPJXBC3 — via "cozinha" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:57:55.672Z] 🆕 Pedido novo recebido: SGMSPK6PIV (Fernanda Costa)
+[2026-08-12T03:57:56.317Z] ✅ Pedido SGMSPK6PIV — via "caixa" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:57:57.212Z] ✅ Pedido SGMSPK6PIV — via "cozinha" impressa com sucesso na impressora "Impressora Única (USB)".
+[2026-08-12T03:57:57.419Z] ℹ️  Pedido SGMSPK6PIV — via "sushibar" sem itens dessa via, nada impresso.

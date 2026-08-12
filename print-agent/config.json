@@ -1,0 +1,19 @@
+{
+    "serverUrl": "https://shogatsu-pedidos.onrender.com",
+    "username": "caixa",
+    "password": "1234",
+    "storeName": "Shogatsu Culinária Oriental",
+    "printers": [
+        {
+            "label": "Impressora Única (USB)",
+            "type": "epson",
+            "interface": "printer:MP-4200 TH",
+            "width": 42,
+            "stations": [
+                "caixa",
+                "cozinha",
+                "sushibar"
+            ]
+        }
+    ]
+}

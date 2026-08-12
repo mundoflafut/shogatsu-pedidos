@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node print-agent.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "node-thermal-printer": "^4.6.0"
   }

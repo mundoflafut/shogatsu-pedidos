@@ -21,12 +21,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const LOG_PATH = path.join(__dirname, 'print-agent.log');
+const WINPRINT_HELPER_PATH = path.join(__dirname, 'winprint-helper.ps1');
 const TEST_MODE = process.env.TEST_MODE === '1'; // não manda pra impressora de verdade, só mostra no log/console
 
 if (!fs.existsSync(CONFIG_PATH)) {
@@ -80,23 +84,86 @@ function loadPrinters() {
   }];
 }
 const PRINTERS = loadPrinters();
+// v82: identificador único gerado a cada inicialização do agente — só serve pra distinguir
+// "sinais de vida" (announce) de instâncias diferentes na tela do painel; não precisa persistir
+// entre reinícios, um novo é gerado toda vez e o anterior simplesmente expira sozinho (90s) do
+// lado do servidor.
+const AGENT_ID = crypto.randomBytes(6).toString('hex');
 
 function printerForStation(station) {
   return PRINTERS.find(p => p.stations.includes(station)) || null;
+}
+
+// v83.2 — CONTORNO PRA IMPRESSORA USB NO WINDOWS ("No driver set!" / npm 'printer' quebrado):
+// o pacote nativo 'printer' (usado pelo node-thermal-printer pra falar com impressoras
+// instaladas como "printer:NOME" no Windows) está abandonado e não compila mais em
+// versões novas do Node sem Python + Visual Studio Build Tools instalados. Em vez de
+// depender dele, pra impressoras "printer:NOME" a gente:
+//   1. monta o ThermalPrinter com uma interface "tcp://" falsa, só pra ele aceitar
+//      construir sem precisar de nenhum driver nativo (nunca chega a conectar nela de
+//      verdade — não chamamos .execute() nesse caso);
+//   2. usa .getBuffer() pra pegar os bytes ESC/POS já prontos, sem enviar a lugar nenhum;
+//   3. manda esses bytes direto pra fila de impressão do Windows (RAW) via winspool.drv,
+//      chamando um script PowerShell auxiliar (winprint-helper.ps1) — mesmo mecanismo que
+//      o Bloco de Notas usa por baixo dos panos, sem precisar de nenhum pacote extra.
+function isWindowsNamedPrinter(printerCfg) {
+  return process.platform === 'win32' && /^printer:/i.test(printerCfg.interface || '');
+}
+
+function windowsPrinterName(printerCfg) {
+  return printerCfg.interface.replace(/^printer:/i, '');
+}
+
+function sendRawBufferToWindowsPrinter(printerName, buffer) {
+  if (!fs.existsSync(WINPRINT_HELPER_PATH)) {
+    throw new Error(`winprint-helper.ps1 não encontrado em ${WINPRINT_HELPER_PATH} (deveria estar do lado do print-agent.js).`);
+  }
+  const tmpFile = path.join(os.tmpdir(), `shogatsu-print-${crypto.randomBytes(4).toString('hex')}.bin`);
+  fs.writeFileSync(tmpFile, buffer);
+  try {
+    execFileSync('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-File', WINPRINT_HELPER_PATH,
+      '-PrinterName', printerName,
+      '-FilePath', tmpFile
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 });
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch (e) { /* arquivo temporário, sem problema se sobrar */ }
+  }
 }
 
 function buildPrinter(printerCfg) {
   if (TEST_MODE) return null; // modo teste não precisa de impressora de verdade
   return new ThermalPrinter({
     type: printerCfg.type,
-    interface: printerCfg.interface,          // ex: "tcp://192.168.1.50:9100" ou "printer:USB001" ou "/dev/usb/lp0"
+    // v83.2: pra impressora "printer:NOME" (USB/instalada no Windows), usamos uma interface
+    // tcp:// de mentirinha só pra passar pela validação do construtor — os bytes nunca são
+    // enviados por ela de verdade (ver sendRawBufferToWindowsPrinter acima). Pra impressora
+    // de rede de verdade (tcp://IP:porta) ou Linux (/dev/...), continua igual a antes.
+    interface: isWindowsNamedPrinter(printerCfg) ? 'tcp://127.0.0.1:9100' : printerCfg.interface,
     width: printerCfg.width,
+    // v84.1 — sem isto, qualquer texto com acento (á, ã, ç, é...) quebrava a impressão com
+    // "Encoding not recognized: 'undefined'", pois a biblioteca não sabia qual codificação
+    // usar pra converter o texto pros bytes que a impressora entende. PC860_PORTUGUESE cobre
+    // os acentos do português. Dá pra sobrescrever por impressora com "characterSet" no
+    // config.json, se um dia precisar de outra (ex.: impressora antiga que só aceite outra).
+    characterSet: printerCfg.characterSet || 'PC860_PORTUGUESE',
     removeSpecialCharacters: false,
     options: { timeout: 5000 }
   });
 }
 
 const money = (n) => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+// v84 — mesma correção do server.js/painel.html ("pagamento deve aparecer como pagamento na
+// entrega"): PIX é pago antes, mas dinheiro/crédito/débito num pedido delivery são cobrados
+// só na entrega — a via do caixa impressa aqui (agente local) precisa deixar isso claro pro
+// motoboy/caixa, não só mostrar a forma escolhida.
+const PAY_METHOD_LABELS = { pix: 'PIX', credito: 'CARTAO DE CREDITO', debito: 'CARTAO DE DEBITO', dinheiro: 'DINHEIRO' };
+function payMethodTicketLabel(order) {
+  const base = PAY_METHOD_LABELS[order.payMethod] || (order.payMethod || '-').toUpperCase();
+  if (!order.payMethod || order.payMethod === 'pix') return base;
+  return base + (order.mode === 'delivery' ? ' (PAGAMENTO NA ENTREGA)' : ' (PAGAMENTO NA RETIRADA)');
+}
 // v55: quais vias esse agente é responsável por imprimir — agora é a UNIÃO das vias de
 // TODAS as impressoras configuradas acima (antes era uma lista solta em cfg.stations).
 const MY_STATIONS = [...new Set(PRINTERS.flatMap(p => p.stations))];
@@ -136,7 +203,7 @@ function printStationTicket(printer, order, station, storeName) {
     items.forEach(it => { printer.bold(true); printer.leftRight(`${it.qty}x ${it.name}`, money(it.price * it.qty)); printer.bold(false); });
     if (order.obs) { printer.drawLine(); printer.println('Obs: ' + order.obs); }
     printer.drawLine();
-    printer.println(`Pagamento: ${(order.payMethod || '-').toUpperCase()}${order.paid ? ' (PAGO)' : ''}`);
+    printer.println(`Pagamento: ${payMethodTicketLabel(order)}${order.paid ? ' (PAGO)' : ''}`);
     printer.setTextDoubleHeight(); printer.bold(true);
     printer.leftRight('TOTAL', money(order.total));
     printer.bold(false); printer.setTextNormal();
@@ -185,12 +252,23 @@ async function printSingleStation(order, station) {
     return { ok:true };
   }
   const printer = buildPrinter(printerCfg);
+  const isWinPrinter = isWindowsNamedPrinter(printerCfg);
   try {
-    const connected = await printer.isPrinterConnected();
-    if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
+    if (!isWinPrinter) {
+      // Impressora de rede/serial de verdade — mantém a checagem original.
+      const connected = await printer.isPrinterConnected();
+      if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
+    }
     const hadItems = printStationTicket(printer, order, station, cfg.storeName);
     if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return { ok:true, skipped:true }; }
-    await printer.execute();
+    if (isWinPrinter) {
+      // v83.2: pega os bytes ESC/POS prontos e manda pra fila de impressão do Windows,
+      // sem depender do pacote nativo 'printer' (ver buildPrinter acima pra explicação).
+      const buffer = printer.getBuffer();
+      sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), buffer);
+    } else {
+      await printer.execute();
+    }
     log(`✅ Pedido ${order.id} — via "${station}" impressa com sucesso na impressora "${printerCfg.label}".`);
     return { ok:true };
   } catch (err) {
@@ -203,17 +281,24 @@ async function printSingleStation(order, station) {
 // dá o efeito de "um clique só (ou automático) manda tudo pro lugar certo": a via do caixa
 // sai na impressora do caixa, a da cozinha na da cozinha, etc., mesmo sendo impressoras
 // físicas diferentes (USB + rede 1 + rede 2), tudo dentro da mesma chamada.
+// v82 — BUG CORRIGIDO ("não dá pra saber por que a impressão automática falhou, sem abrir o
+// log no computador da loja"): até aqui, só a impressão SOB DEMANDA (clique manual em
+// Imprimir/Reimprimir, via printOnDemand) avisava o servidor do resultado — a impressão
+// AUTOMÁTICA (disparada sozinha ao chegar um pedido novo, que é o caminho usado 99% do tempo)
+// nunca chamava reportPrintResult(), então uma falha aqui (impressora desligada, IP errado,
+// papel preso) só aparecia no print-agent.log local, invisível pro admin no painel. Agora
+// avisa o servidor em AMBOS os casos — as falhas passam a aparecer em Configurações → 🖨
+// Central de Impressão → "Últimas falhas de impressão".
 async function printOrder(order) {
   if (TEST_MODE) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
     return true;
   }
-  const results = await Promise.allSettled(
-    MY_STATIONS.map(station => printSingleStation(order, station))
-  );
   let anyPrinted = false;
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value.ok && !result.value.skipped) anyPrinted = true;
+  for (const station of MY_STATIONS) {
+    const r = await printSingleStation(order, station);
+    if (r.ok && !r.skipped) anyPrinted = true;
+    if (!r.skipped) await reportPrintResult(order, station, r.ok, r.error);
   }
   return anyPrinted;
 }
@@ -243,9 +328,12 @@ async function printTestTicket(payload) {
   if (!printerCfg) { log(`⚠️  Nenhuma impressora configurada pra via "${payload.station}" — teste não enviado.`); return; }
   if (TEST_MODE) { log(`🧪 [TEST_MODE] Teste de impressão pra via "${payload.station}" (impressora: ${printerCfg.label}):\n   ` + String(payload.text || '').split('\n').join('\n   ')); return; }
   const printer = buildPrinter(printerCfg);
+  const isWinPrinter = isWindowsNamedPrinter(printerCfg);
   try {
-    const connected = await printer.isPrinterConnected();
-    if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu.`);
+    if (!isWinPrinter) {
+      const connected = await printer.isPrinterConnected();
+      if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu.`);
+    }
     printer.alignCenter(); printer.bold(true);
     printer.println('TESTE DE IMPRESSAO');
     printer.bold(false);
@@ -253,7 +341,11 @@ async function printTestTicket(payload) {
     printer.println('Impressora: ' + printerCfg.label);
     printer.println(new Date().toLocaleString('pt-BR'));
     printer.newLine(); printer.cut();
-    await printer.execute();
+    if (isWinPrinter) {
+      sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), printer.getBuffer());
+    } else {
+      await printer.execute();
+    }
     log(`✅ Teste de impressão da via "${payload.station}" concluído na impressora "${printerCfg.label}".`);
   } catch (err) {
     log(`❌ Falha no teste de impressão (via "${payload.station}", impressora "${printerCfg.label}"): ${err.message}`);
@@ -293,6 +385,23 @@ async function login() {
   if (r.status !== 200 || !r.data || !r.data.token) throw new Error('Login falhou — confira usuário/senha no config.json.');
   token = r.data.token;
   log(`🔑 Login OK (${cfg.username}).`);
+  announcePresence();
+}
+
+// v82: avisa o servidor "estou vivo" logo após logar, e de novo a cada ~45s enquanto o agente
+// estiver rodando — é o que faz o painel (Central de Impressão) mostrar "✅ Agente conectado"
+// ou "❌ Nenhum agente conectado" em tempo real, em vez do admin ter que adivinhar olhando só
+// pro resultado (ou a falta dele) na impressora física.
+let announceTimer = null;
+async function announcePresence() {
+  try {
+    await request('POST', `${cfg.serverUrl}/api/print-agent/announce?token=${encodeURIComponent(token)}`, {
+      agentId: AGENT_ID,
+      printers: PRINTERS.map(p => ({ label: p.label, stations: p.stations }))
+    });
+  } catch (e) { /* se falhar, o painel simplesmente mostra "offline" até o próximo aviso — não trava nada aqui */ }
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(announcePresence, 45000);
 }
 
 function connectStream() {
