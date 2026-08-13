@@ -2859,6 +2859,29 @@ function estimateDeliveryWindow(order, cfg) {
       const items = isCaixa ? order.items : order.items.filter(i => (i.stations || []).includes(st));
       if (!items.length) return sendJSON(res, 200, { ok: true, printed: false, skipped: true, order, station: st });
 
+      // v86 — CORRIGIDO ("imprimiu 3 cópias da mesma via"): cfg.print (auto-impressão) é um
+      // interruptor GLOBAL — todo painel aberto e conectado, em qualquer aparelho (ou aba),
+      // dispara seu PRÓPRIO printOrder() sozinho assim que um pedido novo chega. Nada impedia
+      // isso: com 2 ou 3 painéis abertos ao mesmo tempo (2 abas no mesmo PC, ou vários
+      // aparelhos com "Terminal de Impressão" marcado), CADA um mandava seu próprio
+      // POST /api/print pra cada via, e nenhum sabia que os outros já tinham cuidado do mesmo
+      // pedido — resultado: a mesma via saía 2, 3 vezes seguidas. Agora, só pra disparos
+      // AUTOMÁTICOS (auto:true — nunca pra clique manual de "Imprimir"/reimpressão, que sempre
+      // deve funcionar quando pedido de propósito, inclusive o seletor de vias da v86), o
+      // servidor marca no próprio pedido (order.autoPrinted) qual via já processou o
+      // auto-print; qualquer segunda chamada automática pra essa MESMA via desse MESMO pedido
+      // é ignorada, não importa de quantos painéis abertos ela venha.
+      if (auto) {
+        if (!order.autoPrinted) order.autoPrinted = {};
+        if (order.autoPrinted[st]) {
+          return sendJSON(res, 200, { ok: true, printed: false, skipped: true, alreadyAutoPrinted: true, order, station: st });
+        }
+        order.autoPrinted[st] = true;
+        const idx = orders.findIndex(o => o.id === order.id);
+        if (idx > -1) orders[idx] = order;
+        writeJSON(ORDERS_FILE, orders);
+      }
+
       const deliveryWindow = estimateDeliveryWindow(order, cfg);
       let printerCfg = cfg.stations[st] || { method: 'navegador' };
       // v39 (pedido novo): se a via não tem impressora própria configurada (USB/rede), em vez
@@ -3769,6 +3792,7 @@ function estimateDeliveryWindow(order, cfg) {
         ticketNumber: null, // só é atribuído quando a loja ACEITA o pedido (veja PATCH /api/orders/:id)
         createdAt: new Date().toISOString(),
         status: 'novo',
+        autoPrinted: {}, // v86: ver POST /api/print — evita a mesma via imprimir 2-3x com vários painéis abertos
         mode: body.mode === 'retirada' ? 'retirada' : 'delivery',
         name: String(body.name || '').slice(0, 80),
         phone: String(body.phone || '').slice(0, 30),
