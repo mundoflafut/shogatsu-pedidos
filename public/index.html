@@ -2874,13 +2874,23 @@ function effectivePrice(item, key) {
 // "Editar Cardápio" > categoria), e só usar 'cozinha' se nem a categoria tiver via definida.
 // Antes o fallback ia direto pra ['cozinha'] fixo, ignorando a categoria — então qualquer item
 // novo (sem stations gravada nele) saía sempre como cozinha, mesmo em categoria de Bar/Sushibar.
+//
+// v86 — SEGUNDO BUG CORRIGIDO, esse mais grave ("marquei a categoria e mesmo assim não
+// imprime"): desde a v75 a via passou a ser SÓ da categoria — o modal de edição do item nem
+// mostra mais controle de via. Só que essa função aqui continuava checando `item.stations`
+// PRIMEIRO, antes da categoria. Itens criados/editados antes da v75 ficaram com um campo
+// `stations` gravado no próprio item (ex.: ['cozinha']) — e como esse código dava prioridade
+// pra esse campo, ele ficava TRAVADO pra sempre no valor antigo, sem nenhuma tela pra corrigir
+// (o controle foi removido do modal do item na v75), IGNORANDO SILENCIOSAMENTE qualquer
+// alteração feita na categoria depois. Agora a categoria é a única fonte de verdade, igual o
+// resto do sistema já assume desde a v75 — o campo `item.stations` antigo, se ainda existir
+// nos dados, é ignorado.
 function getSectionByKey(key) {
   const idx = key.lastIndexOf('-');
   const secId = key.slice(0, idx);
   return menu.find(s => s.id === secId);
 }
 function stationsForItemKey(key, item) {
-  if (item && item.stations && item.stations.length) return item.stations;
   const sec = getSectionByKey(key);
   if (sec && sec.stations && sec.stations.length) return sec.stations;
   return ['cozinha'];

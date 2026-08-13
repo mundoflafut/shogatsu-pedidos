@@ -2333,6 +2333,25 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
   </div>
 </div>
 
+<!-- MODAL ESCOLHER VIAS PRA IMPRIMIR (v86) -->
+<div class="modal-overlay" id="print-picker-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🖨 Escolher vias pra imprimir</span>
+      <button class="modal-close" onclick="closeModal('print-picker-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="print-picker-order-id"/>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Marque só as vias que você quer reimprimir agora pra esse pedido — as outras não são tocadas.</div>
+      <div id="print-picker-checks" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('print-picker-modal')">Cancelar</button>
+      <button class="btn primary" onclick="confirmPrintStationPicker()">🖨 Imprimir selecionadas</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOVO PEDIDO MANUAL -->
 <div class="modal-overlay" id="import-menu-modal">
   <div class="modal">
@@ -4973,6 +4992,34 @@ async function printOrder(id, ev, stations, isAuto){
 // v51: o modal "Escolher Impressora" (🖨▾) foi removido a pedido — imprimir agora sempre manda
 // pra todas as vias configuradas direto, sem esse passo extra. Isso também elimina uma fonte
 // do bug das janelas "fantasma" (ver comentário grande dentro de printOrder() logo abaixo).
+// v86: TROUXE DE VOLTA, a pedido — só que agora do lado do botão principal "🖨 Imprimir" (que
+// continua imprimindo tudo com um clique só), um botão pequeno "🖨▾" abre este seletor pra quem
+// quiser reimprimir manualmente só uma via específica (ou 2+ de uma vez), sem mandar de novo
+// pras vias que já saíram certinho. Reaproveita a mesma printOrder(id, ev, stations) de sempre
+// — só passa a lista escolhida em vez de deixar ela pegar todas via getPrintStations().
+function openPrintStationPicker(id, ev){
+  if(ev) ev.stopPropagation();
+  const order = orders.find(o=>o.id===id);
+  document.getElementById('print-picker-order-id').value = id;
+  const involved = new Set(['caixa']);
+  (order&&order.items||[]).forEach(i=>(i.stations||[]).forEach(st=>involved.add(st)));
+  const keys = getPrintStations(); // só vias ativas de verdade, na ordem configurada
+  document.getElementById('print-picker-checks').innerHTML = keys.map(st=>`
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="pp-st-${st}" ${involved.has(st)?'checked':''}/>
+      ${stationIcon(st)} ${esc(stationLabel(st))}
+      ${!involved.has(st)?'<span style="font-size:10px;color:var(--muted);">(sem itens desse pedido nessa via)</span>':''}
+    </label>`).join('');
+  openModal('print-picker-modal');
+}
+function confirmPrintStationPicker(){
+  const id = document.getElementById('print-picker-order-id').value;
+  const keys = getPrintStations();
+  const chosen = keys.filter(st=>{ const el=document.getElementById('pp-st-'+st); return el && el.checked; });
+  if(!chosen.length){ alert('Marque pelo menos uma via.'); return; }
+  closeModal('print-picker-modal');
+  printOrder(id, null, chosen);
+}
 
 // Monta o HTML de uma via e abre a janela de impressão do navegador (impressora
 // térmica USB comum em caixa de restaurante, sem precisar configurar IP/porta).
@@ -5250,11 +5297,14 @@ function renderManualItemSearch(q){
 // v44: BUG CORRIGIDO — pedido manual criado pelo painel também caía sempre em 'cozinha' quando
 // o item não tinha stations próprias, ignorando a via configurada na categoria (mesmo bug do
 // cardápio do cliente). Agora usa a via da categoria como fallback antes de cair pra cozinha.
+// v86: e, mesmo bug do index.html — a categoria não é mais só um "fallback", é a ÚNICA fonte
+// de verdade desde a v75 (controle por item foi removido). Um campo `item.stations` antigo,
+// deixado em itens criados antes da v75, não pode mais vencer a categoria em silêncio.
 function addManualItemFromMenu(idx){
   const r=manualSearchResults[idx];
   if(!r)return;
   const item=r.item, sec=r.sec;
-  const stations=(item.stations&&item.stations.length)?item.stations:((sec&&sec.stations&&sec.stations.length)?sec.stations:['cozinha']);
+  const stations=(sec&&sec.stations&&sec.stations.length)?sec.stations:['cozinha'];
   const existing=manualOrderItems.find(i=>i.name===item.name && !i.custom);
   if(existing) existing.qty++;
   else manualOrderItems.push({name:item.name, qty:1, price:Number(item.price)||0, image:item.image||'', stations});
@@ -5444,6 +5494,7 @@ function miniOrderCard(o){
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
       <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
+      <button class="oa-btn print" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir" style="flex:0 0 auto;padding-left:8px;padding-right:8px;">🖨▾</button>
       ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
       ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
@@ -5526,6 +5577,7 @@ function renderOrdersList(){
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
         <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
+        <button class="oa-btn print" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir" style="flex:0 0 auto;padding-left:8px;padding-right:8px;">🖨▾</button>
         ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
         ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
         ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
@@ -6264,7 +6316,7 @@ function menuItemCardHTML(sec,si,item,ii,allowReorder){
           <div class="mi-card-desc">${esc(item.desc||'')}</div>
           <div class="mi-card-tags">
             ${item.qty?`<span class="mi-badge">${esc(item.qty)}</span>`:''}
-            <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons(item.stations)}</span>
+            <span class="mi-badge" style="background:var(--border2);color:var(--muted);">${stIcons((sec&&sec.stations&&sec.stations.length)?sec.stations:['cozinha'])}</span>
           </div>
           <div class="mi-card-footer">
             <span class="mi-price">R$ ${Number(item.price).toFixed(2).replace('.',',')}</span>
