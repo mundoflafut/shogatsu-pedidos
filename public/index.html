@@ -187,12 +187,18 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .item-body{flex:1;}
 .item-name{font-family:'Cormorant Garamond',serif;font-size:calc(19px * var(--menu-fs-scale,1));font-weight:600;color:var(--white);margin-bottom:4px;line-height:1.25;letter-spacing:.2px;}
 .item-desc{font-size:calc(12px * var(--menu-fs-scale,1));color:#b8b0a8;line-height:1.65;margin-bottom:9px;letter-spacing:.1px;}
+/* v87: descrição compacta por padrão (2 linhas), expande com "Ver mais" — ver toggleItemDesc() */
+.item-desc.clamped{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px;transition:max-height .22s ease;}
+.item-desc-toggle{background:none;border:none;padding:2px 0;margin:0 0 8px;font-size:11px;font-weight:700;color:var(--gold,#c9a84c);cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.item-desc-toggle:active{opacity:.7;}
 .item-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .item-price{font-family:'Cormorant Garamond',serif;font-size:calc(21px * var(--menu-fs-scale,1));font-weight:700;color:var(--red-lt);letter-spacing:.2px;}
 .item-badge{font-size:10px;font-weight:700;letter-spacing:.5px;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:3px 10px;border-radius:20px;margin-bottom:6px;display:inline-block;}
 .item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
 .add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;-webkit-tap-highlight-color:transparent;}
+/* v87: "+ Pedir aqui" — mesmo botão vermelho, agora em formato pílula com texto (melhor área de toque e mais claro que só "+"). */
+.add-btn.add-btn-text{width:auto;height:40px;border-radius:20px;padding:0 16px;font-size:13px;font-weight:700;gap:5px;white-space:nowrap;}
 .add-btn:hover{background:var(--red-lt);transform:scale(1.12);box-shadow:0 4px 12px rgba(196,30,58,.4);}
 .add-btn:active{transform:scale(.9);}
 .add-btn:active{transform:scale(.92);}
@@ -2011,7 +2017,19 @@ async function loadReviews(){
     const r = await fetch('/api/reviews');
     const data = await r.json();
     const section = document.getElementById('reviews-section');
-    if(!data.reviews || !data.reviews.length){ section.style.display='none'; return; }
+    // v87 — CORRIGIDO ("logotipo/área de avaliação some quando não tem avaliação nenhuma"):
+    // antes, sem nenhuma avaliação ainda, a seção inteira ficava com display:none — sumia da
+    // página. Agora ela continua sempre visível; só troca o conteúdo pra um convite elegante
+    // quando ainda não existe avaliação nenhuma.
+    if(!data.reviews || !data.reviews.length){
+      section.style.display='block';
+      document.getElementById('review-avg').innerHTML = `<div style="text-align:center;padding:6px 16px 4px;">
+        <div style="font-size:15px;font-weight:700;color:var(--gold,#c9a84c);">⭐ Avalie seu pedido</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">Sua opinião ajuda o Shogatsu a melhorar.</div>
+      </div>`;
+      document.getElementById('reviews-list').innerHTML = '';
+      return;
+    }
     section.style.display='block';
     document.getElementById('review-avg').innerHTML = `<span style="font-size:28px;font-weight:800;color:#FFC300;">${data.average}</span><span style="color:#FFC300;font-size:20px;text-shadow:0 0 8px rgba(255,195,0,.35);">${'★'.repeat(Math.round(data.average))}${'☆'.repeat(5-Math.round(data.average))}</span><span style="font-size:12px;color:var(--muted);">(${data.count} avaliações)</span>`;
     document.getElementById('reviews-list').innerHTML = data.reviews.slice(0,20).map(rv=>`
@@ -2692,6 +2710,9 @@ function renderMenu() {
     let items = q ? sec.items.filter((it, ii) => matchesQuery(it, q)) : sec.items;
     let indices = q ? sec.items.map((it, ii) => ii).filter(ii => matchesQuery(sec.items[ii], q)) : sec.items.map((it, ii) => ii);
     if (showFavoritesOnly) indices = indices.filter(ii => favorites.has(sec.id + '-' + ii));
+    // v87: "👁️ Ocultar do cardápio" (Editar Cardápio) — item some daqui, mas continua existindo
+    // no painel pra edição (diferente de "Esgotado", que só cinza o item e mantém visível).
+    indices = indices.filter(ii => sec.items[ii].hidden !== true);
     return { sec, items, indices };
   }).filter(s => s.indices.length > 0);
 
@@ -2748,7 +2769,8 @@ function renderMenu() {
             ${badgeAboveName ? badgeHtml : ''}
             <div class="item-name">${item.name}</div>
             ${badgeBelowName ? badgeHtml : ''}
-            <div class="item-desc">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
+            <div class="item-desc${item.desc ? ' clamped' : ''}" id="desc-${key}">${item.desc}${item.qty ? ` <span style="color:var(--muted);font-size:10px">(${item.qty})</span>` : ''}</div>
+            ${item.desc ? `<button type="button" class="item-desc-toggle" id="desc-toggle-${key}" onclick="toggleItemDesc('${key}', event)">⌄ Ver mais</button>` : ''}
             ${cartQty > 0 ? `<div class="mi-in-cart-tag">🛒 ${cartQty} no carrinho</div>` : ''}
             <div class="item-footer">
               ${(() => {
@@ -2767,7 +2789,7 @@ function renderMenu() {
                 ? `<button class="add-btn" style="width:auto;padding:0 14px;border-radius:20px;font-size:12px;" onclick="openVariantPicker('${key}')">🎛 Personalizar</button>`
                 : inCart
                 ? `<div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${inCart.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>`
-                : `<button class="add-btn" onclick="addToCart('${key}')" data-key="${key}">+</button>`
+                : `<button class="add-btn add-btn-text" onclick="addToCart('${key}')" data-key="${key}">+ Pedir aqui</button>`
               }
             </div>
           </div>
@@ -2777,9 +2799,45 @@ function renderMenu() {
   `).join('');
   if (typeof updateStickyOffsets === 'function') updateStickyOffsets(); // v52: recalcula antes do observer usar o offset, pra cobrir mudanças no banner "fechado"/cabeçalho
   setupCategoryObserver();
+  // v87: renderMenu() é chamado de novo em várias ações (favoritar, add ao carrinho, mudar
+  // qty) que não têm nada a ver com a descrição aberta — sem isso, qualquer uma dessas ações
+  // fecharia a descrição que o cliente estava lendo, sem ele ter rolado nem clicado em nada.
+  if(expandedDescKey) expandItemDesc(expandedDescKey);
 }
 
 let customerMenuQuery = '';
+// v87: "Ver mais/Ocultar descrição" — só uma descrição expandida por vez, e fecha sozinha
+// quando o usuário rola o cardápio (com uma tolerância de ~350ms pra não fechar por causa de
+// um toque acidental que gera um scroll mínimo). Listener passivo, sem debounce pesado — só
+// um clearTimeout/setTimeout por evento de scroll, praticamente sem custo.
+let expandedDescKey = null;
+function toggleItemDesc(key, ev){
+  if(ev) ev.stopPropagation();
+  const wasOpen = expandedDescKey === key;
+  if(expandedDescKey && expandedDescKey !== key) collapseItemDesc(expandedDescKey);
+  if(wasOpen){ collapseItemDesc(key); expandedDescKey = null; }
+  else { expandItemDesc(key); expandedDescKey = key; }
+}
+function expandItemDesc(key){
+  const desc = document.getElementById('desc-'+key);
+  const btn = document.getElementById('desc-toggle-'+key);
+  if(desc) desc.classList.remove('clamped');
+  if(btn) btn.textContent = '⌃ Ocultar descrição';
+}
+function collapseItemDesc(key){
+  const desc = document.getElementById('desc-'+key);
+  const btn = document.getElementById('desc-toggle-'+key);
+  if(desc) desc.classList.add('clamped');
+  if(btn) btn.textContent = '⌄ Ver mais';
+}
+let _descScrollCloseTimer = null;
+window.addEventListener('scroll', ()=>{
+  if(!expandedDescKey) return;
+  clearTimeout(_descScrollCloseTimer);
+  _descScrollCloseTimer = setTimeout(()=>{
+    if(expandedDescKey){ collapseItemDesc(expandedDescKey); expandedDescKey = null; }
+  }, 350);
+}, { passive:true });
 let favorites = new Set(JSON.parse(localStorage.getItem('shogatsu_favorites') || '[]'));
 let showFavoritesOnly = false;
 function toggleFavorite(key, ev) {

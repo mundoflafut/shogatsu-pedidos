@@ -1181,6 +1181,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <span class="panel-title" style="font-size:12px;">Categorias</span>
             <div style="display:flex;gap:6px;">
               <button class="btn secondary sm" onclick="openImportMenu()" title="Substituir o cardápio inteiro por um arquivo JSON">📥 Importar</button>
+              <button class="btn secondary sm" onclick="openBulkPriceModal()" title="Ajustar preços de várias categorias/itens de uma vez">💰 Ajustar preços</button>
               <button class="btn primary sm" onclick="openAddCategory()" title="Nova categoria de prato">+ Categoria</button>
             </div>
           </div>
@@ -2348,6 +2349,88 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <div class="modal-footer">
       <button class="btn secondary" onclick="closeModal('print-picker-modal')">Cancelar</button>
       <button class="btn primary" onclick="confirmPrintStationPicker()">🖨 Imprimir selecionadas</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COPIAR ITEM (v87) -->
+<div class="modal-overlay" id="copy-item-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="copy-item-modal-title">📋 Copiar item</span>
+      <button class="modal-close" onclick="closeModal('copy-item-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="copy-item-si"/>
+      <input type="hidden" id="copy-item-ii"/>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Marque pra quais categorias copiar esse prato (pode marcar mais de uma, inclusive a mesma categoria pra duplicar). O original não é alterado.</div>
+      <div id="copy-item-cat-checks" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('copy-item-modal')">Cancelar</button>
+      <button class="btn primary" onclick="confirmCopyItem()">📋 Copiar item</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COPIAR CATEGORIA (v87) -->
+<div class="modal-overlay" id="copy-cat-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📋 Copiar categoria</span>
+      <button class="modal-close" onclick="closeModal('copy-cat-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="copy-cat-source-idx"/>
+      <div class="field"><label>Copiar todos os itens de:</label><input id="copy-cat-source-name" disabled/></div>
+      <div class="field"><label>Para a categoria:</label>
+        <select id="copy-cat-dest-idx"></select>
+      </div>
+      <div id="copy-cat-summary" style="font-size:12px;color:var(--gold,#c9a84c);margin-top:8px;font-weight:600;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('copy-cat-modal')">Cancelar</button>
+      <button class="btn primary" onclick="confirmCopyCategory()">📋 Copiar itens</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AJUSTAR PREÇOS EM MASSA (v87) -->
+<div class="modal-overlay" id="bulk-price-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">💰 Ajustar preços</span>
+      <button class="modal-close" onclick="closeModal('bulk-price-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Aplicar em:</label>
+        <select id="bp-scope" onchange="bulkPriceScopeChanged()">
+          <option value="cat">Uma categoria inteira</option>
+          <option value="all">Todo o cardápio</option>
+        </select>
+      </div>
+      <div class="field" id="bp-cat-field"><label>Categoria:</label><select id="bp-cat-idx"></select></div>
+      <div class="field-row">
+        <div class="field"><label>Tipo de ajuste</label>
+          <select id="bp-type">
+            <option value="pct">Porcentagem (%)</option>
+            <option value="fixed">Valor fixo (R$)</option>
+          </select>
+        </div>
+        <div class="field"><label>Direção</label>
+          <select id="bp-dir">
+            <option value="up">Aumentar (+)</option>
+            <option value="down">Reduzir (−)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Valor</label><input type="number" step="0.01" id="bp-value" placeholder="ex: 10"/></div>
+      <button type="button" class="btn secondary sm" onclick="bulkPricePreview()">🔎 Ver prévia antes de aplicar</button>
+      <div id="bp-preview" style="margin-top:10px;max-height:260px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal('bulk-price-modal')">Cancelar</button>
+      <button class="btn primary" id="bp-confirm-btn" onclick="confirmBulkPrice()" disabled title="Veja a prévia primeiro">💰 Aplicar ajuste</button>
     </div>
   </div>
 </div>
@@ -6039,6 +6122,7 @@ function renderMenuEditor(){
         </span>
         <span class="cat-actions">
           <button class="edit" onclick="event.stopPropagation();openEditCategory(${i})" title="Editar categoria">✏️</button>
+          <button class="edit" onclick="event.stopPropagation();openCopyCategoryPicker(${i})" title="Copiar todos os itens dessa categoria pra outra">📋</button>
           <button class="del" onclick="event.stopPropagation();deleteCategory(${i})" title="Excluir categoria">🗑</button>
         </span>
       </div>
@@ -6290,6 +6374,7 @@ function stIcons(stations){
 function menuItemCardHTML(sec,si,item,ii,allowReorder){
   const vCount=(item.variants||[]).length;
   const unavailable = item.available===false;
+  const hidden = item.hidden===true; // v87: "👁️ Ocultar do cardápio" — some do cardápio do cliente, mas continua aqui no painel
   const promo = itemHasActivePromo(item, si, ii);
   // v84: ferramenta "Foto Provisória Global" removida (duplicava o upload de foto do próprio
   // item) — o card mostra o placeholder genérico quando o prato não tem foto própria.
@@ -6306,6 +6391,7 @@ function menuItemCardHTML(sec,si,item,ii,allowReorder){
             ${menuItemBadgeLabelHTML(item)}
             ${promo?`<span class="mi-badge" style="background:var(--red);color:#fff;border-color:var(--red);">🏷️ Promoção</span>`:''}
             ${vCount?`<span class="mi-badge" style="background:rgba(201,168,76,.85);color:#1a1405;border-color:transparent;">⚙ ${vCount} opção${vCount>1?'ões':''}</span>`:''}
+            ${hidden?`<span class="mi-badge" style="background:var(--muted);color:#fff;border-color:transparent;">⚪ Oculto do cardápio</span>`:''}
           </div>
           ${unavailable?`<span class="mi-card-unavail-tag">🚫 Esgotado</span>`:''}
           <button type="button" class="mi-card-photo-edit" onclick="quickChangeItemPhoto(${si},${ii})" title="Trocar foto rápido"><span>📷 Trocar foto</span></button>
@@ -6324,7 +6410,9 @@ function menuItemCardHTML(sec,si,item,ii,allowReorder){
               ${allowReorder?`
               <button class="ca-move" onclick="moveItem(${si},${ii},-1)" ${ii===0?'disabled':''} title="Mover pra cima" style="background:var(--border2);color:var(--muted);">▲</button>
               <button class="ca-move" onclick="moveItem(${si},${ii},1)" ${ii===sec.items.length-1?'disabled':''} title="Mover pra baixo" style="background:var(--border2);color:var(--muted);">▼</button>`:''}
+              <button class="ca-avail ${hidden?'off':''}" onclick="toggleItemHidden(${si},${ii})" title="${hidden?'🟢 Mostrar no cardápio do cliente':'⚪ Ocultar do cardápio do cliente'}">${hidden?'⚪':'🟢'}</button>
               <button class="ca-avail ${unavailable?'off':''}" onclick="toggleItemAvailability(${si},${ii})" title="${unavailable?'Marcar disponível':'Marcar esgotado'}">${unavailable?'🚫':'✅'}</button>
+              <button class="ca-edit" onclick="openCopyItemPicker(${si},${ii})" title="Copiar item pra outra categoria">📋</button>
               <button class="ca-edit" onclick="openEditItem(${si},${ii})" title="Editar prato">✏️</button>
               <button class="ca-del" onclick="deleteItem(${si},${ii})" title="Excluir prato">🗑</button>
             </div>
@@ -6390,6 +6478,16 @@ async function toggleItemAvailability(si,ii){
   if(!res.ok){ alert(res.data.error||'Erro ao atualizar disponibilidade.'); menu[si].items[ii].available = !menu[si].items[ii].available; renderMenuItems(); return; }
   renderMenuItems();
   showToast(menu[si].items[ii].available?'✅ Disponível':'🚫 Marcado como esgotado', menu[si].items[ii].name);
+}
+// v87: "👁️ Ocultar do cardápio" — diferente de "Esgotado" (que continua aparecendo, só cinza).
+// Oculto some inteiramente do cardápio do cliente (ver filtro em renderMenu, index.html), mas
+// continua normalmente aqui no painel pra edição — nada é excluído do banco.
+async function toggleItemHidden(si,ii){
+  menu[si].items[ii].hidden = menu[si].items[ii].hidden===true ? false : true;
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao atualizar visibilidade.'); menu[si].items[ii].hidden = !menu[si].items[ii].hidden; renderMenuItems(); return; }
+  renderMenuItems();
+  showToast(menu[si].items[ii].hidden?'⚪ Oculto do cardápio':'🟢 Visível no cardápio', menu[si].items[ii].name);
 }
 
 // ── Item: foto do prato ──
@@ -6530,6 +6628,21 @@ function removeVariantGroup(gi){
   editingVariants.splice(gi,1);
   renderVariantGroups();
 }
+// v87: "Reordenar" pedido no editor de variações — grupos e opções, ambos com ↑/↓ (arrastar não
+// valia a pena pra listas curtas como essas; sobe/desce já resolve).
+function moveVariantGroup(gi,dir){
+  const ni=gi+dir;
+  if(ni<0||ni>=editingVariants.length)return;
+  [editingVariants[gi],editingVariants[ni]]=[editingVariants[ni],editingVariants[gi]];
+  renderVariantGroups();
+}
+function moveVariantOption(gi,oi,dir){
+  const opts=editingVariants[gi].options;
+  const ni=oi+dir;
+  if(ni<0||ni>=opts.length)return;
+  [opts[oi],opts[ni]]=[opts[ni],opts[oi]];
+  renderVariantGroups();
+}
 function addVariantOption(gi){
   editingVariants[gi].options.push({name:'',priceDelta:0});
   renderVariantGroups();
@@ -6552,6 +6665,10 @@ function renderVariantGroups(){
     : editingVariants.map((g,gi)=>`
       <div class="vgroup">
         <div class="vgroup-head">
+          <div style="display:flex;flex-direction:column;gap:0;">
+            <button type="button" onclick="moveVariantGroup(${gi},-1)" ${gi===0?'disabled':''} title="Mover grupo pra cima" style="font-size:10px;padding:0 4px;line-height:1.4;">▲</button>
+            <button type="button" onclick="moveVariantGroup(${gi},1)" ${gi===editingVariants.length-1?'disabled':''} title="Mover grupo pra baixo" style="font-size:10px;padding:0 4px;line-height:1.4;">▼</button>
+          </div>
           <input type="text" placeholder="Nome do grupo (ex: Tamanho)" value="${g.name.replace(/"/g,'&quot;')}" oninput="updateVariantGroupField(${gi},'name',this.value)"/>
           <select onchange="updateVariantGroupField(${gi},'type',this.value)">
             <option value="single" ${g.type==='single'?'selected':''}>Escolha única</option>
@@ -6564,6 +6681,8 @@ function renderVariantGroups(){
         </div>
         ${g.options.map((o,oi)=>`
           <div class="vopt-row">
+            <button type="button" onclick="moveVariantOption(${gi},${oi},-1)" ${oi===0?'disabled':''} title="Mover opção pra cima" style="font-size:10px;padding:0 4px;">▲</button>
+            <button type="button" onclick="moveVariantOption(${gi},${oi},1)" ${oi===g.options.length-1?'disabled':''} title="Mover opção pra baixo" style="font-size:10px;padding:0 4px;">▼</button>
             <input type="text" placeholder="Opção (ex: Grande)" value="${(o.name||'').replace(/"/g,'&quot;')}" oninput="updateVariantOptionField(${gi},${oi},'name',this.value)"/>
             <input type="number" step="0.01" placeholder="+R$" value="${o.priceDelta||0}" oninput="updateVariantOptionField(${gi},${oi},'priceDelta',this.value)"/>
             <button type="button" onclick="removeVariantOption(${gi},${oi})" title="Remover opção">✕</button>
@@ -6605,6 +6724,132 @@ async function deleteItem(si,ii){
   const res = await apiPost('/api/config', { cfg, menu });
   if(!res.ok){ alert(res.data.error||'Erro ao remover item.'); return; }
   renderMenuEditor();
+}
+
+// ── Copiar item / Copiar categoria (v87) ──
+// Evita digitação repetitiva pra cardápios grandes com pratos parecidos em várias categorias
+// (ex: mesmo hot roll listado em "Hot Rolls" e num combo). A cópia SEMPRE cria um registro
+// novo — nunca sobrescreve o item original, mesmo copiando pra dentro da própria categoria.
+function openCopyItemPicker(si,ii){
+  const item = menu[si].items[ii];
+  document.getElementById('copy-item-si').value = si;
+  document.getElementById('copy-item-ii').value = ii;
+  document.getElementById('copy-item-modal-title').textContent = `📋 Copiar "${item.name}"`;
+  document.getElementById('copy-item-cat-checks').innerHTML = menu.map((s,i)=>`
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="ci-cat-${i}" ${i===si?'checked':''}/>
+      ${s.icon||'🍽️'} ${esc(s.title)} ${i===si?'<span style="font-size:10px;color:var(--muted);">(mesma categoria — duplica)</span>':''}
+    </label>`).join('');
+  openModal('copy-item-modal');
+}
+async function confirmCopyItem(){
+  const si = parseInt(document.getElementById('copy-item-si').value);
+  const ii = parseInt(document.getElementById('copy-item-ii').value);
+  const original = menu[si].items[ii];
+  const destIdxs = menu.map((s,i)=>i).filter(i=>{ const el=document.getElementById('ci-cat-'+i); return el && el.checked; });
+  if(!destIdxs.length){ alert('Marque pelo menos uma categoria.'); return; }
+  destIdxs.forEach(di=>{
+    // cópia profunda — nunca referencia o item original, senão editar a cópia alteraria o original
+    const copy = JSON.parse(JSON.stringify(original));
+    copy.name = original.name; // mantém o mesmo nome (usuário pode renomear depois se quiser)
+    menu[di].items.push(copy);
+  });
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao copiar item.'); return; }
+  closeModal('copy-item-modal');
+  renderMenuEditor();
+  showToast('📋 Item copiado', `"${original.name}" copiado pra ${destIdxs.length} categoria${destIdxs.length>1?'s':''}.`);
+}
+function openCopyCategoryPicker(si){
+  document.getElementById('copy-cat-source-idx').value = si;
+  document.getElementById('copy-cat-source-name').value = `${menu[si].icon||'🍽️'} ${menu[si].title} (${menu[si].items.length} itens)`;
+  document.getElementById('copy-cat-dest-idx').innerHTML = menu.map((s,i)=>`<option value="${i}">${s.icon||'🍽️'} ${esc(s.title)}${i===si?' (mesma — duplica tudo)':''}</option>`).join('');
+  document.getElementById('copy-cat-dest-idx').value = si===0 && menu.length>1 ? 1 : 0;
+  updateCopyCategorySummary();
+  document.getElementById('copy-cat-dest-idx').onchange = updateCopyCategorySummary;
+  openModal('copy-cat-modal');
+}
+function updateCopyCategorySummary(){
+  const si = parseInt(document.getElementById('copy-cat-source-idx').value);
+  const di = parseInt(document.getElementById('copy-cat-dest-idx').value);
+  const n = menu[si].items.length;
+  document.getElementById('copy-cat-summary').textContent = n===0
+    ? 'Essa categoria não tem nenhum item pra copiar.'
+    : `Você está copiando ${n} ${n===1?'item':'itens'} de ${menu[si].title} para ${menu[di].title}.`;
+}
+async function confirmCopyCategory(){
+  const si = parseInt(document.getElementById('copy-cat-source-idx').value);
+  const di = parseInt(document.getElementById('copy-cat-dest-idx').value);
+  if(!menu[si].items.length){ alert('Essa categoria não tem itens pra copiar.'); return; }
+  const copies = menu[si].items.map(it=>JSON.parse(JSON.stringify(it)));
+  menu[di].items.push(...copies);
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao copiar categoria.'); return; }
+  closeModal('copy-cat-modal');
+  renderMenuEditor();
+  showToast('📋 Categoria copiada', `${copies.length} itens copiados de "${menu[si].title}" pra "${menu[di].title}".`);
+}
+
+// ── Ajuste de preços em massa (v87) ──
+// Sempre mostra prévia (item por item, atual → novo) antes de aplicar — nunca altera preço
+// sem confirmação explícita, mesmo mexendo em muitos itens de uma vez.
+function openBulkPriceModal(){
+  document.getElementById('bp-cat-idx').innerHTML = menu.map((s,i)=>`<option value="${i}">${s.icon||'🍽️'} ${esc(s.title)} (${s.items.length} itens)</option>`).join('');
+  document.getElementById('bp-cat-idx').value = activeCatIdx>=0 ? activeCatIdx : 0;
+  document.getElementById('bp-scope').value='cat';
+  document.getElementById('bp-value').value='';
+  document.getElementById('bp-preview').innerHTML='';
+  document.getElementById('bp-confirm-btn').disabled=true;
+  bulkPriceScopeChanged();
+  openModal('bulk-price-modal');
+}
+function bulkPriceScopeChanged(){
+  document.getElementById('bp-cat-field').style.display = document.getElementById('bp-scope').value==='cat' ? 'block' : 'none';
+  document.getElementById('bp-preview').innerHTML='';
+  document.getElementById('bp-confirm-btn').disabled=true;
+}
+function bulkPriceTargetItems(){
+  const scope = document.getElementById('bp-scope').value;
+  if(scope==='all') return menu.flatMap((s,si)=>s.items.map((it,ii)=>({si,ii,it})));
+  const si = parseInt(document.getElementById('bp-cat-idx').value);
+  return menu[si].items.map((it,ii)=>({si,ii,it}));
+}
+function bulkPriceNewValue(price){
+  const type = document.getElementById('bp-type').value;
+  const dir = document.getElementById('bp-dir').value;
+  const raw = parseFloat(document.getElementById('bp-value').value)||0;
+  const delta = type==='pct' ? price*(raw/100) : raw;
+  const signedDelta = dir==='down' ? -delta : delta;
+  return Math.max(0, Math.round((price+signedDelta)*100)/100);
+}
+let _bulkPricePreviewTargets = [];
+function bulkPricePreview(){
+  const raw = parseFloat(document.getElementById('bp-value').value)||0;
+  if(!raw){ alert('Digite um valor de ajuste diferente de zero.'); return; }
+  _bulkPricePreviewTargets = bulkPriceTargetItems();
+  if(!_bulkPricePreviewTargets.length){ alert('Nenhum item nessa seleção.'); return; }
+  document.getElementById('bp-preview').innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <tr style="color:var(--muted);text-align:left;"><th>Item</th><th style="text-align:right;">Atual</th><th style="text-align:right;">Novo</th></tr>
+      ${_bulkPricePreviewTargets.map(({it})=>{
+        const novo = bulkPriceNewValue(it.price);
+        return `<tr><td style="padding:3px 0;">${esc(it.name)}</td><td style="text-align:right;color:var(--muted);">R$ ${it.price.toFixed(2).replace('.',',')}</td><td style="text-align:right;font-weight:700;color:var(--gold,#c9a84c);">R$ ${novo.toFixed(2).replace('.',',')}</td></tr>`;
+      }).join('')}
+    </table>`;
+  document.getElementById('bp-confirm-btn').disabled=false;
+}
+async function confirmBulkPrice(){
+  if(!_bulkPricePreviewTargets.length) return;
+  if(!confirm(`Aplicar o novo preço em ${_bulkPricePreviewTargets.length} item(ns)? Essa ação não tem "desfazer" automático.`)) return;
+  _bulkPricePreviewTargets.forEach(({si,ii})=>{
+    menu[si].items[ii].price = bulkPriceNewValue(menu[si].items[ii].price);
+  });
+  const res = await apiPost('/api/config', { cfg, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar os novos preços.'); return; }
+  closeModal('bulk-price-modal');
+  renderMenuEditor();
+  showToast('💰 Preços atualizados', `${_bulkPricePreviewTargets.length} item(ns) ajustado(s).`);
+  _bulkPricePreviewTargets = [];
 }
 
 // ── Categorias ──
