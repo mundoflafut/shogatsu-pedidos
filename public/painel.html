@@ -229,7 +229,8 @@ table{max-width:100%;}
    unificado, exatamente como "abrir opções" de UMA ferramenta de impressão. */
 .oa-print-group{display:flex;flex:1;min-width:100px;}
 .oa-print-group .oa-btn.print{flex:1;border-radius:6px 0 0 6px;border-right:none;}
-.oa-print-group .oa-btn.print-more{flex:0 0 auto;min-width:0;border-radius:0 6px 6px 0;padding:10px 9px;border-left:1px solid var(--blue-dk,var(--blue));}
+.oa-print-group .oa-btn.print-more{flex:0 0 auto;min-width:0;border-radius:0 6px 6px 0;padding:10px 9px;border-left:1px solid var(--blue-dk,var(--blue));background:var(--blue-bg);color:var(--blue);border-top:1px solid var(--blue);border-bottom:1px solid var(--blue);border-right:1px solid var(--blue);}
+.oa-print-group .oa-btn.print-more:hover{background:var(--blue);color:#fff;}
 .oa-btn.whatsapp{background:rgba(37,211,102,.14);color:#25d366;border:1px solid #25d366;}
 .oa-btn.whatsapp:hover{background:#25d366;color:#fff;}
 .oa-btn.paid{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold);}
@@ -364,12 +365,18 @@ table{max-width:100%;}
 .mi-card-footer{display:flex;flex-direction:column;gap:8px;margin-top:auto;padding-top:6px;}
 .mi-card-actions{display:flex;gap:5px;flex-wrap:wrap;}
 .mi-card-actions button{border:none;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.mi-card-actions button:active{transform:scale(.9);}
 .mi-card-actions .ca-avail{background:rgba(80,200,120,.14);color:#50c878;margin-left:auto;}
+.mi-card-actions .ca-avail:hover{transform:scale(1.08);filter:brightness(1.15);}
 .mi-card-actions .ca-avail.off{background:var(--red-bg);color:var(--red-lt);}
 .mi-card-actions .ca-edit{background:var(--blue-bg);color:var(--blue);}
 .mi-card-actions .ca-edit:hover{background:var(--blue);color:#fff;transform:scale(1.08);}
 .mi-card-actions .ca-del{background:var(--red-bg);color:var(--red-lt);}
 .mi-card-actions .ca-del:hover{background:var(--red);color:#fff;transform:scale(1.08);}
+/* v88: botões ▲▼ de reordenar item — mesmo tratamento de toque/hover dos outros */
+.mi-card-actions .ca-move{background:var(--border2);color:var(--muted);}
+.mi-card-actions .ca-move:hover:not(:disabled){background:var(--gold-bg);color:var(--gold);transform:scale(1.08);}
+.mi-card-actions .ca-move:disabled{opacity:.35;cursor:default;}
 @media (max-width:640px){
   .mi-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
   .mi-card-name{font-size:13px;}
@@ -5273,7 +5280,9 @@ function openBrowserTicket(order, station, deliveryWindow, existingWin){
     <div class="t-hr"></div>
     <div class="t-block-title">HORÁRIOS</div>
     <div class="t-item"><span>Entrada:</span><span>${time}</span></div>
+    <div class="t-item"><span>Tempo de preparo:</span><span>${(cfg.stations&&cfg.stations[station]&&cfg.stations[station].prepTime)||15} min</span></div>
     <div class="t-item"><span>Saída prevista:</span><span>${calcPrevisaoSaida(order.createdAt, (cfg.stations&&cfg.stations[station]&&cfg.stations[station].prepTime)||15)}</span></div>
+    <div class="t-item"><span>${order.mode==='delivery'?'Prev. entrega:':'Prev. retirada:'}</span><span>${deliveryWindow||'—'}</span></div>
     `}
     <div class="t-hr"></div>
     ${bodyHTML}
@@ -5576,8 +5585,10 @@ function miniOrderCard(o){
     <div class="order-actions">
       <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">✓ ${actionLabel(st)||'Avançar'}</button>
       <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>
-      <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
-      <button class="oa-btn print" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir" style="flex:0 0 auto;padding-left:8px;padding-right:8px;">🖨▾</button>
+      <div class="oa-print-group">
+        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir todas as vias configuradas">🖨 Imprimir</button>
+        <button class="oa-btn print-more" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir">▾</button>
+      </div>
       ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
       ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
     </div>
@@ -5659,8 +5670,10 @@ function renderOrdersList(){
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
         <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
-        <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
-        <button class="oa-btn print" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir" style="flex:0 0 auto;padding-left:8px;padding-right:8px;">🖨▾</button>
+        <div class="oa-print-group">
+          <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
+          <button class="oa-btn print-more" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir">▾</button>
+        </div>
         ${o.phone?`<button class="oa-btn whatsapp" onclick="notifyWhatsApp('${o.id}')" title="Avisar cliente pelo WhatsApp">💬 WhatsApp</button>`:''}
         ${o.payMethod==='pix' && !o.paid?`<button class="oa-btn paid" onclick="markPaid('${o.id}')" title="Confirmar recebimento do PIX">✅ Marcar pago</button>`:''}
         ${hasRole('master')?`<button class="oa-btn cancel" onclick="deleteOrderFromSystem('${o.id}')" title="Excluir definitivamente do sistema (senha MASTER)">🗑️ Excluir do Sistema</button>`:''}
