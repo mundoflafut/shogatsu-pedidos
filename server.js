@@ -3014,7 +3014,14 @@ function estimateDeliveryWindow(order, cfg) {
         lines.push(ESC.boldOn + 'HORARIOS' + ESC.boldOff);
         lines.push(HR);
         lines.push(rightAlignRow('Entrada:', entrada));
+        lines.push(rightAlignRow('Tempo de preparo:', prepMin + ' min'));
         lines.push(rightAlignRow('Saida Prevista:', saidaPrevista));
+        // v88 — CORRIGIDO: as vias de produção (Cozinha/Sushibar/Bar/etc) só mostravam o
+        // horário de saída da PRÓPRIA via, mas não a previsão de entrega/retirada do pedido
+        // inteiro (isso só saía na via do Caixa) — quem tá preparando o prato não tinha como
+        // saber se o pedido é pra já ou se tem uma previsão de entrega mais folgada. Agora
+        // mostra as duas linhas, igual já aparece na página de Pedidos do painel.
+        lines.push(rightAlignRow(order.mode === 'delivery' ? 'Prev. entrega:' : 'Prev. retirada:', deliveryWindow));
         lines.push(HR);
         lines.push(ESC.boldOn + ('ITENS DA ' + (((cfg.stations[st] && cfg.stations[st].label) || st).toUpperCase())) + ESC.boldOff);
         lines.push(HR);
