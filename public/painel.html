@@ -1588,6 +1588,16 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div id="print-agent-status-box" style="margin-top:10px;font-size:11px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
             Verificando Agente Local de Impressão...
           </div>
+          <div style="margin-top:10px;font-size:11px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
+            <div id="print-station-indicator" style="font-weight:600;">⏳ Verificando estação de impressão...</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">
+              🖥️ Estação deste computador: <code id="print-station-id-display" style="user-select:all;"></code>
+              <button type="button" class="btn secondary sm" style="margin-left:6px;padding:1px 8px;" onclick="navigator.clipboard.writeText(PRINT_STATION_ID).then(()=>showToast('📋 Copiado','Código da estação copiado.',2000)).catch(()=>{})">Copiar</button>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">
+              Só o computador com o Painel aberto e conectado pode imprimir de verdade (Agente Local ou modo Navegador). Se abrir o Painel em outro computador, ele assume a impressão automaticamente. Pra travar um Agente Local específico nesta estação, copie este código e cole em "stationId" no config.json dele.
+            </div>
+          </div>
           <div class="field" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="cfg-print-terminal" style="width:16px;height:16px;" onchange="localStorage.setItem('shogatsu_print_terminal', this.checked?'1':'0'); updatePrintTerminalHeartbeat();"/>
             <label for="cfg-print-terminal" style="font-size:11px;margin:0;">🖥️ Este computador é o Terminal de Impressão (imprime sozinho as vias em modo "Navegador" pedidas de OUTRO aparelho, como o celular)</label>
@@ -2771,6 +2781,81 @@ function updatePrintTerminalHeartbeat(){
     printTerminalHeartbeatInterval = null;
   }
 }
+
+// v90: Estação Ativa de Impressão — identificador ÚNICO E PERSISTENTE deste navegador/
+// computador (gerado uma vez e guardado no localStorage; sobrevive a recarregar a página,
+// diferente do DEVICE_SESSION_ID acima, que é novo a cada abertura). Enquanto o Painel estiver
+// aberto e logado NESTE computador, ele manda "sinal de vida" pro servidor (independente de
+// estar marcado como Terminal de Impressão ou não) — isso é o que autoriza (ou não) o Agente
+// Local (print-agent.js) desse MESMO computador a imprimir de verdade, e também decide qual
+// Terminal de fato executa a impressão em modo Navegador quando há mais de um marcado. Ver
+// isStationAuthorized()/claimActiveStation() no server.js.
+function getOrCreateStationId(){
+  let id = localStorage.getItem('shogatsu_station_id');
+  if(!id){
+    id = 'st' + Date.now().toString(36) + Math.random().toString(36).slice(2,10);
+    localStorage.setItem('shogatsu_station_id', id);
+  }
+  return id;
+}
+const PRINT_STATION_ID = getOrCreateStationId();
+try{ const stEl = document.getElementById('print-station-id-display'); if(stEl) stEl.textContent = PRINT_STATION_ID; }catch(e){}
+// Rótulo só pra identificação humana no indicador/log — não precisa ser único, é só exibição.
+function printStationLabel(){
+  const who = userName || 'Painel';
+  const ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  return who + (ua ? (' · ' + ua) : '');
+}
+// Último status conhecido da Estação Ativa (atualizado pelo register/heartbeat abaixo e pelo
+// evento SSE 'active-station-changed') — usado só pra desenhar o indicador 🟢/🔴 e decidir, no
+// modo Navegador, se ESTE terminal deve mesmo executar a impressão (ver 'print-order-remote').
+let activeStationInfo = { active: null, label: null };
+function updatePrintStationIndicator(){
+  const el = document.getElementById('print-station-indicator');
+  if(!el) return;
+  if(activeStationInfo.active === true){
+    el.textContent = '🟢 Impressão ativa neste computador';
+    el.style.color = '#2ecc71';
+  } else if(activeStationInfo.active === false){
+    el.textContent = '🔴 Impressão ativa em outro computador' + (activeStationInfo.label ? (' (' + activeStationInfo.label + ')') : '');
+    el.style.color = '#e0555a';
+  } else {
+    el.textContent = '⏳ Verificando estação de impressão...';
+    el.style.color = '#999';
+  }
+}
+// Reivindica a Estação Ativa pra ESTE computador imediatamente ao abrir o Painel (chamado uma
+// vez em boot()) — "o mais recente a abrir o painel assume automaticamente" (regra pedida).
+function registerPrintStation(){
+  if(!token) return;
+  apiPost('/api/print-station/register', { stationId: PRINT_STATION_ID, label: printStationLabel() }).then(r=>{
+    if(r.ok){ activeStationInfo = { active: true, label: r.data.activeLabel }; updatePrintStationIndicator(); }
+  }).catch(()=>{});
+}
+// v90: o servidor recusou imprimir porque este computador não é a Estação Ativa agora (ver
+// unauthorized na resposta de POST /api/print) — avisa o usuário, mas só uma vez por minuto,
+// pra não empilhar um toast pra CADA via/pedido enquanto isso durar.
+let lastStationUnauthorizedWarnAt = 0;
+function warnStationUnauthorizedOnce(activeLabel){
+  const now = Date.now();
+  if(now - lastStationUnauthorizedWarnAt < 60000) return;
+  lastStationUnauthorizedWarnAt = now;
+  showToast('🔴 Impressão em outro computador', `Este computador não é a estação de impressão ativa agora${activeLabel ? (' — ativa em: ' + activeLabel) : ''}. Abra o Painel no computador da impressora, ou aguarde ele assumir de novo.`, 6000);
+}
+let printStationHeartbeatInterval = null;
+// Sinal de vida periódico — se este computador perder a Estação Ativa (outro Painel abriu
+// depois), continua avisando "estou vivo" mesmo assim; se a estação ativa cair sem avisar
+// (painel fechado, sem heartbeat por tempo suficiente), este computador assume sozinho no
+// próximo heartbeat, sem precisar recarregar nada (failover automático).
+function startPrintStationHeartbeat(){
+  if(printStationHeartbeatInterval || !token) return;
+  const ping = ()=>{
+    apiPost('/api/print-station/heartbeat', { stationId: PRINT_STATION_ID, label: printStationLabel() }).then(r=>{
+      if(r.ok){ activeStationInfo = { active: r.data.active, label: r.data.activeLabel }; updatePrintStationIndicator(); }
+    }).catch(()=>{});
+  };
+  printStationHeartbeatInterval = setInterval(ping, 15000);
+}
 let orders = [];
 let activeCatIdx = 0;
 let orderFilter = 'todos';
@@ -2888,6 +2973,9 @@ async function boot(){
   goPage('pedidos');
   connectSSE();
   updatePrintTerminalHeartbeat();
+  registerPrintStation();
+  startPrintStationHeartbeat();
+  updatePrintStationIndicator();
   loadReservations();
   setInterval(loadReservations, 30000);
   setupCardControls();
@@ -3419,9 +3507,21 @@ function connectSSE(){
     const r = JSON.parse(e.data);
     if(r.originId && r.originId===DEVICE_SESSION_ID) return; // este aparelho já imprimiu pelo fluxo normal
     if(localStorage.getItem('shogatsu_print_terminal')!=='1') return; // este aparelho não é o terminal de impressão
+    // v90: além de estar marcado como Terminal, só imprime se ESTE computador for a Estação
+    // Ativa agora — evita 2 computadores marcados como Terminal imprimindo o mesmo pedido ao
+    // mesmo tempo. Enquanto não se sabe ainda (activeStationInfo.active===null, logo após
+    // abrir o Painel), deixa passar pra não perder a primeira impressão à toa.
+    if(activeStationInfo.active === false) return;
     let win = window.open('', '_blank', 'width=380,height=600');
     if(win) win.document.write('<body style="font-family:sans-serif;padding:24px;color:#666;">Carregando pedido...</body>');
     openBrowserTicket(r.order, r.station, r.deliveryWindow, win).catch(()=>{});
+  });
+  // v90: outro Painel abriu (ou assumiu por failover) a Estação Ativa de Impressão — atualiza
+  // o indicador 🟢/🔴 aqui na hora, em vez de esperar o próximo heartbeat (até 15s depois).
+  evtSource.addEventListener('active-station-changed', e=>{
+    const r = JSON.parse(e.data);
+    activeStationInfo = { active: r.activeStationId === PRINT_STATION_ID, label: r.activeLabel };
+    updatePrintStationIndicator();
   });
 }
 
@@ -5010,20 +5110,22 @@ async function printOrder(id, ev, stations, isAuto){
   try{
     if(directStations.length){
       const results = await Promise.all(directStations.map(st =>
-        apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID }).then(res => ({ st, res }))
+        apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID, stationId: PRINT_STATION_ID }).then(res => ({ st, res }))
       ));
       for(const { st, res } of results){
         if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
         const d = res.data;
+        if(d.unauthorized){ warnStationUnauthorizedOnce(d.activeLabel); continue; } // v90: este computador não é a estação ativa agora
         if(d.skipped) continue;
         if(d.printed) printedAny=true;
         if(d.usedCaixaFallback) fellBackAny=true;
       }
     }
     for(const st of otherStations){
-      const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID });
+      const res = await apiPost('/api/print', { orderId:id, station: st, auto: !!isAuto, originId: DEVICE_SESSION_ID, stationId: PRINT_STATION_ID });
       if(!res.ok){ showToast('⚠️ Falha ao imprimir', res.data.error||`Via "${st}" não pôde ser impressa.`, 5000); continue; }
       const d = res.data;
+      if(d.unauthorized){ warnStationUnauthorizedOnce(d.activeLabel); continue; } // v90: este computador não é a estação ativa agora
       if(d.skipped) continue; // essa via não tem itens desse pedido (ou está desativada) — pula sem incomodar
       if(d.method==='navegador'){
         if(!win){ blockedAny=true; continue; } // pop-up bloqueado logo de cara — avisa o usuário, mas não trava o resto
