@@ -166,6 +166,34 @@ function buildPrinter(printerCfg) {
 }
 
 const money = (n) => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+
+// v91: tamanho da escrita configurado em Configurações → 🖨 Central de Impressão
+// (cfg.printSize) — antes só afetava a pré-visualização no navegador (modo "Navegador") e o
+// modo rede/usb feito direto pelo servidor; o Agente Local (usado por essa loja no modo
+// "Automática") ignorava completamente esse campo e imprimia sempre do mesmo jeito. Agora
+// busca esse valor (GET /api/config é público, não precisa de login) e aplica de verdade nas
+// impressoras físicas.
+let printSize = 20; // valor padrão, igual ao cfg.printSize padrão do server.js
+async function refreshPrintSize() {
+  try {
+    const r = await request('GET', `${cfg.serverUrl}/api/config`);
+    if (r.status === 200 && r.data && r.data.cfg && r.data.cfg.printSize) printSize = Number(r.data.cfg.printSize) || printSize;
+  } catch (e) { /* mantém o último valor conhecido — não trava a impressão por causa disso */ }
+}
+let printSizeTimer = null;
+function startPrintSizePolling() {
+  refreshPrintSize();
+  clearInterval(printSizeTimer);
+  printSizeTimer = setInterval(refreshPrintSize, 30000);
+}
+// Impressora térmica não tem "fonte"/px de verdade — só multiplicadores de tamanho do próprio
+// hardware (comando ESC/POS GS ! : nível 0 = normal até 7 = 8x maior). O campo do painel é em
+// px (10–28), então convertemos numa escala de 0 a 3 — dá pra sentir a diferença no papel sem
+// exagerar a ponto de estourar a largura da impressora.
+function ticketTextSizeLevel(ps) {
+  const n = Math.max(10, Math.min(28, Number(ps) || 20));
+  return Math.max(0, Math.min(3, Math.round((n - 10) / 6)));
+}
 // v84 — mesma correção do server.js/painel.html ("pagamento deve aparecer como pagamento na
 // entrega"): PIX é pago antes, mas dinheiro/crédito/débito num pedido delivery são cobrados
 // só na entrega — a via do caixa impressa aqui (agente local) precisa deixar isso claro pro
@@ -184,15 +212,20 @@ const STATION_LABELS = { caixa: 'Caixa', cozinha: 'Cozinha', sushibar: 'Sushibar
 // v46: layout igual ao das outras vias do sistema (painel.html/server.js) — cabeçalho
 // centralizado, blocos com título, "TOTAL" em destaque na via do caixa, e "ITENS
 // DA <SETOR>" + espaço de observações nas vias de produção (cozinha/sushibar/bar).
-function printStationTicket(printer, order, station, storeName) {
+function printStationTicket(printer, order, station, storeName, sizeLevel) {
   const isCaixa = station === 'caixa';
   const items = isCaixa ? (order.items || []) : (order.items || []).filter(i => (i.stations || []).includes(station));
   if (!items.length) return false; // essa via não tem nada desse pedido — não desperdiça papel
+  const lvl = Number.isInteger(sizeLevel) ? sizeLevel : ticketTextSizeLevel(printSize);
+  // v91: volta pro tamanho CONFIGURADO (não fixo em "normal") depois de qualquer trecho em
+  // destaque (título/total) — é isso que faz o campo "Tamanho (px)" de Central de Impressão
+  // realmente mudar o tamanho da letra na impressora física, não só na pré-visualização.
+  const backToConfiguredSize = () => printer.setTextSize(lvl, lvl);
 
   printer.alignCenter();
   printer.bold(true); printer.setTextDoubleHeight();
   printer.println((storeName || 'SHOGATSU').toUpperCase());
-  printer.setTextNormal(); printer.bold(false);
+  backToConfiguredSize(); printer.bold(false);
   printer.println('CULINARIA ORIENTAL');
   printer.drawLine();
 
@@ -218,7 +251,7 @@ function printStationTicket(printer, order, station, storeName) {
     printer.println(`Pagamento: ${payMethodTicketLabel(order)}${order.paid ? ' (PAGO)' : ''}`);
     printer.setTextDoubleHeight(); printer.bold(true);
     printer.leftRight('TOTAL', money(order.total));
-    printer.bold(false); printer.setTextNormal();
+    printer.bold(false); backToConfiguredSize();
   } else {
     printer.println((STATION_LABELS[station] || station).toUpperCase());
     printer.println('VIA DE PRODUCAO');
@@ -235,6 +268,7 @@ function printStationTicket(printer, order, station, storeName) {
     else { printer.println('_______________________________'); printer.println('_______________________________'); }
   }
   printer.newLine();
+  printer.setTextNormal(); // deixa a impressora "limpa" pro próximo trabalho, seja lá qual for
   printer.cut();
   return true;
 }
@@ -271,7 +305,7 @@ async function printSingleStation(order, station) {
       const connected = await printer.isPrinterConnected();
       if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
     }
-    const hadItems = printStationTicket(printer, order, station, cfg.storeName);
+    const hadItems = printStationTicket(printer, order, station, cfg.storeName, ticketTextSizeLevel(printSize));
     if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return { ok:true, skipped:true }; }
     if (isWinPrinter) {
       // v83.2: pega os bytes ESC/POS prontos e manda pra fila de impressão do Windows,
@@ -364,11 +398,11 @@ async function printTestTicket(payload) {
     }
     printer.alignCenter(); printer.bold(true);
     printer.println('TESTE DE IMPRESSAO');
-    printer.bold(false);
+    printer.bold(false); printer.setTextSize(ticketTextSizeLevel(printSize), ticketTextSizeLevel(printSize));
     printer.println('Via: ' + (payload.label || payload.station));
     printer.println('Impressora: ' + printerCfg.label);
     printer.println(new Date().toLocaleString('pt-BR'));
-    printer.newLine(); printer.cut();
+    printer.newLine(); printer.setTextNormal(); printer.cut();
     if (isWinPrinter) {
       sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), printer.getBuffer());
     } else {
@@ -542,6 +576,7 @@ async function start() {
   try {
     await login();
     connectStream();
+    startPrintSizePolling();
   } catch (e) {
     log(`❌ ${e.message}`);
     scheduleReconnect();
