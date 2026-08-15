@@ -3,16 +3,26 @@
     "username": "caixa",
     "password": "1234",
     "storeName": "Shogatsu Culinária Oriental",
+    "stationId": "",
     "printers": [
         {
-            "label": "Impressora Única (USB)",
+            "label": "Caixa + Sushibar (USB)",
             "type": "epson",
-            "interface": "printer:MP-4200 TH",
+            "interface": "printer:MP-4000 TH",
             "width": 42,
             "stations": [
                 "caixa",
-                "cozinha",
                 "sushibar"
+            ]
+        },
+        {
+            "label": "Cozinha (Rede)",
+            "nomeWindows": "COZINHA",
+            "type": "epson",
+            "interface": "tcp://192.168.1.21:9100",
+            "width": 48,
+            "stations": [
+                "cozinha"
             ]
         }
     ]

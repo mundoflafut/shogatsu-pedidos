@@ -5,6 +5,9 @@
 
   "storeName": "Shogatsu Culinária Oriental",
 
+  "_stationId_comentario": "OPCIONAL (v90) — só preencha se este computador for ter um Painel próprio aberto nele e você quiser ativar a trava de 'Estação Ativa de Impressão' (evita 2 computadores imprimindo o mesmo pedido). Copie o código mostrado no Painel deste MESMO computador em Configurações → Central de Impressão → '🖥️ Estação deste computador'. Deixe em branco/remova pra manter o comportamento de sempre (sem trava).",
+  "stationId": "",
+
   "printers": [
     {
       "label": "Caixa (USB)",

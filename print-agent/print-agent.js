@@ -90,6 +90,18 @@ const PRINTERS = loadPrinters();
 // lado do servidor.
 const AGENT_ID = crypto.randomBytes(6).toString('hex');
 
+// v90: "stationId" opcional no config.json — identifica A QUAL computador/estação este Agente
+// pertence, pra ser cruzado com o stationId do Painel (localStorage, gerado no navegador —
+// ver getOrCreateStationId() em painel.html) daquele MESMO computador. Quando configurado, o
+// Agente só imprime enquanto o servidor confirmar que esse é o stationId da ESTAÇÃO ATIVA
+// agora (ver isAuthorizedToPrint() abaixo) — evita 2 computadores (ex.: PC principal + PC
+// reserva, cada um com seu próprio Painel+Agente) imprimindo o mesmo pedido ao mesmo tempo.
+// Pra configurar: abra o Painel neste MESMO computador → Configurações → Central de Impressão
+// → copie o código mostrado em "🖥️ Estação deste computador" e cole aqui em "stationId".
+// Se deixar em branco (padrão), o Agente imprime exatamente como sempre imprimiu — sem
+// nenhuma trava nova — pra não quebrar quem já está usando o sistema hoje com um Agente só.
+const STATION_ID = cfg.stationId ? String(cfg.stationId).trim() || null : null;
+
 function printerForStation(station) {
   return PRINTERS.find(p => p.stations.includes(station)) || null;
 }
@@ -294,6 +306,14 @@ async function printOrder(order) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
     return true;
   }
+  // v90: só imprime automaticamente se este computador for a Estação Ativa de Impressão
+  // agora (quando "stationId" está configurado — ver isAuthorizedToPrint() acima). Evita
+  // duplicar comanda quando existe mais de um Agente instalado (ex.: PC principal + PC
+  // reserva) rodando ao mesmo tempo.
+  if (!isAuthorizedToPrint()) {
+    log(`⛔ Impressão automática do pedido ${order.id} BLOQUEADA — este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora (o Painel está aberto/conectado em outro computador).`);
+    return false;
+  }
   let anyPrinted = false;
   for (const station of MY_STATIONS) {
     const r = await printSingleStation(order, station);
@@ -313,6 +333,14 @@ async function printOrder(order) {
 // (ou o erro) volta pra tela de quem clicou, em tempo real.
 async function printOnDemand(order, station) {
   if (!MY_STATIONS.includes(station)) return;
+  // v90: mesma trava da impressão automática (ver printOrder acima) — um clique manual de
+  // "Imprimir"/"Reimprimir" partido de qualquer aparelho só é executado por este Agente se
+  // este computador for a Estação Ativa agora.
+  if (!isAuthorizedToPrint()) {
+    log(`⛔ Impressão sob demanda da via "${station}" BLOQUEADA — este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora.`);
+    await reportPrintResult(order, station, false, 'Estação não autorizada a imprimir agora (o Painel ativo está em outro computador).');
+    return;
+  }
   log(`🖨️  Impressão sob demanda pedida pra via "${station}" — pedido ${order.id} (${order.name || 'sem nome'}).`);
   const r = await printSingleStation(order, station);
   await reportPrintResult(order, station, r.ok, r.error);
@@ -386,6 +414,7 @@ async function login() {
   token = r.data.token;
   log(`🔑 Login OK (${cfg.username}).`);
   announcePresence();
+  startStationStatusPolling();
 }
 
 // v82: avisa o servidor "estou vivo" logo após logar, e de novo a cada ~45s enquanto o agente
@@ -402,6 +431,45 @@ async function announcePresence() {
   } catch (e) { /* se falhar, o painel simplesmente mostra "offline" até o próximo aviso — não trava nada aqui */ }
   clearTimeout(announceTimer);
   announceTimer = setTimeout(announcePresence, 45000);
+}
+
+// v90: Estação Ativa de Impressão — só consultada quando "stationId" está configurado no
+// config.json (ver STATION_ID acima). Guarda o ÚLTIMO status conhecido do servidor (quem é a
+// estação ativa agora) num cache local, atualizado a cada STATION_STATUS_POLL_MS — assim a
+// checagem em isAuthorizedToPrint() (chamada em CADA impressão) é instantânea, sem esperar
+// nenhuma requisição de rede na hora de imprimir.
+let stationStatus = null; // { active, activeStationId, activeLabel, checkedAt }
+let stationStatusTimer = null;
+const STATION_STATUS_POLL_MS = 8000;
+async function refreshStationStatus() {
+  if (!STATION_ID || !token) return;
+  try {
+    const r = await request('GET', `${cfg.serverUrl}/api/print-station/status?token=${encodeURIComponent(token)}`);
+    if (r.status === 200 && r.data) stationStatus = { ...r.data, checkedAt: Date.now() };
+  } catch (e) { /* mantém o último status conhecido; se ficar velho demais, isAuthorizedToPrint() já bloqueia por segurança */ }
+}
+function startStationStatusPolling() {
+  if (!STATION_ID) return; // sem stationId configurado = modo compatível/legado, nunca consulta
+  refreshStationStatus();
+  clearInterval(stationStatusTimer);
+  stationStatusTimer = setInterval(refreshStationStatus, STATION_STATUS_POLL_MS);
+}
+
+// v90: decide se ESTE Agente está autorizado a imprimir AGORA.
+//   • Sem "stationId" no config.json (padrão) → sempre autorizado, exatamente como sempre
+//     funcionou (modo compatível/legado — não quebra ninguém que já usa o sistema hoje).
+//   • Com "stationId" configurado → só autorizado se o servidor confirmou, recentemente, que
+//     esse é o stationId da estação ATIVA agora (Painel aberto/conectado NESTE computador).
+//     Se o último status conhecido estiver velho demais (internet caiu, servidor fora do ar),
+//     prefere BLOQUEAR a arriscar imprimir em duplicidade — a impressão automática desse
+//     pedido específico fica pendente até a conexão voltar (o pedido continua salvo
+//     normalmente, só a via automática desse Agente é que não sai até confirmar de novo).
+function isAuthorizedToPrint() {
+  if (!STATION_ID) return true;
+  if (!stationStatus) return false;
+  const age = Date.now() - stationStatus.checkedAt;
+  if (age > STATION_STATUS_POLL_MS * 3) return false;
+  return !!stationStatus.active && stationStatus.activeStationId === STATION_ID;
 }
 
 function connectStream() {

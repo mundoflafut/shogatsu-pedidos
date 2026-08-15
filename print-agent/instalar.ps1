@@ -5,8 +5,15 @@
 # ============================================================
 
 $ErrorActionPreference = 'Stop'
+# v89 — BUG CRÍTICO CORRIGIDO ("Não encontrei a pasta 'print-agent' do lado deste instalador"):
+# esse instalador SEMPRE viveu DENTRO da própria pasta print-agent (junto de print-agent.js,
+# config.json etc.) — nunca ao lado dela. Antes, $agentDir procurava por uma sub-pasta
+# "print-agent" DENTRO da pasta onde o instalador está (ou seja, print-agent\print-agent\, que
+# nunca existiu) — o instalador nunca funcionou, em nenhuma versão anterior, pra ninguém que
+# tenha rodado ele exatamente como as instruções sempre disseram (extrair o zip e rodar
+# INSTALAR.bat de dentro de print-agent/). Peço desculpa — isso deveria ter sido pego antes.
 $here        = $PSScriptRoot
-$agentDir    = Join-Path $here 'print-agent'
+$agentDir    = $here
 $configPath  = Join-Path $agentDir 'config.json'
 $examplePath = Join-Path $agentDir 'config.example.json'
 $taskName    = 'ShogatsuPrintAgent'
@@ -32,8 +39,9 @@ Write-Host 'Isso vai deixar a impressao automatica funcionando de verdade'
 Write-Host 'neste computador (sem extensao, sem pop-up bloqueado).'
 Write-Host ''
 
-if (-not (Test-Path $agentDir)) {
-    Pausar-E-Sair "Nao encontrei a pasta 'print-agent' do lado deste instalador. Extraia o ZIP inteiro antes de rodar."
+$printAgentJsPath = Join-Path $agentDir 'print-agent.js'
+if (-not (Test-Path $printAgentJsPath)) {
+    Pausar-E-Sair "Nao encontrei o arquivo 'print-agent.js' do lado deste instalador ($agentDir). Extraia o ZIP inteiro (pasta print-agent completa) antes de rodar, e rode o INSTALAR.bat de dentro dela."
 }
 
 # ------------------------------------------------------------
@@ -164,7 +172,23 @@ try {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 } catch {}
 
-$action  = New-ScheduledTaskAction -Execute $nodeExe -Argument '"print-agent.js"' -WorkingDirectory $agentDir
+# v86 — CORRIGIDO: antes, a tarefa agendada chamava node.exe diretamente. O node.exe É um
+# programa de console — mesmo numa tarefa "Hidden" (essa opção só esconde a tarefa da LISTA do
+# Agendador de Tarefas, não a janela!), o Windows ainda abre uma janela preta de terminal com o
+# agente rodando. Qualquer pessoa da loja podia fechar essa janela sem saber o que era ("parece
+# um erro"), o que MATA o processo inteiro — parando a impressão automática de TODAS as vias de
+# uma vez (Sushibar, Delivery, Expedição, todas), não só uma. Agora a tarefa chama um pequeno
+# lançador VBScript (run-hidden.vbs, gerado aqui do lado do print-agent.js) que inicia o node.exe
+# com a janela criada já oculta (WshShell.Run com estilo 0) — o processo continua rodando
+# normalmente em segundo plano, só não aparece mais nenhuma janela pra ninguém fechar por engano.
+$hiddenLauncherPath = Join-Path $agentDir 'run-hidden.vbs'
+$vbsContent = "Set WshShell = CreateObject(`"WScript.Shell`")`r`n" +
+    "WshShell.CurrentDirectory = `"$agentDir`"`r`n" +
+    "WshShell.Run `"`"`"$nodeExe`"`" `"`"print-agent.js`"`"`", 0, False`r`n"
+Set-Content -Path $hiddenLauncherPath -Value $vbsContent -Encoding Unicode
+
+$wscriptExe = Join-Path $env:WINDIR 'System32\wscript.exe'
+$action  = New-ScheduledTaskAction -Execute $wscriptExe -Argument ('"' + $hiddenLauncherPath + '"') -WorkingDirectory $agentDir
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
@@ -174,7 +198,7 @@ $settings = New-ScheduledTaskSettingsSet `
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
     -Description 'Agente local de impressao automatica do Shogatsu' | Out-Null
 
-Write-Host 'Tarefa agendada criada - o agente liga sozinho toda vez que o Windows abrir.' -ForegroundColor Green
+Write-Host 'Tarefa agendada criada - o agente liga sozinho toda vez que o Windows abrir, sem nenhuma janela visivel.' -ForegroundColor Green
 
 # ------------------------------------------------------------
 Show-Titulo '5/5 - Ligando o agente agora'
@@ -196,7 +220,10 @@ Show-Titulo 'Pronto!'
 Write-Host 'Agora abra o painel Shogatsu no navegador, va em'
 Write-Host '  Configuracoes -> card "Impressao Automatica"'
 Write-Host 'e confira se a caixinha de status mostra um V verde (Agente Local conectado)'
-Write-Host 'com Caixa, Cozinha e Sushibar cobertos.'
+Write-Host 'cobrindo todas as vias que voce configurou nesse computador.'
+Write-Host ''
+Write-Host 'Nao vai aparecer nenhuma janela preta quando o Windows ligar de agora em diante -' -ForegroundColor Green
+Write-Host 'o agente roda escondido, entao ninguem consegue fechar ele sem querer.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'Dica: agora que o Agente Local esta ativo, pode desligar/remover a'
 Write-Host 'extensao "Shogatsu - Impressao Automatica" do Chrome - ela nao e mais necessaria.'
