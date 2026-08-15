@@ -1557,6 +1557,50 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
+  // v91 — BUG CORRIGIDO ("caixa e outros logins não conseguem abrir/fechar e ligar aceite
+  // automático"): abrir/fechar o restaurante e ligar/desligar o Aceite Automático (pedidos e
+  // reservas) são tarefas do dia a dia de QUALQUER pessoa operando o caixa — mas esses 3
+  // interruptores (rodapé do menu lateral) chamavam POST /api/config, que exige nível 'admin'.
+  // Um login "caixa" (nível 'vendas', o mais comum pra operação do dia a dia) tomava 403 e
+  // nada acontecia (parecia travado/quebrado). Em vez de abrir todo o /api/config pra 'vendas'
+  // (isso liberaria mexer em cardápio/preços/senhas também, o que NÃO foi pedido), criamos 3
+  // rotas enxutas, cada uma mexendo em só 1 campo, liberadas pra qualquer login autenticado
+  // ('vendas' pra cima — inclui admin/master também).
+  if (pathname === '/api/store/toggle' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const { open } = await readBody(req);
+      const data = readConfig();
+      data.cfg.open = open ? 1 : 0;
+      writeJSON(CONFIG_FILE, data);
+      broadcast('config-updated', {});
+      publicBroadcast('menu-updated', {});
+      return sendJSON(res, 200, { ok: true, open: data.cfg.open });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  if (pathname === '/api/auto-accept/toggle' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const { autoAcceptOrders } = await readBody(req);
+      const data = readConfig();
+      data.cfg.autoAcceptOrders = autoAcceptOrders ? 1 : 0;
+      writeJSON(CONFIG_FILE, data);
+      broadcast('config-updated', {});
+      return sendJSON(res, 200, { ok: true, autoAcceptOrders: data.cfg.autoAcceptOrders });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  if (pathname === '/api/auto-accept-reservations/toggle' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const { autoAcceptReservations } = await readBody(req);
+      const data = readConfig();
+      data.cfg.autoAcceptReservations = autoAcceptReservations ? 1 : 0;
+      writeJSON(CONFIG_FILE, data);
+      broadcast('config-updated', {});
+      return sendJSON(res, 200, { ok: true, autoAcceptReservations: data.cfg.autoAcceptReservations });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
   // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
   if (pathname === '/api/change-password' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
