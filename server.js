@@ -743,6 +743,44 @@ function getOnlinePrintTerminalsCount() {
   return printTerminals.size;
 }
 
+// v90: Estação Ativa de Impressão — só o computador com o PAINEL aberto e conectado (mandando
+// heartbeat) pode autorizar impressão. Criado pra evitar que 2 computadores imprimam o mesmo
+// pedido ao mesmo tempo quando existe mais de um Painel/Agente Local instalado (ex.: PC
+// principal + PC reserva, ambos ligados ao mesmo tempo). Guardado só em memória, mesmo espírito
+// de printAgents/printTerminals acima: cada Painel manda um stationId próprio (gerado e
+// persistido no localStorage do navegador, ver getOrCreateStationId() em painel.html) e
+// reivindica a estação ativa ao abrir (POST /api/print-station/register) — o mais recente a
+// abrir sempre assume, a estação anterior perde autorização na hora. Enquanto o Painel
+// continuar mandando heartbeat (POST /api/print-station/heartbeat a cada ~15s), continua sendo
+// o único autorizado; se parar (painel fechado, aba trocada, conexão caiu) e passar
+// ACTIVE_STATION_TIMEOUT_MS sem sinal, qualquer outro Painel aberto assume sozinho no próximo
+// heartbeat dele — sem precisar reabrir nada. O Agente Local (print-agent/print-agent.js)
+// consulta GET /api/print-station/status periodicamente pra saber se ELE está na estação ativa
+// antes de imprimir (comparando com o "stationId" opcional do próprio config.json).
+const ACTIVE_STATION_TIMEOUT_MS = 25 * 1000; // sem heartbeat por 25s = estação considerada offline
+let activeStation = null; // { stationId, label, lastSeen }
+const knownStations = new Map(); // stationId -> { label, lastSeen } — só pra diagnóstico
+function isActiveStationAlive() {
+  return !!activeStation && (Date.now() - activeStation.lastSeen) < ACTIVE_STATION_TIMEOUT_MS;
+}
+function claimActiveStation(stationId, label) {
+  activeStation = { stationId: String(stationId), label: String(label || stationId || '').slice(0, 60), lastSeen: Date.now() };
+  knownStations.set(activeStation.stationId, { label: activeStation.label, lastSeen: activeStation.lastSeen });
+  broadcast('active-station-changed', { activeStationId: activeStation.stationId, activeLabel: activeStation.label });
+  return activeStation;
+}
+// v90: usado pelo POST /api/print (impressão disparada por um Painel) pra decidir se PODE
+// imprimir. Enquanto NENHUM Painel nunca tiver mandado heartbeat (activeStation ainda null —
+// ex.: sistema recém-atualizado, ou loja com um só Painel que nunca chegou a rodar 2 ao mesmo
+// tempo), libera geral (modo compatível/legado), pra não quebrar a impressão automática de
+// quem já usava o sistema antes dessa trava existir. Um stationId vazio (Painel desatualizado,
+// que ainda não manda esse campo) também não bloqueia — mesmo motivo.
+function isStationAuthorized(stationId) {
+  if (!isActiveStationAlive()) return true;
+  if (!stationId) return true;
+  return String(stationId) === activeStation.stationId;
+}
+
 // ─── Clientes conectados via SSE no SITE DO CLIENTE (só avisa "cardápio mudou",
 // nunca manda dados de pedido/cliente — canal público, sem autenticação) ───
 const publicSseClients = new Set();
@@ -2829,11 +2867,62 @@ function estimateDeliveryWindow(order, cfg) {
     return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations, terminalsOnline: getOnlinePrintTerminalsCount() });
   }
 
+  // ── POST /api/print-station/register — o Painel avisa que abriu/está ativo AGORA e assume
+  // a Estação Ativa de Impressão imediatamente (v90). Chamado uma vez ao abrir o Painel (login
+  // ou recarregar com sessão já válida) — o mais recente a abrir sempre assume, a estação
+  // anterior perde autorização na hora (regra pedida: "outro computador que abrir o painel
+  // assume automaticamente").
+  if (pathname === '/api/print-station/register' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { stationId, label } = await readBody(req);
+      if (!stationId) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
+      claimActiveStation(stationId, label);
+      return sendJSON(res, 200, { ok: true, activeStationId: activeStation.stationId, activeLabel: activeStation.label });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── POST /api/print-station/heartbeat — sinal de vida periódico da estação (v90), chamado
+  // pelo painel.html a cada ~15s enquanto a página estiver aberta e logada. Se a estação ativa
+  // atual ficou sem heartbeat por mais de ACTIVE_STATION_TIMEOUT_MS (painel fechado, aba
+  // trocada, computador desligado), ESTE stationId assume sozinho no próximo heartbeat dele
+  // (failover automático); senão só confirma presença.
+  if (pathname === '/api/print-station/heartbeat' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { stationId, label } = await readBody(req);
+      if (!stationId) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
+      const sid = String(stationId);
+      if (activeStation && activeStation.stationId === sid) {
+        activeStation.lastSeen = Date.now();
+        knownStations.set(sid, { label: activeStation.label, lastSeen: activeStation.lastSeen });
+      } else if (!isActiveStationAlive()) {
+        claimActiveStation(sid, label); // estação ativa anterior caiu (ou nunca existiu) — assume
+      } else {
+        knownStations.set(sid, { label: String(label || sid).slice(0, 60), lastSeen: Date.now() }); // viva, mas não é a ativa agora
+      }
+      return sendJSON(res, 200, { ok: true, active: activeStation.stationId === sid, activeStationId: activeStation.stationId, activeLabel: activeStation.label });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── GET /api/print-station/status — consulta simples do estado atual da Estação Ativa de
+  // Impressão (v90). Usado pelo indicador 🟢/🔴 no Painel (Central de Impressão) e pelo Agente
+  // Local, que consulta isso periodicamente pra decidir se ele mesmo está autorizado a
+  // imprimir antes de cada tentativa (ver STATION_ID/isAuthorizedToPrint() em print-agent.js).
+  if (pathname === '/api/print-station/status' && req.method === 'GET') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    return sendJSON(res, 200, {
+      active: isActiveStationAlive(),
+      activeStationId: activeStation ? activeStation.stationId : null,
+      activeLabel: activeStation ? activeStation.label : null
+    });
+  }
+
   // ── POST /api/print — imprime a via de uma estação para um pedido ──
   if (pathname === '/api/print' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { orderId, station, auto, originId } = await readBody(req);
+      const { orderId, station, auto, originId, stationId } = await readBody(req);
       const { cfg } = readConfig();
       // v49 — BUG CORRIGIDO ("impressora não imprime" em vias novas): essa checagem só aceitava
       // as 4 vias originais — qualquer via nova (delivery, expedição, ou uma via customizada
@@ -2845,6 +2934,22 @@ function estimateDeliveryWindow(order, cfg) {
       const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === orderId);
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
+
+      // v90: só a Estação Ativa de Impressão (o Painel aberto/conectado autorizado no momento)
+      // pode disparar impressão — evita 2 computadores imprimindo o mesmo pedido ao mesmo
+      // tempo quando há mais de um Painel/Agente instalado. Se nenhuma estação nunca foi
+      // reivindicada (sistema recém-atualizado, ou loja com um Painel só), libera geral — ver
+      // isStationAuthorized() acima. Não é erro (sendJSON 200), só "não imprimiu desta vez":
+      // fica registrado no log de impressão pra dar pra conferir depois.
+      if (!isStationAuthorized(stationId)) {
+        try {
+          const log = readJSON(PRINT_LOG_FILE);
+          log.unshift({ orderId, station: st, error: `Estação "${stationId || 'desconhecida'}" não autorizada a imprimir (estação ativa agora: ${activeStation ? activeStation.label : '-'}).`, ts: new Date().toISOString() });
+          fs.writeFileSync(PRINT_LOG_FILE, JSON.stringify(log.slice(0, 500), null, 2));
+        } catch (e) { console.error('⚠️  Não consegui gravar print-log.json:', e.message); }
+        return sendJSON(res, 200, { ok: true, printed: false, skipped: true, unauthorized: true, activeStationId: activeStation ? activeStation.stationId : null, activeLabel: activeStation ? activeStation.label : null, order, station: st });
+      }
+
       const isCaixa = st === 'caixa';
 
       // v50: via desativada (Configurações → 📠 Impressoras por Estação → impressora
