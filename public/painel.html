@@ -730,6 +730,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       </div>
       <label class="toggle"><input type="checkbox" id="auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
     </div>
+    <div class="store-toggle" style="margin-top:8px;" title="Quando ligado, toda reserva de mesa nova já entra CONFIRMADA automaticamente, sem precisar clicar em &quot;Confirmar&quot; no painel.">
+      <div>
+        <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">Aceite Automático de Reserva</div>
+        <div class="store-toggle-label" id="auto-accept-rsv-status-sub">desligado</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="auto-accept-rsv-toggle" onchange="toggleAutoAcceptReservations(this)"><span class="toggle-slider"></span></label>
+    </div>
   </div>
   <div class="sidebar-resize-handle" id="sidebar-resize-handle" title="Arraste para redimensionar"></div>
 </aside>
@@ -1675,36 +1682,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
         <div class="settings-accordion-body" id="acc-body-restaurante">
           <div class="settings-grid">
-<div class="settings-card" style="grid-column:1/-1;">
-          <div class="settings-card-title">🤖 Automações</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
-            Mesmos interruptores que aparecem no rodapé do menu lateral — só que aqui, em card,
-            fica mais fácil de ver o estado certinho (ligado/desligado) e o que cada um faz.
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
-            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
-              <div>
-                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">🏪 Restaurante Aberto</div>
-                <div class="store-toggle-label" id="cfg-store-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Desligado = cardápio mostra "Fechado" e não aceita pedido novo.</div>
-              </div>
-              <label class="toggle"><input type="checkbox" id="cfg-store-toggle" onchange="toggleStore(this)"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
-              <div>
-                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📋 Aceite Automático de Pedidos</div>
-                <div class="store-toggle-label" id="cfg-auto-accept-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.</div>
-              </div>
-              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
-              <div>
-                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📅 Aceite Automático de Reservas</div>
-                <div class="store-toggle-label" id="cfg-auto-accept-rsv-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".</div>
-              </div>
-              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-rsv-toggle" onchange="toggleAutoAcceptReservations(this)"><span class="toggle-slider"></span></label>
-            </div>
-          </div>
-        </div>
 <div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
@@ -3366,25 +3343,13 @@ async function loadConfigAndMenu(){
   document.getElementById('store-status-text').textContent = (Number(cfg.open) ? 'Restaurante Aberto' : 'Restaurante Fechado') + (autoSched ? ' (auto)' : '');
   document.getElementById('auto-accept-toggle').checked = Boolean(Number(cfg.autoAcceptOrders));
   document.getElementById('auto-accept-status-sub').textContent = Number(cfg.autoAcceptOrders) ? 'ligado — aceita sozinho' : 'desligado';
+  // v91: 3º interruptor do rodapé (Reserva) — antes só existia duplicado dentro de
+  // Configurações; agora mora só aqui, junto dos outros dois.
+  const rsvToggleEl = document.getElementById('auto-accept-rsv-toggle');
+  if (rsvToggleEl) rsvToggleEl.checked = Boolean(Number(cfg.autoAcceptReservations));
+  const rsvSubFooterEl = document.getElementById('auto-accept-rsv-status-sub');
+  if (rsvSubFooterEl) rsvSubFooterEl.textContent = Number(cfg.autoAcceptReservations) ? 'ligado — aceita sozinho' : 'desligado';
   applyAdminChatBackground();
-  // v78: mesmos interruptores, agora também como card em Configurações → 🏪 Restaurante
-  syncAutomationToggles();
-}
-// v78: os interruptores de automação existem em dois lugares (rodapé do menu + card em
-// Configurações) — essa função mantém os dois sempre iguais, não importa qual foi clicado.
-function syncAutomationToggles(){
-  const storeEl = document.getElementById('cfg-store-toggle');
-  if (storeEl) { storeEl.checked = Boolean(Number(cfg.open)); storeEl.disabled = !!(cfg.schedule && cfg.schedule.enabled); }
-  const autoEl = document.getElementById('cfg-auto-accept-toggle');
-  if (autoEl) autoEl.checked = Boolean(Number(cfg.autoAcceptOrders));
-  const subEl = document.getElementById('cfg-auto-accept-status-sub');
-  if (subEl) subEl.textContent = Number(cfg.autoAcceptOrders) ? '✅ Ligado — pedido novo já entra aceito.' : 'Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.';
-  const rsvEl = document.getElementById('cfg-auto-accept-rsv-toggle');
-  if (rsvEl) rsvEl.checked = Boolean(Number(cfg.autoAcceptReservations));
-  const rsvSubEl = document.getElementById('cfg-auto-accept-rsv-status-sub');
-  if (rsvSubEl) rsvSubEl.textContent = Number(cfg.autoAcceptReservations) ? '✅ Ligado — reserva nova já entra confirmada.' : 'Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".';
-  const storeSubEl = document.getElementById('cfg-store-status-sub');
-  if (storeSubEl) storeSubEl.textContent = Number(cfg.open) ? '✅ Aberto — recebendo pedidos normalmente.' : '🔴 Fechado — cardápio mostra "Fechado" e não aceita pedido novo.';
 }
 
 async function loadOrders(){
@@ -3608,9 +3573,9 @@ async function toggleStore(el){
   cfg.open = el.checked ? 1 : 0;
   const txt=document.getElementById('store-status-text');
   txt.textContent=cfg.open?'Restaurante Aberto':'Restaurante Fechado';
-  const res = await apiPost('/api/config',{ cfg:{open:cfg.open}, menu });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
-  syncAutomationToggles();
+  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
+  const res = await apiPost('/api/store/toggle',{ open: cfg.open });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.open = el.checked?1:0; txt.textContent=cfg.open?'Restaurante Aberto':'Restaurante Fechado'; return; }
   showToast(cfg.open?'✅ Aberto':'❌ Fechado', cfg.open?'Restaurante está aceitando pedidos.':'Restaurante não está aceitando pedidos.');
 }
 
@@ -3621,9 +3586,9 @@ async function toggleStore(el){
 async function toggleAutoAccept(el){
   cfg.autoAcceptOrders = el.checked ? 1 : 0;
   document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado';
-  const res = await apiPost('/api/config',{ cfg:{autoAcceptOrders:cfg.autoAcceptOrders}, menu });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
-  syncAutomationToggles();
+  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
+  const res = await apiPost('/api/auto-accept/toggle',{ autoAcceptOrders: cfg.autoAcceptOrders });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.autoAcceptOrders = el.checked?1:0; document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado'; return; }
   showToast(cfg.autoAcceptOrders?'🤖 Aceite automático ligado':'✋ Aceite automático desligado', cfg.autoAcceptOrders?'Pedidos novos já entram aceitos, sem precisar clicar em nada.':'Volta a precisar clicar em "Aceitar Pedido" pra cada um.');
 }
 // v78: liga/desliga o aceite automático de RESERVAS — mesma ideia da de pedidos, mas pra
@@ -3631,9 +3596,11 @@ async function toggleAutoAccept(el){
 // /api/reservations no server.js), sem precisar clicar em "Confirmar" no painel.
 async function toggleAutoAcceptReservations(el){
   cfg.autoAcceptReservations = el.checked ? 1 : 0;
-  const res = await apiPost('/api/config',{ cfg:{autoAcceptReservations:cfg.autoAcceptReservations}, menu });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; return; }
-  syncAutomationToggles();
+  const subEl = document.getElementById('auto-accept-rsv-status-sub');
+  if(subEl) subEl.textContent = cfg.autoAcceptReservations ? 'ligado — aceita sozinho' : 'desligado';
+  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
+  const res = await apiPost('/api/auto-accept-reservations/toggle',{ autoAcceptReservations: cfg.autoAcceptReservations });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.autoAcceptReservations = el.checked?1:0; if(subEl) subEl.textContent = cfg.autoAcceptReservations ? 'ligado — aceita sozinho' : 'desligado'; return; }
   showToast(cfg.autoAcceptReservations?'🤖 Aceite automático de reservas ligado':'✋ Aceite automático de reservas desligado', cfg.autoAcceptReservations?'Reservas novas já entram confirmadas, sem precisar clicar em nada.':'Volta a precisar clicar em "Confirmar" pra cada reserva.');
 }
 

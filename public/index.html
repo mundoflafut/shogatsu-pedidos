@@ -2786,7 +2786,7 @@ function renderMenu() {
               ${!isAvail
                 ? `<span style="font-size:11px;color:var(--muted);">Indisponível</span>`
                 : hasVariants
-                ? `<button class="add-btn" style="width:auto;padding:0 14px;border-radius:20px;font-size:12px;" onclick="openVariantPicker('${key}')">🎛 Personalizar</button>`
+                ? `<button class="add-btn add-btn-text" style="width:auto;padding:0 14px;" onclick="openVariantPicker('${key}')">+ Pedir aqui</button>`
                 : inCart
                 ? `<div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${inCart.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>`
                 : `<button class="add-btn add-btn-text" onclick="addToCart('${key}')" data-key="${key}">+ Pedir aqui</button>`
