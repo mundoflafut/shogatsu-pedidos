@@ -37,6 +37,10 @@ const COURIERS_FILE = path.join(DATA_DIR, 'couriers.json'); // v32: pré-cadastr
 const INGREDIENTES_FILE = path.join(DATA_DIR, 'ingredientes.json');
 const FICHAS_TECNICAS_FILE = path.join(DATA_DIR, 'fichas-tecnicas.json');
 const CUSTOS_CONFIG_FILE = path.join(DATA_DIR, 'custos-config.json');
+// v91 — fila de sugestões da IA (novos produtos, alterações, preço, ficha, badge) aguardando
+// aprovação humana. Nada aqui é aplicado ao cardápio/config sozinho — ver seção "CENTRAL DE
+// APROVAÇÕES DA IA" mais abaixo.
+const APROVACOES_IA_FILE = path.join(DATA_DIR, 'aprovacoes-ia.json');
 const DELETE_LOG_FILE = path.join(DATA_DIR, 'delete-log.json'); // v32: histórico de exclusões de pedidos
 const CONTATOS_IMPORTADOS_FILE = path.join(DATA_DIR, 'contatos-importados.json'); // v56: contatos importados de CSV/vCard/txt, separado dos clientes reais (que vêm de pedidos)
 const ATENDIMENTO_FILE = path.join(DATA_DIR, 'atendimento.json'); // v57: conversas do chat (IA e/ou atendente humano)
@@ -282,7 +286,10 @@ const DEFAULT_CFG = {
   // contexto, e lê foto de nota fiscal/catálogo pra sugerir ingredientes em Custos & Ficha Técnica.
   // Usa a API da Anthropic (Claude) com a chave que o restaurante cadastra aqui. OPCIONAL: sem
   // isso configurado, os botões de IA simplesmente avisam que não está configurado, sem quebrar nada.
-  ia: { enabled: false, provider: 'groq', apiKey: '', modelo: '', faq: [] },
+  // v91: badgesAutoAprovar — "☑ Permitir alteração automática de badges" do escopo da IA de
+  // gestão. Só afeta sugestões de BADGE (tipo='badge'); novo produto e demais tipos continuam
+  // sempre exigindo aprovação manual, sem exceção.
+  ia: { enabled: false, provider: 'groq', apiKey: '', modelo: '', faq: [], badgesAutoAprovar: false },
   // ── Redes sociais (v56) — botão de pedido direto no Instagram/Facebook do cardápio online.
   // Deixe em branco pra não mostrar o botão correspondente.
   social: { instagram: '', facebook: '' },
@@ -379,6 +386,7 @@ if (!fs.existsSync(SCHEDULED_PUSH_FILE)) fs.writeFileSync(SCHEDULED_PUSH_FILE, '
 if (!fs.existsSync(COURIERS_FILE)) fs.writeFileSync(COURIERS_FILE, '[]');
 if (!fs.existsSync(INGREDIENTES_FILE)) fs.writeFileSync(INGREDIENTES_FILE, '[]');
 if (!fs.existsSync(FICHAS_TECNICAS_FILE)) fs.writeFileSync(FICHAS_TECNICAS_FILE, '[]');
+if (!fs.existsSync(APROVACOES_IA_FILE)) fs.writeFileSync(APROVACOES_IA_FILE, '[]');
 if (!fs.existsSync(CUSTOS_CONFIG_FILE)) fs.writeFileSync(CUSTOS_CONFIG_FILE, JSON.stringify({ diasParaDesatualizado: 21, margemPadrao: 65 }, null, 2));
 if (!fs.existsSync(DELETE_LOG_FILE)) fs.writeFileSync(DELETE_LOG_FILE, '[]');
 if (!fs.existsSync(CONTATOS_IMPORTADOS_FILE)) fs.writeFileSync(CONTATOS_IMPORTADOS_FILE, '[]');
@@ -421,7 +429,7 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia' };
 
 function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
@@ -1238,6 +1246,30 @@ function lerImagemIA(base64, mediaType, tipo, iaCfg) {
   });
 }
 
+// v91 — sugestão de novo prato (seção "NOVOS PRATOS" do escopo da IA de gestão). IMPORTANTE:
+// esta IA (Groq/Anthropic/Gemini/etc, a mesma configurada em Configurações → Atendimento) NÃO
+// navega na internet de verdade — a sugestão vem do conhecimento próprio do modelo, sem citar
+// fonte real com data/preço verificável. Por isso toda ficha técnica gerada aqui sempre nasce
+// com status "estimada" e uma origem deixando isso claro, nunca "oficial".
+function sugerirNovoProdutoIA(iaCfg, cfg, menu, ingredientes, tema) {
+  const itensTexto = (menu || []).flatMap(cat => (cat.items || []).map(it => `- [${cat.title}] ${it.name}: R$ ${Number(it.price || 0).toFixed(2)}`)).join('\n');
+  const ingredientesTexto = (ingredientes || []).map(i => `- ${i.nome} (R$ ${i.precoUnitario}/${i.unidade})`).join('\n');
+  const instrucao = `Você é uma consultora de cardápio para o restaurante japonês "${cfg.name || 'Shogatsu'}". ` +
+    `Cardápio atual:\n${itensTexto || '(vazio)'}\n\nIngredientes já cadastrados (use esses de preferência, pelo NOME exato quando possível):\n${ingredientesTexto || '(nenhum)'}\n\n` +
+    `${tema ? `O restaurante pediu especificamente algo relacionado a: "${tema}".` : 'Sugira um prato novo que combine com o estilo do cardápio acima e que ainda não exista nele.'} ` +
+    `Responda APENAS com um JSON (sem markdown, sem texto antes/depois) no formato exato:\n` +
+    `{"nome":"...","categoria":"...","descricao":"...(1-2 frases apetitosas)","rendimento":1,"badgeSugerido":"🆕 Novidade",` +
+    `"ingredientes":[{"nome":"...","quantidade":0,"unidade":"g|kg|ml|l|un"}],` +
+    `"custoEstimado":0.0,"precoSugerido":0.0,"margemEstimadaPercentual":0,"justificativa":"por que esse prato pode vender bem aqui"}\n` +
+    `As quantidades de ingredientes e o custo são uma ESTIMATIVA sua (não pesquisa real na internet) — deixe claro no campo "justificativa" que são valores de referência a conferir.`;
+  return chamarIA([{ role: 'user', content: instrucao }], iaCfg, 1200).then(texto => {
+    const limpo = texto.replace(/```json|```/g, '').trim();
+    const obj = JSON.parse(limpo);
+    if (!obj.nome) throw new Error('A IA não retornou um nome de prato válido.');
+    return obj;
+  });
+}
+
 
 // ─── Impressão — rede (ESC/POS via TCP) e USB (dispositivo local) ───
 // Comandos ESC/POS básicos
@@ -1265,12 +1297,28 @@ function payMethodTicketLabel(order) {
 }
 
 // Monta o texto puro do ticket (usado tanto na pré-visualização quanto na impressão real).
-// Impressoras térmicas não suportam fontes (só o hardware da própria impressora), mas
-// suportam alternar entre tamanho normal e "letra grande" — usamos isso pra respeitar
-// ao menos o tamanho configurado em cfg.printSize.
+// v92 — BUG CORRIGIDO ("tamanho da fonte na impressão não está ajustando corretamente"): antes
+// só existiam DOIS estados (normal ou "dobrado" em cfg.printSize >= 18) — então mudar o campo
+// de 14 pra 17, ou de 19 pra 27, não tinha efeito nenhum na impressora de rede/USB direta.
+// Impressoras térmicas não trocam de "fonte" de verdade (só têm a fonte gravada no hardware),
+// mas o comando ESC/POS "GS ! n" permite multiplicar altura e largura em até 8x cada, de forma
+// independente — usamos isso pra dar mais degraus reais dentro da faixa de 10 a 28px da tela de
+// Configurações. Só a ALTURA aumenta nos degraus intermediários (a largura fica normal) pra não
+// estourar a largura da bobina e quebrar a linha no meio de uma palavra; a largura só dobra
+// junto no degrau mais alto, onde isso já é claramente a intenção ("letra bem grande").
+function tamanhoImpressaoTermica(printSize) {
+  const s = Number(printSize) || 14;
+  let alturaMult = 0, larguraMult = 0; // 0 = tamanho padrão da impressora (não dá pra ficar MENOR que isso)
+  if (s >= 26) { alturaMult = 3; larguraMult = 1; }      // bem grande: altura 4x + largura 2x
+  else if (s >= 22) { alturaMult = 2; }                   // altura 3x, largura normal
+  else if (s >= 18) { alturaMult = 1; }                   // altura 2x, largura normal (era o único "grande" antes)
+  // abaixo de 18 (10 a 17): tamanho padrão da impressora — térmica não imprime menor que isso
+  const n = (larguraMult << 4) | alturaMult;
+  return { on: '\x1D\x21' + String.fromCharCode(n), off: ESC.doubleOff };
+}
 function buildTicketText(lines, cfg) {
-  const big = cfg && Number(cfg.printSize) >= 18;
-  const body = big ? ESC.doubleOn + lines.join('\n') + ESC.doubleOff : lines.join('\n');
+  const tam = tamanhoImpressaoTermica(cfg && cfg.printSize);
+  const body = tam.on + lines.join('\n') + tam.off;
   return ESC.init + body + ESC.feed + ESC.cut;
 }
 
@@ -1557,50 +1605,6 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
 
-  // v91 — BUG CORRIGIDO ("caixa e outros logins não conseguem abrir/fechar e ligar aceite
-  // automático"): abrir/fechar o restaurante e ligar/desligar o Aceite Automático (pedidos e
-  // reservas) são tarefas do dia a dia de QUALQUER pessoa operando o caixa — mas esses 3
-  // interruptores (rodapé do menu lateral) chamavam POST /api/config, que exige nível 'admin'.
-  // Um login "caixa" (nível 'vendas', o mais comum pra operação do dia a dia) tomava 403 e
-  // nada acontecia (parecia travado/quebrado). Em vez de abrir todo o /api/config pra 'vendas'
-  // (isso liberaria mexer em cardápio/preços/senhas também, o que NÃO foi pedido), criamos 3
-  // rotas enxutas, cada uma mexendo em só 1 campo, liberadas pra qualquer login autenticado
-  // ('vendas' pra cima — inclui admin/master também).
-  if (pathname === '/api/store/toggle' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    try {
-      const { open } = await readBody(req);
-      const data = readConfig();
-      data.cfg.open = open ? 1 : 0;
-      writeJSON(CONFIG_FILE, data);
-      broadcast('config-updated', {});
-      publicBroadcast('menu-updated', {});
-      return sendJSON(res, 200, { ok: true, open: data.cfg.open });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-  if (pathname === '/api/auto-accept/toggle' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    try {
-      const { autoAcceptOrders } = await readBody(req);
-      const data = readConfig();
-      data.cfg.autoAcceptOrders = autoAcceptOrders ? 1 : 0;
-      writeJSON(CONFIG_FILE, data);
-      broadcast('config-updated', {});
-      return sendJSON(res, 200, { ok: true, autoAcceptOrders: data.cfg.autoAcceptOrders });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-  if (pathname === '/api/auto-accept-reservations/toggle' && req.method === 'POST') {
-    if (!requireRole(getToken(req, query), 'vendas')) return sendJSON(res, 403, { error: 'Sem permissão.' });
-    try {
-      const { autoAcceptReservations } = await readBody(req);
-      const data = readConfig();
-      data.cfg.autoAcceptReservations = autoAcceptReservations ? 1 : 0;
-      writeJSON(CONFIG_FILE, data);
-      broadcast('config-updated', {});
-      return sendJSON(res, 200, { ok: true, autoAcceptReservations: data.cfg.autoAcceptReservations });
-    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
   // ── POST /api/change-password — troca senha do painel (admin) ou senha master ──
   if (pathname === '/api/change-password' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
@@ -1732,7 +1736,8 @@ const server = http.createServer(async (req, res) => {
     const { cfg } = readConfig();
     return sendJSON(res, 200, {
       enabled: !!cfg.ia.enabled, hasKey: !!cfg.ia.apiKey, provider: cfg.ia.provider || 'groq',
-      modelo: cfg.ia.modelo || '', faq: cfg.ia.faq || [], provedores: IA_PROVEDORES
+      modelo: cfg.ia.modelo || '', faq: cfg.ia.faq || [], provedores: IA_PROVEDORES,
+      badgesAutoAprovar: !!cfg.ia.badgesAutoAprovar
     });
   }
   if (pathname === '/api/ia/settings' && req.method === 'POST') {
@@ -1746,10 +1751,11 @@ const server = http.createServer(async (req, res) => {
         provider: IA_PROVEDORES[body.provider] ? body.provider : (iaAtual.provider || 'groq'),
         apiKey: (typeof body.apiKey === 'string' && body.apiKey.trim()) ? body.apiKey.trim() : iaAtual.apiKey || '',
         modelo: typeof body.modelo === 'string' ? body.modelo.trim() : (iaAtual.modelo || ''),
-        faq: Array.isArray(body.faq) ? body.faq.slice(0, 100).map(f => ({ pergunta: String(f.pergunta || '').slice(0, 200), resposta: String(f.resposta || '').slice(0, 600) })).filter(f => f.pergunta && f.resposta) : (iaAtual.faq || [])
+        faq: Array.isArray(body.faq) ? body.faq.slice(0, 100).map(f => ({ pergunta: String(f.pergunta || '').slice(0, 200), resposta: String(f.resposta || '').slice(0, 600) })).filter(f => f.pergunta && f.resposta) : (iaAtual.faq || []),
+        badgesAutoAprovar: body.badgesAutoAprovar !== undefined ? !!body.badgesAutoAprovar : !!iaAtual.badgesAutoAprovar
       };
       writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
-      return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey });
+      return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey, badgesAutoAprovar: data.cfg.ia.badgesAutoAprovar });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
   // POST /api/custos/ler-imagem — lê foto de nota fiscal (custo) ou catálogo (preço de venda) e
@@ -3598,11 +3604,30 @@ function estimateDeliveryWindow(order, cfg) {
     if (tabela && tabela[usada] !== undefined) return ingrediente.precoUnitario * (quantidade / tabela[usada]);
     return ingrediente.precoUnitario * quantidade;
   }
-  function calcularFichaTecnica(ficha, ingredientesPorId, custosCfg) {
+  // v91: resolve os itens de uma ficha — se ela for uma VARIAÇÃO (fichaBaseId setado, ex: "Hot
+  // Filadélfia — 15 peças" apontando pra "Hot Filadélfia — base por peça"), busca os itens da
+  // ficha base e multiplica cada quantidade pelo fator (`multiplicador`), em vez de guardar a
+  // receita duplicada. Suporta encadeamento (variação de variação) com limite de profundidade
+  // pra nunca travar num ciclo (ex: A aponta pra B que aponta pra A por engano).
+  function resolverItensFicha(ficha, fichasPorId, depth) {
+    depth = depth || 0;
+    if (ficha.fichaBaseId && depth < 6) {
+      const base = fichasPorId[ficha.fichaBaseId];
+      if (base) {
+        const itensBase = resolverItensFicha(base, fichasPorId, depth + 1);
+        const mult = Number(ficha.multiplicador) || 1;
+        return itensBase.map(it => ({ ...it, quantidade: (Number(it.quantidade) || 0) * mult }));
+      }
+    }
+    return ficha.itens || [];
+  }
+  function calcularFichaTecnica(ficha, ingredientesPorId, custosCfg, fichasPorId) {
     let custoTotal = 0, temIngredienteFaltando = false, temPrecoDefasado = false;
     const limiteMs = (custosCfg.diasParaDesatualizado || 21) * 86400000;
     const agora = Date.now();
-    const itensCalculados = (ficha.itens || []).map(item => {
+    const fichaBase = ficha.fichaBaseId && fichasPorId ? fichasPorId[ficha.fichaBaseId] : null;
+    const itensResolvidos = fichasPorId ? resolverItensFicha(ficha, fichasPorId) : (ficha.itens || []);
+    const itensCalculados = (itensResolvidos || []).map(item => {
       const ing = ingredientesPorId[item.ingredienteId];
       if (!ing) { temIngredienteFaltando = true; return { ...item, custo: 0, erro: 'ingrediente não encontrado' }; }
       const custo = custoDoItem(ing, Number(item.quantidade) || 0, item.unidade);
@@ -3624,9 +3649,15 @@ function estimateDeliveryWindow(order, cfg) {
       custoPorPorcao: Math.round(custoPorPorcao * 100) / 100,
       precoSugerido: Math.round(precoSugerido * 100) / 100,
       cmvPercentual: cmv !== null ? Math.round(cmv * 10) / 10 : null,
-      temIngredienteFaltando, temPrecoDefasado
+      temIngredienteFaltando, temPrecoDefasado,
+      status: ficha.status || 'oficial',
+      origem: ficha.origem || 'Cadastro manual',
+      nomeFichaBase: fichaBase ? fichaBase.nome : null
     };
   }
+  // Monta o índice { id: ficha } usado pra resolver variações (fichaBaseId) — sempre a partir da
+  // lista COMPLETA e crua (sem cálculo), pra nunca resolver contra uma versão já derivada.
+  function fichasIndexadasPorId(fichas) { return Object.fromEntries(fichas.map(f => [f.id, f])); }
 
   // ── GET /api/custos/ingredientes ──
   if (pathname === '/api/custos/ingredientes' && req.method === 'GET') {
@@ -3699,7 +3730,8 @@ function estimateDeliveryWindow(order, cfg) {
     const ingredientes = readJSON(INGREDIENTES_FILE, []);
     const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
     const porId = Object.fromEntries(ingredientes.map(i => [i.id, i]));
-    return sendJSON(res, 200, fichas.map(f => calcularFichaTecnica(f, porId, cfg)));
+    const fichasPorId = fichasIndexadasPorId(fichas);
+    return sendJSON(res, 200, fichas.map(f => calcularFichaTecnica(f, porId, cfg, fichasPorId)));
   }
   // ── POST /api/custos/fichas ──
   if (pathname === '/api/custos/fichas' && req.method === 'POST') {
@@ -3708,6 +3740,8 @@ function estimateDeliveryWindow(order, cfg) {
       const body = await readBody(req);
       if (!body.nome) return sendJSON(res, 400, { error: 'nome é obrigatório' });
       const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+      const STATUS_VALIDOS = ['oficial', 'estimada', 'revisao'];
+      const fichaBaseId = body.fichaBaseId && fichas.some(f => f.id === body.fichaBaseId) ? body.fichaBaseId : null;
       const nova = {
         id: crypto.randomBytes(8).toString('hex'),
         nome: String(body.nome).trim().slice(0, 120),
@@ -3715,14 +3749,40 @@ function estimateDeliveryWindow(order, cfg) {
         rendimento: Number(body.rendimento) || 1,
         margemDesejada: body.margemDesejada ?? null,
         precoVendaAtual: body.precoVendaAtual ?? null,
-        itens: Array.isArray(body.itens) ? body.itens : [],
+        // v91: se for uma variação (fichaBaseId setado), a receita vem da base × multiplicador —
+        // itens próprios ficam vazios de propósito, pra nunca duplicar a receita.
+        itens: fichaBaseId ? [] : (Array.isArray(body.itens) ? body.itens : []),
+        fichaBaseId,
+        multiplicador: fichaBaseId ? (Number(body.multiplicador) || 1) : null,
+        status: STATUS_VALIDOS.includes(body.status) ? body.status : 'oficial',
+        origem: body.origem ? String(body.origem).trim().slice(0, 200) : 'Cadastro manual',
+        criadoEm: new Date().toISOString(),
+        atualizadoEm: new Date().toISOString(),
       };
       fichas.push(nova);
       writeJSON(FICHAS_TECNICAS_FILE, fichas);
       const ingredientes = readJSON(INGREDIENTES_FILE, []);
       const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
-      return sendJSON(res, 201, calcularFichaTecnica(nova, Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg));
+      return sendJSON(res, 201, calcularFichaTecnica(nova, Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg, fichasIndexadasPorId(fichas)));
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+  // ── POST /api/custos/fichas/:id/confirmar — marca a ficha como 🟢 OFICIAL (v91). Não altera a
+  // receita, só o status + registra quando/por quem foi confirmada. ──
+  const custosFichaConfirmarMatch = pathname.match(/^\/api\/custos\/fichas\/([^/]+)\/confirmar$/);
+  if (custosFichaConfirmarMatch && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const id = custosFichaConfirmarMatch[1];
+    const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+    const idx = fichas.findIndex(f => f.id === id);
+    if (idx === -1) return sendJSON(res, 404, { error: 'Ficha não encontrada.' });
+    const quem = getSession(getToken(req, query))?.username || '';
+    fichas[idx].status = 'oficial';
+    fichas[idx].origem = `Confirmada como oficial${quem ? ' por ' + quem : ''} em ${new Date().toLocaleDateString('pt-BR')}`;
+    fichas[idx].atualizadoEm = new Date().toISOString();
+    writeJSON(FICHAS_TECNICAS_FILE, fichas);
+    const ingredientes = readJSON(INGREDIENTES_FILE, []);
+    const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
+    return sendJSON(res, 200, calcularFichaTecnica(fichas[idx], Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg, fichasIndexadasPorId(fichas)));
   }
   // ── PUT /api/custos/fichas/:id ──
   const custosFichaMatch = pathname.match(/^\/api\/custos\/fichas\/([^/]+)$/);
@@ -3734,11 +3794,42 @@ function estimateDeliveryWindow(order, cfg) {
       const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
       const idx = fichas.findIndex(f => f.id === id);
       if (idx === -1) return sendJSON(res, 404, { error: 'Ficha não encontrada.' });
-      fichas[idx] = { ...fichas[idx], ...body, id };
+      const STATUS_VALIDOS = ['oficial', 'estimada', 'revisao'];
+      const atual = fichas[idx];
+      // v91: se estiver vinculando/trocando a ficha base, valida que existe e que não cria um
+      // ciclo (uma ficha não pode ser base de si mesma, direta ou indiretamente).
+      let fichaBaseId = atual.fichaBaseId;
+      if (body.fichaBaseId !== undefined) {
+        if (body.fichaBaseId === null || body.fichaBaseId === '') {
+          fichaBaseId = null;
+        } else if (body.fichaBaseId === id) {
+          return sendJSON(res, 400, { error: 'Uma ficha não pode ser base dela mesma.' });
+        } else {
+          let cursor = fichas.find(f => f.id === body.fichaBaseId);
+          if (!cursor) return sendJSON(res, 400, { error: 'Ficha base não encontrada.' });
+          let hops = 0;
+          while (cursor && cursor.fichaBaseId && hops < 10) {
+            if (cursor.fichaBaseId === id) return sendJSON(res, 400, { error: 'Isso criaria um ciclo entre fichas.' });
+            cursor = fichas.find(f => f.id === cursor.fichaBaseId);
+            hops++;
+          }
+          fichaBaseId = body.fichaBaseId;
+        }
+      }
+      const precoMudou = body.precoVendaAtual !== undefined && body.precoVendaAtual !== atual.precoVendaAtual;
+      const itensMudaram = body.itens !== undefined && JSON.stringify(body.itens) !== JSON.stringify(atual.itens);
+      fichas[idx] = {
+        ...atual, ...body, id,
+        fichaBaseId,
+        multiplicador: fichaBaseId ? (body.multiplicador !== undefined ? (Number(body.multiplicador) || 1) : (atual.multiplicador || 1)) : null,
+        itens: fichaBaseId ? [] : (body.itens !== undefined ? body.itens : atual.itens),
+        status: STATUS_VALIDOS.includes(body.status) ? body.status : atual.status,
+        atualizadoEm: (itensMudaram || precoMudou || body.status !== undefined || body.fichaBaseId !== undefined) ? new Date().toISOString() : (atual.atualizadoEm || new Date().toISOString()),
+      };
       writeJSON(FICHAS_TECNICAS_FILE, fichas);
       const ingredientes = readJSON(INGREDIENTES_FILE, []);
       const cfg = readJSON(CUSTOS_CONFIG_FILE, custosDefaultConfig());
-      return sendJSON(res, 200, calcularFichaTecnica(fichas[idx], Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg));
+      return sendJSON(res, 200, calcularFichaTecnica(fichas[idx], Object.fromEntries(ingredientes.map(i => [i.id, i])), cfg, fichasIndexadasPorId(fichas)));
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
   }
   // ── DELETE /api/custos/fichas/:id ──
@@ -3746,6 +3837,13 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const id = custosFichaMatch[1];
     let fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+    // v91: se outras fichas usam esta como base (ex: "10 peças"/"15 peças" apontando pra "base por
+    // peça"), avisa em vez de apagar e deixar as variações órfãs sem receita — a menos que o admin
+    // confirme explicitamente com ?force=1.
+    const dependentes = fichas.filter(f => f.fichaBaseId === id);
+    if (dependentes.length && query.force !== '1') {
+      return sendJSON(res, 409, { error: `Essa ficha é a base de ${dependentes.length} variação(ões): ${dependentes.map(f => f.nome).join(', ')}. Exclua ou desvincule elas primeiro, ou confirme com force=1.` });
+    }
     const antes = fichas.length;
     fichas = fichas.filter(f => f.id !== id);
     writeJSON(FICHAS_TECNICAS_FILE, fichas);
@@ -3777,7 +3875,7 @@ function estimateDeliveryWindow(order, cfg) {
       for (const categoria of menu || []) {
         for (const item of categoria.items || []) {
           if (existentes.has(item.name)) continue;
-          fichas.push({ id: crypto.randomBytes(8).toString('hex'), nome: item.name, categoria: categoria.title, rendimento: 1, margemDesejada: null, precoVendaAtual: item.price, itens: [] });
+          fichas.push({ id: crypto.randomBytes(8).toString('hex'), nome: item.name, categoria: categoria.title, rendimento: 1, margemDesejada: null, precoVendaAtual: item.price, itens: [], fichaBaseId: null, multiplicador: null, status: 'revisao', origem: 'Importada do cardápio (sem ingredientes ainda)', criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() });
           existentes.add(item.name);
           criadas++;
         }
@@ -3785,6 +3883,273 @@ function estimateDeliveryWindow(order, cfg) {
       writeJSON(FICHAS_TECNICAS_FILE, fichas);
       return sendJSON(res, 200, { ok: true, criadas });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ═══════════════════════════════════════════
+  // IA DE GESTÃO — CENTRAL DE APROVAÇÕES (v91)
+  // Nada nesta seção altera o cardápio público, preço, ficha oficial ou qualquer outra coisa
+  // sozinho. A IA só CRIA PROPOSTAS (status "pendente") aqui; um admin precisa aprovar
+  // explicitamente em /api/ia/aprovacoes/:id/aprovar pra algo virar realidade no sistema.
+  // ═══════════════════════════════════════════
+  const APROVACAO_TIPOS = ['novo_produto', 'alteracao', 'preco', 'ficha', 'badge'];
+
+  // ── POST /api/ia/produtos/sugerir — pede pra IA imaginar um prato novo e registra como
+  // proposta PENDENTE (não mexe no cardápio). body.tema é opcional (ex: "algo com atum"). ──
+  if (pathname === '/api/ia/produtos/sugerir' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const body = await readBody(req).catch(() => ({}));
+      const { cfg, menu } = readConfig();
+      if (!cfg.ia || !cfg.ia.enabled || !cfg.ia.apiKey) return sendJSON(res, 400, { error: 'Configure a IA de Atendimento em Configurações antes de pedir sugestões (é a mesma IA usada aqui).' });
+      const ingredientes = readJSON(INGREDIENTES_FILE, []);
+      const sugestao = await sugerirNovoProdutoIA(cfg.ia, cfg, menu, ingredientes, (body.tema || '').slice(0, 200));
+      // Casa cada ingrediente sugerido com um já cadastrado pelo nome (ignorando maiúscula/acento);
+      // o que não bater fica marcado como "novo" — só é criado de fato se o admin aprovar.
+      const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const itensFicha = (Array.isArray(sugestao.ingredientes) ? sugestao.ingredientes : []).map(ing => {
+        const existente = ingredientes.find(i => norm(i.nome) === norm(ing.nome));
+        return {
+          ingredienteId: existente ? existente.id : null,
+          nomeNovoIngrediente: existente ? null : String(ing.nome || '').slice(0, 120),
+          quantidade: Number(ing.quantidade) || 0,
+          unidade: ['g', 'kg', 'ml', 'l', 'un'].includes(ing.unidade) ? ing.unidade : 'g',
+        };
+      });
+      const aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+      const proposta = {
+        id: crypto.randomBytes(8).toString('hex'),
+        tipo: 'novo_produto',
+        status: 'pendente',
+        titulo: sugestao.nome,
+        dados: {
+          nome: String(sugestao.nome).slice(0, 120),
+          categoria: String(sugestao.categoria || 'Sugestões da IA').slice(0, 60),
+          descricao: String(sugestao.descricao || '').slice(0, 400),
+          rendimento: Number(sugestao.rendimento) || 1,
+          badgeSugerido: String(sugestao.badgeSugerido || '').slice(0, 40),
+          itensFicha,
+          custoEstimado: Number(sugestao.custoEstimado) || 0,
+          precoSugerido: Number(sugestao.precoSugerido) || 0,
+          margemEstimadaPercentual: Number(sugestao.margemEstimadaPercentual) || null,
+        },
+        justificativa: String(sugestao.justificativa || '').slice(0, 600),
+        fontes: [], // v91: sem pesquisa real na internet ainda — ver observação em sugerirNovoProdutoIA
+        origem: 'Sugestão da IA (sem pesquisa real na internet — estimativa do modelo)',
+        criadoEm: new Date().toISOString(),
+        decididoEm: null,
+        decididoPor: null,
+        motivoRejeicao: null,
+      };
+      aprovacoes.unshift(proposta);
+      writeJSON(APROVACOES_IA_FILE, aprovacoes);
+      return sendJSON(res, 201, proposta);
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui gerar uma sugestão agora.' }); }
+  }
+
+  // ── POST /api/ia/badges/sugerir — analisa vendas reais (data/orders.json) dos últimos N dias
+  // e sugere 🔥 "Mais Pedido" pros itens mais vendidos que ainda não têm esse badge. Não usa a IA
+  // de texto pra isso (é estatística direta sobre pedidos de verdade, não estimativa). Se
+  // cfg.ia.badgesAutoAprovar estiver ligado, a sugestão já entra como aprovada (aplicada na
+  // hora); senão fica pendente igual as outras propostas. ──
+  if (pathname === '/api/ia/badges/sugerir' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const body = await readBody(req).catch(() => ({}));
+      const janelaDias = Math.max(1, Number(body.dias) || 30);
+      const topN = Math.max(1, Math.min(10, Number(body.topN) || 3));
+      const { cfg, menu } = readConfig();
+      const orders = readJSON(ORDERS_FILE);
+      const desde = Date.now() - janelaDias * 86400000;
+      const vendasPorNome = {};
+      orders.filter(o => o.status !== 'cancelado' && new Date(o.createdAt).getTime() >= desde)
+        .forEach(o => (o.items || []).forEach(i => { vendasPorNome[i.name] = (vendasPorNome[i.name] || 0) + (Number(i.qty) || 0); }));
+
+      const todosItens = [];
+      (menu || []).forEach(cat => (cat.items || []).forEach(it => todosItens.push({ item: it, categoria: cat.title })));
+      const ranking = todosItens
+        .map(({ item, categoria }) => ({ item, categoria, vendas: vendasPorNome[item.name] || 0 }))
+        .filter(r => r.vendas > 0)
+        .sort((a, b) => b.vendas - a.vendas)
+        .slice(0, topN);
+
+      const aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+      const quem = getSession(getToken(req, query))?.username || '';
+      const autoAprovar = !!cfg.ia.badgesAutoAprovar;
+      const criadas = [];
+      const BADGE_SUGERIDO = '🔥 Mais Pedido';
+      for (const r of ranking) {
+        if (r.item.badgeOverride === BADGE_SUGERIDO) continue; // já tem esse badge, nada a sugerir
+        const proposta = {
+          id: crypto.randomBytes(8).toString('hex'),
+          tipo: 'badge',
+          status: 'pendente',
+          titulo: `Badge para ${r.item.name}`,
+          dados: { itemId: r.item.id, categoria: r.categoria, nomeItem: r.item.name, badgeAtual: r.item.badgeOverride || '', badgeSugerido: BADGE_SUGERIDO },
+          justificativa: `${r.item.name} vendeu ${r.vendas} unidade(s) nos últimos ${janelaDias} dias — um dos mais pedidos do cardápio no período.`,
+          fontes: ['data/orders.json (vendas reais do próprio sistema)'],
+          origem: `Sugestão baseada em vendas reais dos últimos ${janelaDias} dias`,
+          criadoEm: new Date().toISOString(),
+          decididoEm: null, decididoPor: null, motivoRejeicao: null,
+        };
+        if (autoAprovar) {
+          // aplica direto no cardápio
+          const catObj = menu.find(c => c.title === r.categoria);
+          const itObj = catObj && catObj.items.find(i => i.id === r.item.id);
+          if (itObj) { itObj.badgeMode = 'custom'; itObj.badgeOverride = BADGE_SUGERIDO; }
+          proposta.status = 'aprovado';
+          proposta.decididoEm = new Date().toISOString();
+          proposta.decididoPor = quem;
+          proposta.origem += ' — auto-aprovado (Configurações → IA → "Permitir alteração automática de badges" está ligado)';
+        }
+        aprovacoes.unshift(proposta);
+        criadas.push(proposta);
+      }
+      if (autoAprovar && criadas.length) writeJSON(CONFIG_FILE, { cfg, menu });
+      writeJSON(APROVACOES_IA_FILE, aprovacoes);
+      return sendJSON(res, 200, { criadas: criadas.length, autoAprovadas: autoAprovar, propostas: criadas });
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui analisar as vendas agora.' }); }
+  }
+
+  // ── GET /api/ia/aprovacoes?status=pendente&tipo=novo_produto ──
+  if (pathname === '/api/ia/aprovacoes' && req.method === 'GET') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    let lista = readJSON(APROVACOES_IA_FILE, []);
+    if (query.status) lista = lista.filter(a => a.status === query.status);
+    if (query.tipo) lista = lista.filter(a => a.tipo === query.tipo);
+    return sendJSON(res, 200, lista);
+  }
+
+  // ── POST /api/ia/aprovacoes/:id/aprovar — body opcional pode sobrescrever campos de "dados"
+  // antes de aplicar (ex: admin ajusta o preço sugerido) e { publicar:false } pra salvar como
+  // rascunho no cardápio (item criado com available:false) em vez de publicar liberado. ──
+  const aprovarMatch = pathname.match(/^\/api\/ia\/aprovacoes\/([^/]+)\/aprovar$/);
+  if (aprovarMatch && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const id = aprovarMatch[1];
+      const body = await readBody(req).catch(() => ({}));
+      const aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+      const idx = aprovacoes.findIndex(a => a.id === id);
+      if (idx === -1) return sendJSON(res, 404, { error: 'Proposta não encontrada.' });
+      const proposta = aprovacoes[idx];
+      if (proposta.status !== 'pendente') return sendJSON(res, 400, { error: 'Essa proposta já foi decidida.' });
+      const quem = getSession(getToken(req, query))?.username || '';
+      const publicar = body.publicar !== false; // padrão: aprovar já publica (seção 13 do escopo)
+
+      if (proposta.tipo === 'novo_produto') {
+        const dados = { ...proposta.dados, ...(body.dados || {}) };
+        // 1) cria no cadastro de ingredientes qualquer item que a IA sugeriu e ainda não existia —
+        //    entra com referenciaWeb:true (preço é estimativa, não confirmado pelo admin ainda).
+        const ingredientes = readJSON(INGREDIENTES_FILE, []);
+        const itensFichaResolvidos = (dados.itensFicha || []).map(item => {
+          if (item.ingredienteId) return { ingredienteId: item.ingredienteId, quantidade: item.quantidade, unidade: item.unidade };
+          const novoIng = {
+            id: crypto.randomBytes(8).toString('hex'),
+            nome: item.nomeNovoIngrediente || 'Ingrediente sugerido pela IA',
+            categoria: 'Geral',
+            unidade: item.unidade || 'g',
+            precoUnitario: 0,
+            atualizadoEm: new Date().toISOString(),
+            referenciaWeb: true,
+            fornecedor: '',
+          };
+          ingredientes.push(novoIng);
+          return { ingredienteId: novoIng.id, quantidade: item.quantidade, unidade: item.unidade };
+        });
+        writeJSON(INGREDIENTES_FILE, ingredientes);
+
+        // 2) cria a ficha técnica como ESTIMADA (a receita em si continua precisando de
+        //    confirmação separada em Custos → Fichas Técnicas, mesmo depois do produto aprovado).
+        const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+        const novaFicha = {
+          id: crypto.randomBytes(8).toString('hex'),
+          nome: dados.nome, categoria: dados.categoria, rendimento: dados.rendimento || 1,
+          margemDesejada: dados.margemEstimadaPercentual || null,
+          precoVendaAtual: dados.precoSugerido || null,
+          itens: itensFichaResolvidos, fichaBaseId: null, multiplicador: null,
+          status: 'estimada',
+          origem: `Gerada a partir de sugestão da IA, aprovada${quem ? ' por ' + quem : ''} em ${new Date().toLocaleDateString('pt-BR')} — receita ainda precisa ser conferida na cozinha antes de virar oficial.`,
+          criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+        };
+        fichas.push(novaFicha);
+        writeJSON(FICHAS_TECNICAS_FILE, fichas);
+
+        // 3) cria o item no cardápio (menu). Se a categoria não existir ainda, cria uma nova.
+        const { cfg, menu } = readConfig();
+        let categoria = menu.find(c => (c.title || '').trim().toLowerCase() === (dados.categoria || '').trim().toLowerCase());
+        if (!categoria) { categoria = { title: dados.categoria || 'Sugestões da IA', items: [], stations: [] }; menu.push(categoria); }
+        const novoItem = {
+          id: crypto.randomBytes(8).toString('hex'),
+          name: dados.nome,
+          description: dados.descricao || '',
+          price: Number(dados.precoSugerido) || 0,
+          available: publicar,
+          variants: [],
+          badgeMode: dados.badgeSugerido ? 'custom' : 'none',
+          badgeOverride: dados.badgeSugerido || '',
+          origemIA: true,
+        };
+        categoria.items.push(novoItem);
+        writeJSON(CONFIG_FILE, { cfg, menu });
+
+        proposta.dados = dados;
+        proposta.resultado = { itemId: novoItem.id, fichaId: novaFicha.id, publicado: publicar };
+      }
+      if (proposta.tipo === 'badge') {
+        const dados = { ...proposta.dados, ...(body.dados || {}) };
+        const { cfg, menu } = readConfig();
+        const catObj = menu.find(c => c.title === dados.categoria);
+        const itObj = catObj && catObj.items.find(i => i.id === dados.itemId);
+        if (!itObj) return sendJSON(res, 404, { error: 'O item do cardápio dessa sugestão não existe mais.' });
+        itObj.badgeMode = 'custom';
+        itObj.badgeOverride = dados.badgeSugerido || '';
+        writeJSON(CONFIG_FILE, { cfg, menu });
+        proposta.dados = dados;
+        proposta.resultado = { itemId: itObj.id, badgeAplicado: itObj.badgeOverride };
+      }
+      // tipos futuros (alteracao/preco/ficha) — aplicados quando essas fases forem construídas;
+      // por enquanto, aprovar só muda o status (sem efeito automático no sistema).
+
+      proposta.status = 'aprovado';
+      proposta.decididoEm = new Date().toISOString();
+      proposta.decididoPor = quem;
+      writeJSON(APROVACOES_IA_FILE, aprovacoes);
+      return sendJSON(res, 200, proposta);
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Erro ao aprovar.' }); }
+  }
+
+  // ── POST /api/ia/aprovacoes/:id/rejeitar — body: { motivo } (opcional) ──
+  const rejeitarMatch = pathname.match(/^\/api\/ia\/aprovacoes\/([^/]+)\/rejeitar$/);
+  if (rejeitarMatch && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const id = rejeitarMatch[1];
+      const body = await readBody(req).catch(() => ({}));
+      const aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+      const idx = aprovacoes.findIndex(a => a.id === id);
+      if (idx === -1) return sendJSON(res, 404, { error: 'Proposta não encontrada.' });
+      if (aprovacoes[idx].status !== 'pendente') return sendJSON(res, 400, { error: 'Essa proposta já foi decidida.' });
+      const quem = getSession(getToken(req, query))?.username || '';
+      aprovacoes[idx].status = 'rejeitado';
+      aprovacoes[idx].decididoEm = new Date().toISOString();
+      aprovacoes[idx].decididoPor = quem;
+      aprovacoes[idx].motivoRejeicao = String(body.motivo || '').slice(0, 300);
+      writeJSON(APROVACOES_IA_FILE, aprovacoes);
+      return sendJSON(res, 200, aprovacoes[idx]);
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+  }
+
+  // ── DELETE /api/ia/aprovacoes/:id — remove do histórico (limpeza manual; só itens já decididos) ──
+  const aprovacaoDelMatch = pathname.match(/^\/api\/ia\/aprovacoes\/([^/]+)$/);
+  if (aprovacaoDelMatch && req.method === 'DELETE') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    const id = aprovacaoDelMatch[1];
+    let aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+    const alvo = aprovacoes.find(a => a.id === id);
+    if (alvo && alvo.status === 'pendente') return sendJSON(res, 400, { error: 'Aprove ou rejeite antes de remover do histórico.' });
+    aprovacoes = aprovacoes.filter(a => a.id !== id);
+    writeJSON(APROVACOES_IA_FILE, aprovacoes);
+    return sendJSON(res, 200, { ok: true });
   }
 
   // ═══════════════════════════════════════════
@@ -4058,7 +4423,16 @@ function estimateDeliveryWindow(order, cfg) {
         }
       }
 
-      broadcast('new-order', order);
+      // v92 — BUG CORRIGIDO ("não deve imprimir se botão de aceite automático estiver
+      // desligado"): a impressão automática sempre foi pensada pra andar junto do aceite
+      // automático (pedido já nasce com número de ficha atribuído — ver comentário acima). Sem
+      // aceite automático ligado, o pedido nasce "novo" (pendente), esperando alguém olhar e
+      // aceitar manualmente no painel — imprimir sozinho nesse caso faz a via sair sem número
+      // de ficha nenhum, e o papel pode ser desperdiçado se o pedido for recusado/cancelado
+      // antes de alguém olhar. O Agente Local agora só imprime automaticamente quando essa
+      // flag vier true; a impressão manual (botão "🖨 Imprimir" no painel) continua funcionando
+      // sempre, com ou sem aceite automático ligado.
+      broadcast('new-order', { ...order, _printFontSize: cfg.printSize, _autoAcceptOn: !!cfg.autoAcceptOrders });
       // v79: alerta push pra loja em todos os aparelhos ativados (PC + celular simultâneo) —
       // além do som/SSE de quem já está com o painel aberto na tela. Não trava a resposta ao
       // cliente: dispara e segue (a função nunca rejeita, então não precisa de .catch aqui).

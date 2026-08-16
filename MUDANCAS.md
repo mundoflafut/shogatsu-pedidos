@@ -1,3 +1,55 @@
+# v92 — Bugs de impressão corrigidos + visual novo das opções de variação
+
+**Bug real corrigido: tamanho da fonte na impressão não ajustava.** A impressora de rede/USB
+direta só tinha DOIS estados (normal ou "dobrado" a partir de 18px) — mudar o campo de
+Configurações → Impressão de, por exemplo, 14 pra 17px não tinha efeito nenhum. Agora tem
+degraus reais (usando o comando ESC/POS `GS ! n` de altura/largura) cobrindo toda a faixa de
+10 a 28px. Mesma correção aplicada no Agente Local (print-agent.js/node-thermal-printer), que
+antes ignorava essa configuração por completo.
+
+**Bug real corrigido: impressão automática saía mesmo com "Aceite automático" desligado.** A
+impressão automática nasceu pra andar junto do aceite automático (o pedido já sai com número de
+ficha atribuído) — sem isso ligado, um pedido ainda pendente de aceite podia gastar papel de via
+antes de alguém sequer olhar pra ele. Agora o Agente Local só imprime sozinho quando o aceite
+automático está ligado; o botão manual "🖨 Imprimir" continua funcionando sempre, do jeito que
+sempre funcionou.
+
+**Bug real corrigido: agente imprimia mesmo com o Painel fechado em todo lugar.** A checagem de
+"Estação Ativa de Impressão" (criada na v90) só entrava em ação quando um `stationId` opcional
+estava configurado — no caso mais comum (sem isso configurado), o Agente sempre se considerava
+autorizado a imprimir, mesmo que ninguém tivesse o Painel aberto em computador nenhum. Agora essa
+checagem (reaproveitando o mesmo heartbeat que já existia) é obrigatória sempre: sem o Painel
+aberto/conectado em algum lugar, o Agente não imprime nada sozinho. ⚠️ Isso NÃO muda como o
+Agente liga (continua como Tarefa Agendada do Windows, ligando sozinho no boot) — só impede ele
+de imprimir enquanto ninguém estiver de fato usando o sistema.
+
+**Visual novo das opções de variação no cardápio do cliente** (só aparência, lógica intacta):
+cards maiores com toda a área clicável, marcadores grandes ⚪ (não selecionado) / 🔘
+(selecionado), "INCLUSO NO VALOR" pra opções sem custo extra, "+ R$ X,XX" bem visível nos
+adicionais, bordas arredondadas e destaque elegante em dourado na opção escolhida. Grupos de
+escolha única e obrigatórios agora mostram "Obrigatório • escolha 1" embaixo do nome do grupo.
+
+# v91 — IA de Gestão do Cardápio (fichas técnicas com multiplicador, Central de Aprovações, badges inteligentes)
+
+**Fichas técnicas com ficha base + fator de multiplicação.** Agora dá pra criar "Hot Filadélfia
+— base por peça" com a receita normal, e depois "Hot Filadélfia — 10 peças" e "— 15 peças" como
+variações vinculadas à base com um multiplicador — a quantidade de cada ingrediente é calculada
+sozinha, sem duplicar a receita. Cada ficha agora tem um status: 🟢 Oficial / 🟡 Estimada / 🔴
+Precisa revisão, com botão "Confirmar como oficial".
+
+**Nova página "🤖 IA do Cardápio"** com dois recursos:
+- **Sugestão de prato novo** — pede pra IA de Atendimento (já configurada em Configurações)
+  imaginar um prato novo com ficha técnica, custo e preço estimados. ⚠️ Sempre nasce como 🟡
+  Estimada — essa IA não pesquisa preços reais na internet, é estimativa do próprio modelo.
+- **Central de Aprovações** — toda sugestão (produto novo, badge) fica pendente até um admin
+  aprovar (publicar ou salvar como rascunho), rejeitar, ou editar antes de aprovar. Nada é
+  publicado, tem preço alterado ou fica visível pro cliente sem aprovação explícita.
+
+**Badges inteligentes baseados em vendas reais** (não estimativa da IA) — analisa
+`data/orders.json` dos últimos N dias e sugere 🔥 "Mais Pedido" pros itens mais vendidos.
+Configurações → IA tem um toggle opcional "Permitir alteração automática de badges" — só afeta
+badges, nunca produto/preço/estoque, que continuam sempre exigindo aprovação manual.
+
 # v43 — Notificação push, Custos integrado, reserva e limpeza do modal de prato
 
 **Bug real corrigido: notificação push não chegava no app do cliente.** A causa: o Service
