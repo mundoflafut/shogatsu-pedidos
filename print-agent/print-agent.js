@@ -166,34 +166,6 @@ function buildPrinter(printerCfg) {
 }
 
 const money = (n) => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
-
-// v91: tamanho da escrita configurado em Configurações → 🖨 Central de Impressão
-// (cfg.printSize) — antes só afetava a pré-visualização no navegador (modo "Navegador") e o
-// modo rede/usb feito direto pelo servidor; o Agente Local (usado por essa loja no modo
-// "Automática") ignorava completamente esse campo e imprimia sempre do mesmo jeito. Agora
-// busca esse valor (GET /api/config é público, não precisa de login) e aplica de verdade nas
-// impressoras físicas.
-let printSize = 20; // valor padrão, igual ao cfg.printSize padrão do server.js
-async function refreshPrintSize() {
-  try {
-    const r = await request('GET', `${cfg.serverUrl}/api/config`);
-    if (r.status === 200 && r.data && r.data.cfg && r.data.cfg.printSize) printSize = Number(r.data.cfg.printSize) || printSize;
-  } catch (e) { /* mantém o último valor conhecido — não trava a impressão por causa disso */ }
-}
-let printSizeTimer = null;
-function startPrintSizePolling() {
-  refreshPrintSize();
-  clearInterval(printSizeTimer);
-  printSizeTimer = setInterval(refreshPrintSize, 30000);
-}
-// Impressora térmica não tem "fonte"/px de verdade — só multiplicadores de tamanho do próprio
-// hardware (comando ESC/POS GS ! : nível 0 = normal até 7 = 8x maior). O campo do painel é em
-// px (10–28), então convertemos numa escala de 0 a 3 — dá pra sentir a diferença no papel sem
-// exagerar a ponto de estourar a largura da impressora.
-function ticketTextSizeLevel(ps) {
-  const n = Math.max(10, Math.min(28, Number(ps) || 20));
-  return Math.max(0, Math.min(3, Math.round((n - 10) / 6)));
-}
 // v84 — mesma correção do server.js/painel.html ("pagamento deve aparecer como pagamento na
 // entrega"): PIX é pago antes, mas dinheiro/crédito/débito num pedido delivery são cobrados
 // só na entrega — a via do caixa impressa aqui (agente local) precisa deixar isso claro pro
@@ -209,28 +181,38 @@ function payMethodTicketLabel(order) {
 const MY_STATIONS = [...new Set(PRINTERS.flatMap(p => p.stations))];
 const STATION_LABELS = { caixa: 'Caixa', cozinha: 'Cozinha', sushibar: 'Sushibar', bar: 'Bar' };
 
+// v92 — mesma correção de tamanho de fonte feita no server.js (impressora de rede/USB direta),
+// agora espelhada aqui pro Agente Local (que usa node-thermal-printer): antes o tamanho
+// configurado em Configurações → Impressão simplesmente não tinha efeito nenhum aqui — só o
+// cabeçalho (nome da loja) tinha uma altura fixa dobrada, sempre, independente da configuração.
+function tamanhoImpressaoTermica(printSize) {
+  const s = Number(printSize) || 14;
+  if (s >= 26) return { h: 3, w: 1 };
+  if (s >= 22) return { h: 2, w: 0 };
+  if (s >= 18) return { h: 1, w: 0 };
+  return { h: 0, w: 0 };
+}
+
 // v46: layout igual ao das outras vias do sistema (painel.html/server.js) — cabeçalho
 // centralizado, blocos com título, "TOTAL" em destaque na via do caixa, e "ITENS
 // DA <SETOR>" + espaço de observações nas vias de produção (cozinha/sushibar/bar).
-function printStationTicket(printer, order, station, storeName, sizeLevel) {
+function printStationTicket(printer, order, station, storeName) {
   const isCaixa = station === 'caixa';
   const items = isCaixa ? (order.items || []) : (order.items || []).filter(i => (i.stations || []).includes(station));
   if (!items.length) return false; // essa via não tem nada desse pedido — não desperdiça papel
-  const lvl = Number.isInteger(sizeLevel) ? sizeLevel : ticketTextSizeLevel(printSize);
-  // v91: volta pro tamanho CONFIGURADO (não fixo em "normal") depois de qualquer trecho em
-  // destaque (título/total) — é isso que faz o campo "Tamanho (px)" de Central de Impressão
-  // realmente mudar o tamanho da letra na impressora física, não só na pré-visualização.
-  const backToConfiguredSize = () => printer.setTextSize(lvl, lvl);
 
+  const tam = tamanhoImpressaoTermica(order._printFontSize);
   printer.alignCenter();
   printer.bold(true); printer.setTextDoubleHeight();
   printer.println((storeName || 'SHOGATSU').toUpperCase());
-  backToConfiguredSize(); printer.bold(false);
+  printer.setTextNormal(); printer.bold(false);
   printer.println('CULINARIA ORIENTAL');
   printer.drawLine();
+  printer.setTextSize(tam.h, tam.w); // a partir daqui, o corpo do ticket já respeita o tamanho configurado
 
   if (isCaixa) {
     printer.println('COMPROVANTE');
+
     printer.alignLeft();
     printer.println(order.ticketNumber ? `Pedido Nº ${order.ticketNumber}` : `Pedido #${order.id}`);
     printer.println(`Hora: ${new Date(order.createdAt).toLocaleString('pt-BR')}`);
@@ -251,7 +233,7 @@ function printStationTicket(printer, order, station, storeName, sizeLevel) {
     printer.println(`Pagamento: ${payMethodTicketLabel(order)}${order.paid ? ' (PAGO)' : ''}`);
     printer.setTextDoubleHeight(); printer.bold(true);
     printer.leftRight('TOTAL', money(order.total));
-    printer.bold(false); backToConfiguredSize();
+    printer.bold(false); printer.setTextNormal();
   } else {
     printer.println((STATION_LABELS[station] || station).toUpperCase());
     printer.println('VIA DE PRODUCAO');
@@ -268,7 +250,6 @@ function printStationTicket(printer, order, station, storeName, sizeLevel) {
     else { printer.println('_______________________________'); printer.println('_______________________________'); }
   }
   printer.newLine();
-  printer.setTextNormal(); // deixa a impressora "limpa" pro próximo trabalho, seja lá qual for
   printer.cut();
   return true;
 }
@@ -305,7 +286,7 @@ async function printSingleStation(order, station) {
       const connected = await printer.isPrinterConnected();
       if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu (verifique se está ligada e na mesma rede/USB).`);
     }
-    const hadItems = printStationTicket(printer, order, station, cfg.storeName, ticketTextSizeLevel(printSize));
+    const hadItems = printStationTicket(printer, order, station, cfg.storeName);
     if (!hadItems) { log(`ℹ️  Pedido ${order.id} — via "${station}" sem itens dessa via, nada impresso.`); return { ok:true, skipped:true }; }
     if (isWinPrinter) {
       // v83.2: pega os bytes ESC/POS prontos e manda pra fila de impressão do Windows,
@@ -345,7 +326,18 @@ async function printOrder(order) {
   // duplicar comanda quando existe mais de um Agente instalado (ex.: PC principal + PC
   // reserva) rodando ao mesmo tempo.
   if (!isAuthorizedToPrint()) {
-    log(`⛔ Impressão automática do pedido ${order.id} BLOQUEADA — este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora (o Painel está aberto/conectado em outro computador).`);
+    const motivo = !stationStatus || !stationStatus.active
+      ? 'o Painel não está aberto/conectado em NENHUM computador agora'
+      : `este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora (o Painel está aberto/conectado em outro computador)`;
+    log(`⛔ Impressão automática do pedido ${order.id} BLOQUEADA — ${motivo}.`);
+    return false;
+  }
+  // v92 — BUG CORRIGIDO ("não deve imprimir se o botão de aceite automático estiver
+  // desligado"): a impressão automática nasceu pensada pra andar junto do aceite automático
+  // (ver v55 no server.js) — sem isso ligado, o pedido fica pendente aguardando alguém aceitar
+  // manualmente, e imprimir sozinho gastava papel de pedidos que podiam nem ser aceitos.
+  if (!order._autoAcceptOn) {
+    log(`⏸️  Pedido ${order.id} recebido, mas impressão automática pulada — "Aceite automático" está desligado (Configurações → Pedidos). Use o botão "🖨 Imprimir" no painel se quiser essa via na hora.`);
     return false;
   }
   let anyPrinted = false;
@@ -371,7 +363,10 @@ async function printOnDemand(order, station) {
   // "Imprimir"/"Reimprimir" partido de qualquer aparelho só é executado por este Agente se
   // este computador for a Estação Ativa agora.
   if (!isAuthorizedToPrint()) {
-    log(`⛔ Impressão sob demanda da via "${station}" BLOQUEADA — este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora.`);
+    const motivo = !stationStatus || !stationStatus.active
+      ? 'o Painel não está aberto/conectado em NENHUM computador agora'
+      : `este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora`;
+    log(`⛔ Impressão sob demanda da via "${station}" BLOQUEADA — ${motivo}.`);
     await reportPrintResult(order, station, false, 'Estação não autorizada a imprimir agora (o Painel ativo está em outro computador).');
     return;
   }
@@ -398,11 +393,11 @@ async function printTestTicket(payload) {
     }
     printer.alignCenter(); printer.bold(true);
     printer.println('TESTE DE IMPRESSAO');
-    printer.bold(false); printer.setTextSize(ticketTextSizeLevel(printSize), ticketTextSizeLevel(printSize));
+    printer.bold(false);
     printer.println('Via: ' + (payload.label || payload.station));
     printer.println('Impressora: ' + printerCfg.label);
     printer.println(new Date().toLocaleString('pt-BR'));
-    printer.newLine(); printer.setTextNormal(); printer.cut();
+    printer.newLine(); printer.cut();
     if (isWinPrinter) {
       sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), printer.getBuffer());
     } else {
@@ -498,12 +493,21 @@ function startStationStatusPolling() {
 //     prefere BLOQUEAR a arriscar imprimir em duplicidade — a impressão automática desse
 //     pedido específico fica pendente até a conexão voltar (o pedido continua salvo
 //     normalmente, só a via automática desse Agente é que não sai até confirmar de novo).
+// v92 — BUG CORRIGIDO ("o agente não deve imprimir nada com o sistema fechado"): antes dessa
+// checagem só entrava em ação quando "stationId" estava configurado no config.json (recurso
+// opcional pra evitar imprimir em dobro com 2 agentes ligados ao mesmo tempo) — sem isso
+// configurado (o caso mais comum), o Agente sempre se considerava autorizado, mesmo que
+// NINGUÉM tivesse o Painel aberto em lugar nenhum. Agora a checagem de "o Painel está aberto
+// AGORA em algum computador" (mesmo heartbeat que já existia pra decidir a Estação Ativa, ver
+// server.js) vira OBRIGATÓRIA sempre — com ou sem stationId configurado. O stationId continua
+// como uma checagem A MAIS, só pra quando tem mais de um Agente instalado.
 function isAuthorizedToPrint() {
-  if (!STATION_ID) return true;
-  if (!stationStatus) return false;
+  if (!stationStatus) return false; // ainda não confirmou nada com o servidor — não arrisca
   const age = Date.now() - stationStatus.checkedAt;
-  if (age > STATION_STATUS_POLL_MS * 3) return false;
-  return !!stationStatus.active && stationStatus.activeStationId === STATION_ID;
+  if (age > STATION_STATUS_POLL_MS * 3) return false; // último status conhecido velho demais
+  if (!stationStatus.active) return false; // painel fechado em todo lugar agora — não imprime
+  if (!STATION_ID) return true; // sem stationId configurado: só a checagem acima já basta
+  return stationStatus.activeStationId === STATION_ID;
 }
 
 function connectStream() {
@@ -576,7 +580,6 @@ async function start() {
   try {
     await login();
     connectStream();
-    startPrintSizePolling();
   } catch (e) {
     log(`❌ ${e.message}`);
     scheduleReconnect();
