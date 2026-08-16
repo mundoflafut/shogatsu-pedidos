@@ -257,7 +257,65 @@ function printStationTicket(printer, order, station, storeName) {
 // v54: extraído de dentro de printOrder() pra poder imprimir UMA via específica sob
 // demanda (reimpressão manual pedida do painel, de celular ou PC — ver evento
 // "print-order" mais abaixo), sem precisar reimprimir todas as vias desse agente de novo.
-// v55: agora escolhe AUTOMATICAMENTE qual impressora física usar (USB, Rede 1, Rede 2...)
+// v93 — via de RESERVA DE MESA. Usa a impressora configurada pra via "caixa" (é quem
+// normalmente atende o cliente que reservou). Mesmas travas de segurança do pedido novo
+// (isAuthorizedToPrint) — não imprime se este computador não estiver autorizado agora.
+function printReservationTicket(printer, reservation, storeName) {
+  const tam = tamanhoImpressaoTermica(reservation._printFontSize);
+  printer.alignCenter();
+  printer.bold(true); printer.setTextDoubleHeight();
+  printer.println((storeName || 'SHOGATSU').toUpperCase());
+  printer.setTextNormal(); printer.bold(false);
+  printer.println('CULINARIA ORIENTAL');
+  printer.drawLine();
+  printer.setTextSize(tam.h, tam.w);
+  printer.bold(true); printer.println('RESERVA DE MESA'); printer.bold(false);
+  printer.alignLeft();
+  printer.println('Ref.: ' + reservation.id);
+  printer.println('Status: ' + (reservation.status === 'confirmada' ? 'CONFIRMADA' : 'PENDENTE DE CONFIRMACAO'));
+  printer.drawLine();
+  printer.bold(true); printer.println('CLIENTE'); printer.bold(false);
+  printer.drawLine();
+  printer.println(reservation.name);
+  printer.println('Tel: ' + reservation.phone);
+  printer.drawLine();
+  printer.bold(true); printer.println('DETALHES'); printer.bold(false);
+  printer.drawLine();
+  const dataFmt = reservation.date ? new Date(reservation.date + 'T00:00').toLocaleDateString('pt-BR') : '';
+  printer.println('Data: ' + dataFmt);
+  printer.println('Hora: ' + reservation.time);
+  printer.println('Pessoas: ' + reservation.people);
+  if (reservation.notes) { printer.drawLine(); printer.println('Obs: ' + reservation.notes); }
+  printer.setTextNormal();
+  printer.alignCenter();
+  printer.println('Reservado em ' + new Date(reservation.createdAt).toLocaleString('pt-BR'));
+}
+async function printReservation(reservation) {
+  if (!isAuthorizedToPrint()) {
+    log(`⛔ Impressão da reserva ${reservation.id} BLOQUEADA — o Painel não está aberto/conectado agora (ou este não é o computador ativo).`);
+    return;
+  }
+  const printerCfg = printerForStation('caixa');
+  if (!printerCfg) { log(`⚠️  Nenhuma impressora configurada pra via "caixa" — reserva ${reservation.id} não impressa.`); return; }
+  if (TEST_MODE) { log(`🧪 [TEST_MODE] Imprimiria agora a reserva ${reservation.id} (impressora: ${printerCfg.label})`); return; }
+  const printer = buildPrinter(printerCfg);
+  const isWinPrinter = isWindowsNamedPrinter(printerCfg);
+  try {
+    if (!isWinPrinter) {
+      const connected = await printer.isPrinterConnected();
+      if (!connected) throw new Error(`Impressora "${printerCfg.label}" não respondeu.`);
+    }
+    printReservationTicket(printer, reservation, cfg.storeName);
+    printer.newLine(); printer.cut();
+    if (isWinPrinter) sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), printer.getBuffer());
+    else await printer.execute();
+    log(`✅ Reserva ${reservation.id} impressa com sucesso na impressora "${printerCfg.label}".`);
+  } catch (err) {
+    log(`❌ Falha ao imprimir reserva ${reservation.id} (impressora "${printerCfg.label}"): ${err.message}`);
+  }
+}
+
+
 // de acordo com qual delas cuida dessa via — cada comanda sai na impressora certa, no
 // local certo, mesmo com várias impressoras diferentes no mesmo agente.
 // v60: avisa o servidor se a impressão dessa via deu certo ou não — é isso que faz o aviso
@@ -394,9 +452,16 @@ async function printTestTicket(payload) {
     printer.alignCenter(); printer.bold(true);
     printer.println('TESTE DE IMPRESSAO');
     printer.bold(false);
+    // v93 — BUG CORRIGIDO ("impressora ainda não está atualizando tamanho da fonte"): o teste
+    // de impressão (botão "🖨 Testar" em Configurações) sempre imprimia em tamanho padrão,
+    // ignorando cfg.printSize por completo — era exatamente o que a pessoa usava pra conferir
+    // se o tamanho tinha mudado, então parecia que a configuração nunca fazia efeito nenhum.
+    const tam = tamanhoImpressaoTermica(payload.fontSize);
+    printer.setTextSize(tam.h, tam.w);
     printer.println('Via: ' + (payload.label || payload.station));
     printer.println('Impressora: ' + printerCfg.label);
     printer.println(new Date().toLocaleString('pt-BR'));
+    printer.setTextNormal();
     printer.newLine(); printer.cut();
     if (isWinPrinter) {
       sendRawBufferToWindowsPrinter(windowsPrinterName(printerCfg), printer.getBuffer());
@@ -462,23 +527,26 @@ async function announcePresence() {
   announceTimer = setTimeout(announcePresence, 45000);
 }
 
-// v90: Estação Ativa de Impressão — só consultada quando "stationId" está configurado no
-// config.json (ver STATION_ID acima). Guarda o ÚLTIMO status conhecido do servidor (quem é a
-// estação ativa agora) num cache local, atualizado a cada STATION_STATUS_POLL_MS — assim a
-// checagem em isAuthorizedToPrint() (chamada em CADA impressão) é instantânea, sem esperar
-// nenhuma requisição de rede na hora de imprimir.
+// v90: Estação Ativa de Impressão — guarda o ÚLTIMO status conhecido do servidor (quem é a
+// estação ativa agora, e se o Painel está aberto em ALGUM lugar) num cache local, atualizado a
+// cada STATION_STATUS_POLL_MS — assim a checagem em isAuthorizedToPrint() (chamada em CADA
+// impressão) é instantânea, sem esperar nenhuma requisição de rede na hora de imprimir.
+// v93 — BUG CRÍTICO CORRIGIDO: esse polling só rodava quando "stationId" estava configurado no
+// config.json. Na v92, a checagem "o Painel está aberto em algum lugar" virou OBRIGATÓRIA pra
+// TODO agente (com ou sem stationId) — mas sem o polling rodando, `stationStatus` nunca era
+// preenchido pros agentes sem stationId (o caso mais comum), e a impressão automática ficava
+// SEMPRE bloqueada, silenciosamente. Agora o polling roda sempre, independente de stationId.
 let stationStatus = null; // { active, activeStationId, activeLabel, checkedAt }
 let stationStatusTimer = null;
 const STATION_STATUS_POLL_MS = 8000;
 async function refreshStationStatus() {
-  if (!STATION_ID || !token) return;
+  if (!token) return;
   try {
     const r = await request('GET', `${cfg.serverUrl}/api/print-station/status?token=${encodeURIComponent(token)}`);
     if (r.status === 200 && r.data) stationStatus = { ...r.data, checkedAt: Date.now() };
   } catch (e) { /* mantém o último status conhecido; se ficar velho demais, isAuthorizedToPrint() já bloqueia por segurança */ }
 }
 function startStationStatusPolling() {
-  if (!STATION_ID) return; // sem stationId configurado = modo compatível/legado, nunca consulta
   refreshStationStatus();
   clearInterval(stationStatusTimer);
   stationStatusTimer = setInterval(refreshStationStatus, STATION_STATUS_POLL_MS);
@@ -540,6 +608,14 @@ function connectStream() {
             log(`🆕 Pedido novo recebido: ${order.id} (${order.name})`);
             printOrder(order);
           } catch (e) { log(`⚠️  Não consegui interpretar o pedido recebido: ${e.message}`); }
+        } else if (eventName === 'new-reservation-print') {
+          // v93: reserva de mesa também imprime — mesmo caminho/trava (só imprime se este
+          // computador estiver autorizado, ver isAuthorizedToPrint) do pedido novo.
+          try {
+            const reservation = JSON.parse(dataLine.slice(5).trim());
+            log(`🪑 Reserva nova recebida: ${reservation.id} (${reservation.name})`);
+            printReservation(reservation);
+          } catch (e) { log(`⚠️  Não consegui interpretar a reserva recebida: ${e.message}`); }
         } else if (eventName === 'print-test') {
           // v46: teste de impressão sob demanda, disparado pelo botão "🖨 Testar" no painel
           // quando a via está configurada como "Automática".
