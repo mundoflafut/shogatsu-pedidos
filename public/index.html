@@ -206,20 +206,30 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .qty-ctrl button{background:none;border:none;color:var(--white);width:32px;height:32px;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
 .qty-ctrl button:hover{background:var(--red-dk);}
 .qty-ctrl span{min-width:28px;text-align:center;font-size:14px;font-weight:600;}
-.vgroup-title{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin:16px 0 8px;display:flex;align-items:center;gap:8px;}
+.vgroup-title{font-size:13px;font-weight:700;letter-spacing:.3px;color:var(--white);margin:20px 0 3px;display:flex;align-items:center;gap:8px;}
 .vgroup-title:first-child{margin-top:0;}
+.vgroup-sub{font-size:11px;color:var(--muted);margin-bottom:10px;letter-spacing:.2px;}
 .vreq-tag{font-size:9px;background:var(--red-bg);color:var(--red-lt);border-radius:20px;padding:2px 8px;letter-spacing:.5px;}
 .contact-opt{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
 .contact-opt:hover{border-color:var(--gold);}
 .contact-opt .co-icon{font-size:24px;}
 .contact-opt .co-name{font-size:14px;font-weight:600;}
 .contact-opt .co-sub{font-size:11px;color:var(--muted);}
-.vopt-chip{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,background .15s;}
-.vopt-chip:hover{border-color:var(--red-dk);}
-.vopt-chip.selected{border-color:var(--gold);background:rgba(201,168,76,.08);}
-.vopt-chip-name{font-size:13px;}
-.vopt-chip-price{font-size:12px;color:var(--muted);}
-.vopt-chip.selected .vopt-chip-price{color:var(--gold);}
+/* v92 — redesign visual das opções de variação (cardápio do cliente): cards maiores, marcador
+   grande e óbvio (⚪/🔘), toda a área clicável, destaque elegante no selecionado. Só visual —
+   a lógica de seleção (toggleVariantOption) continua exatamente a mesma. */
+.vopt-chip{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s,transform .1s;-webkit-tap-highlight-color:transparent;}
+.vopt-chip:active{transform:scale(.98);}
+.vopt-chip:hover{border-color:var(--gold);}
+.vopt-chip.selected{border-color:var(--gold);background:rgba(201,168,76,.10);box-shadow:0 0 0 1px var(--gold) inset;}
+.vopt-marker{font-size:20px;line-height:1;flex-shrink:0;filter:grayscale(1) opacity(.55);}
+.vopt-chip.selected .vopt-marker{filter:none;}
+.vopt-chip-body{flex:1;min-width:0;}
+.vopt-chip-name{font-size:14px;font-weight:600;display:block;}
+.vopt-chip.selected .vopt-chip-name{color:var(--gold);}
+.vopt-chip-price{font-size:11.5px;color:var(--muted);margin-top:2px;display:block;}
+.vopt-chip-price.included{color:#4ade80;font-weight:600;letter-spacing:.3px;}
+.vopt-chip.selected .vopt-chip-price:not(.included){color:var(--gold);}
 .coupon-chip{background:var(--card);border:1px solid var(--gold);border-radius:20px;padding:6px 12px;font-size:11px;color:var(--gold);cursor:pointer;transition:background .15s;white-space:nowrap;animation:couponGlow 2s ease-in-out infinite;}
 @keyframes couponGlow{0%,100%{box-shadow:0 0 0 rgba(201,168,76,0);}50%{box-shadow:0 0 10px rgba(201,168,76,.5);}}
 @keyframes couponFlash{0%{transform:scale(1);}30%{transform:scale(1.08);}100%{transform:scale(1);}}
@@ -2786,7 +2796,7 @@ function renderMenu() {
               ${!isAvail
                 ? `<span style="font-size:11px;color:var(--muted);">Indisponível</span>`
                 : hasVariants
-                ? `<button class="add-btn add-btn-text" style="width:auto;padding:0 14px;" onclick="openVariantPicker('${key}')">+ Pedir aqui</button>`
+                ? `<button class="add-btn" style="width:auto;padding:0 14px;border-radius:20px;font-size:12px;" onclick="openVariantPicker('${key}')">🎛 Personalizar</button>`
                 : inCart
                 ? `<div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${inCart.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>`
                 : `<button class="add-btn add-btn-text" onclick="addToCart('${key}')" data-key="${key}">+ Pedir aqui</button>`
@@ -3021,17 +3031,34 @@ function renderVariantPicker() {
   const { item, selections, qty } = variantPicker;
   document.getElementById('variant-title').textContent = item.name;
   const unitPrice = variantUnitPrice();
-  const groupsHTML = item.variants.map((g, gi) => `
-    <div class="vgroup-title">${g.name} ${g.required ? '<span class="vreq-tag">Obrigatório</span>' : '<span class="vreq-tag" style="background:var(--border2);color:var(--muted);">Opcional</span>'}</div>
+  const groupsHTML = item.variants.map((g, gi) => {
+    const isSingleRequired = g.required && g.type !== 'multiple';
+    const subLabel = isSingleRequired ? 'Obrigatório • escolha 1' : (g.required ? 'Obrigatório' : 'Opcional');
+    return `
+    <div class="vgroup-title">${g.name}</div>
+    <div class="vgroup-sub">${subLabel}</div>
     ${g.options.map((o, oi) => {
       const isSel = (selections[g.id] || []).includes(oi);
+      const marker = isSel ? (g.type === 'multiple' ? '🔘' : '🔘') : '⚪';
+      let precoHTML;
+      if (!o.priceDelta) {
+        precoHTML = `<span class="vopt-chip-price included">INCLUSO NO VALOR</span>`;
+      } else if (o.priceDelta > 0) {
+        precoHTML = `<span class="vopt-chip-price">+ R$ ${o.priceDelta.toFixed(2).replace('.', ',')}</span>`;
+      } else {
+        precoHTML = `<span class="vopt-chip-price">- R$ ${Math.abs(o.priceDelta).toFixed(2).replace('.', ',')}</span>`;
+      }
       return `
       <div class="vopt-chip ${isSel ? 'selected' : ''}" onclick="toggleVariantOption(${gi},${oi})">
-        <span class="vopt-chip-name">${isSel ? (g.type === 'multiple' ? '☑' : '●') : (g.type === 'multiple' ? '☐' : '○')} ${o.name}</span>
-        <span class="vopt-chip-price">${o.priceDelta ? (o.priceDelta > 0 ? '+R$ ' + o.priceDelta.toFixed(2).replace('.', ',') : '-R$ ' + Math.abs(o.priceDelta).toFixed(2).replace('.', ',')) : 'grátis'}</span>
+        <span class="vopt-marker">${marker}</span>
+        <span class="vopt-chip-body">
+          <span class="vopt-chip-name">${o.name}</span>
+          ${precoHTML}
+        </span>
       </div>`;
     }).join('')}
-  `).join('');
+  `;
+  }).join('');
   const canConfirm = variantCanConfirm();
   document.getElementById('variant-body').innerHTML = `
     <div class="item-desc" style="margin-bottom:4px;">${item.desc || ''}</div>

@@ -704,6 +704,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
     <button class="nav-item" data-page="custos" data-min-role="admin" onclick="goPage('custos')"><span class="ni">💰</span> Custos</button>
+    <button class="nav-item" data-page="ia" data-min-role="admin" onclick="goPage('ia')"><span class="ni">🤖</span> IA do Cardápio <span class="nb" id="nb-ia-aprovacoes" style="display:none">0</span></button>
     <button class="nav-item" data-page="qrlinks" data-min-role="admin" onclick="goPage('qrlinks')"><span class="ni">🔗</span> QR Code &amp; Links</button>
     <button class="nav-item" data-page="relatorios" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>
     <button class="nav-item" data-page="avaliacoes" data-min-role="admin" onclick="goPage('avaliacoes')"><span class="ni">⭐</span> Avaliações</button>
@@ -729,13 +730,6 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         <div class="store-toggle-label" id="auto-accept-status-sub">desligado</div>
       </div>
       <label class="toggle"><input type="checkbox" id="auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
-    </div>
-    <div class="store-toggle" style="margin-top:8px;" title="Quando ligado, toda reserva de mesa nova já entra CONFIRMADA automaticamente, sem precisar clicar em &quot;Confirmar&quot; no painel.">
-      <div>
-        <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">Aceite Automático de Reserva</div>
-        <div class="store-toggle-label" id="auto-accept-rsv-status-sub">desligado</div>
-      </div>
-      <label class="toggle"><input type="checkbox" id="auto-accept-rsv-toggle" onchange="toggleAutoAcceptReservations(this)"><span class="toggle-slider"></span></label>
     </div>
   </div>
   <div class="sidebar-resize-handle" id="sidebar-resize-handle" title="Arraste para redimensionar"></div>
@@ -1162,6 +1156,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <button class="btn secondary sm" onclick="adicionarFaqIa()" style="margin-top:6px;">+ Adicionar pergunta</button>
           </div>
 
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">🤖 IA do Cardápio — Badges</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;">
+              <input type="checkbox" id="ia-badges-auto"/> Permitir alteração automática de badges (🔥 Mais Pedido aplicado sozinho quando a IA analisar as vendas, sem precisar aprovar um por um — outras sugestões da IA continuam sempre exigindo aprovação)
+            </label>
+          </div>
+
           <button class="btn success sm" onclick="saveIaSettings()" style="margin-top:14px;">💾 Salvar Atendimento</button>
           <div id="ia-save-status" style="font-size:12px;margin-top:8px;"></div>
         </div>
@@ -1292,12 +1293,22 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div class="panel-header"><span class="panel-title">+ Nova ficha técnica (prato)</span></div>
           <div class="panel-body">
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
-              <div class="field" style="flex:1;min-width:180px;"><label>Nome do prato</label><input id="nf-nome" placeholder="Ex: Hot roll salmão"/></div>
+              <div class="field" style="flex:1;min-width:180px;"><label>Nome do prato</label><input id="nf-nome" placeholder="Ex: Hot Filadélfia — 10 peças"/></div>
               <div class="field" style="flex:1;min-width:120px;"><label>Categoria</label><input id="nf-categoria" placeholder="Ex: Quentes"/></div>
               <div class="field" style="width:150px;"><label>Rendimento (porções)</label><input id="nf-rendimento" type="number" value="1" min="1"/></div>
               <div class="field" style="width:150px;"><label>Preço de venda (R$)</label><input id="nf-preco-venda" type="number" step="0.01" placeholder="opcional"/></div>
               <button class="btn primary" onclick="criarFichaTecnica()" style="height:38px;margin-bottom:14px;">Criar</button>
             </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#333);">
+              <div class="field" style="flex:1;min-width:220px;margin-bottom:0;">
+                <label>🔗 Ou gerar como variação de uma ficha base (não duplica a receita)</label>
+                <select id="nf-ficha-base">
+                  <option value="">— Ficha independente (não é variação) —</option>
+                </select>
+              </div>
+              <div class="field" style="width:170px;margin-bottom:0;"><label>Fator de multiplicação</label><input id="nf-multiplicador" type="number" step="0.5" placeholder="Ex: 10 (para 10 peças)"/></div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Ex: crie primeiro "Hot Filadélfia — base por peça" com a receita normal, depois crie "Hot Filadélfia — 10 peças" escolhendo a base acima e multiplicador 10 — a quantidade de cada ingrediente é calculada sozinha.</div>
           </div>
         </div>
         <div id="custos-lista-fichas"></div>
@@ -1314,6 +1325,34 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ── IA DO CARDÁPIO (v91) — sugestão de novos pratos + central de aprovações ── -->
+    <div class="page" id="page-ia">
+      <div id="ia-stats-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header"><span class="panel-title">✨ Pedir sugestão de prato novo</span></div>
+        <div class="panel-body">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+            A IA olha seu cardápio atual e sugere um prato novo, com ficha técnica, custo e preço estimados.
+            ⚠️ Ela usa o conhecimento próprio do modelo — <b>não pesquisa preços reais na internet</b> — por
+            isso a ficha nasce sempre como 🟡 Estimada, e o produto só aparece no cardápio depois que você
+            aprovar aqui embaixo.
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+            <div class="field" style="flex:1;min-width:220px;margin-bottom:0;"><label>Tema/pedido (opcional)</label><input id="ia-sugestao-tema" placeholder="Ex: algo com atum, ou deixe em branco"/></div>
+            <button class="btn primary" id="btn-ia-sugerir" onclick="pedirSugestaoIA()" style="height:38px;">🤖 Gerar sugestão</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="topbar-btn active" id="ia-tabbtn-pendente" onclick="switchIaTab('pendente')">🕓 Pendentes</button>
+        <button class="topbar-btn" id="ia-tabbtn-decidido" onclick="switchIaTab('decidido')">📜 Histórico</button>
+      </div>
+      <div id="ia-lista-aprovacoes"></div>
+      <div id="ia-aprovacoes-vazio" style="text-align:center;padding:40px;color:var(--muted);display:none;">Nenhuma proposta por aqui ainda.</div>
     </div>
 
     <!-- ── QR CODE & LINKS ── -->
@@ -1682,6 +1721,36 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
         </div>
         <div class="settings-accordion-body" id="acc-body-restaurante">
           <div class="settings-grid">
+<div class="settings-card" style="grid-column:1/-1;">
+          <div class="settings-card-title">🤖 Automações</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">
+            Mesmos interruptores que aparecem no rodapé do menu lateral — só que aqui, em card,
+            fica mais fácil de ver o estado certinho (ligado/desligado) e o que cada um faz.
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">🏪 Restaurante Aberto</div>
+                <div class="store-toggle-label" id="cfg-store-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Desligado = cardápio mostra "Fechado" e não aceita pedido novo.</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-store-toggle" onchange="toggleStore(this)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📋 Aceite Automático de Pedidos</div>
+                <div class="store-toggle-label" id="cfg-auto-accept-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-toggle" onchange="toggleAutoAccept(this)"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="store-toggle" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+              <div>
+                <div class="store-toggle-label" style="font-weight:600;color:var(--white);font-size:12px;">📅 Aceite Automático de Reservas</div>
+                <div class="store-toggle-label" id="cfg-auto-accept-rsv-status-sub" style="font-size:10px;color:var(--muted);margin-top:2px;">Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="cfg-auto-accept-rsv-toggle" onchange="toggleAutoAcceptReservations(this)"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
 <div class="settings-card">
           <div class="settings-card-title">📋 Dados do Restaurante</div>
           <div class="field"><label>Nome do Restaurante</label><input id="cfg-name" placeholder="Shogatsu Culinária Oriental"/></div>
@@ -3343,13 +3412,25 @@ async function loadConfigAndMenu(){
   document.getElementById('store-status-text').textContent = (Number(cfg.open) ? 'Restaurante Aberto' : 'Restaurante Fechado') + (autoSched ? ' (auto)' : '');
   document.getElementById('auto-accept-toggle').checked = Boolean(Number(cfg.autoAcceptOrders));
   document.getElementById('auto-accept-status-sub').textContent = Number(cfg.autoAcceptOrders) ? 'ligado — aceita sozinho' : 'desligado';
-  // v91: 3º interruptor do rodapé (Reserva) — antes só existia duplicado dentro de
-  // Configurações; agora mora só aqui, junto dos outros dois.
-  const rsvToggleEl = document.getElementById('auto-accept-rsv-toggle');
-  if (rsvToggleEl) rsvToggleEl.checked = Boolean(Number(cfg.autoAcceptReservations));
-  const rsvSubFooterEl = document.getElementById('auto-accept-rsv-status-sub');
-  if (rsvSubFooterEl) rsvSubFooterEl.textContent = Number(cfg.autoAcceptReservations) ? 'ligado — aceita sozinho' : 'desligado';
   applyAdminChatBackground();
+  // v78: mesmos interruptores, agora também como card em Configurações → 🏪 Restaurante
+  syncAutomationToggles();
+}
+// v78: os interruptores de automação existem em dois lugares (rodapé do menu + card em
+// Configurações) — essa função mantém os dois sempre iguais, não importa qual foi clicado.
+function syncAutomationToggles(){
+  const storeEl = document.getElementById('cfg-store-toggle');
+  if (storeEl) { storeEl.checked = Boolean(Number(cfg.open)); storeEl.disabled = !!(cfg.schedule && cfg.schedule.enabled); }
+  const autoEl = document.getElementById('cfg-auto-accept-toggle');
+  if (autoEl) autoEl.checked = Boolean(Number(cfg.autoAcceptOrders));
+  const subEl = document.getElementById('cfg-auto-accept-status-sub');
+  if (subEl) subEl.textContent = Number(cfg.autoAcceptOrders) ? '✅ Ligado — pedido novo já entra aceito.' : 'Pedido novo já entra ACEITO, com número de ficha — sem clicar em nada.';
+  const rsvEl = document.getElementById('cfg-auto-accept-rsv-toggle');
+  if (rsvEl) rsvEl.checked = Boolean(Number(cfg.autoAcceptReservations));
+  const rsvSubEl = document.getElementById('cfg-auto-accept-rsv-status-sub');
+  if (rsvSubEl) rsvSubEl.textContent = Number(cfg.autoAcceptReservations) ? '✅ Ligado — reserva nova já entra confirmada.' : 'Reserva nova já entra CONFIRMADA — sem clicar em "Confirmar".';
+  const storeSubEl = document.getElementById('cfg-store-status-sub');
+  if (storeSubEl) storeSubEl.textContent = Number(cfg.open) ? '✅ Aberto — recebendo pedidos normalmente.' : '🔴 Fechado — cardápio mostra "Fechado" e não aceita pedido novo.';
 }
 
 async function loadOrders(){
@@ -3510,8 +3591,8 @@ setInterval(tick,1000);tick();
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',mensagens:'Mensagens',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações',impressao:'Central de Impressão'};
-const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin', impressao:'admin' };
+const pageTitles={pedidos:'Gerenciar Pedidos',reservas:'Reserva de Mesas',mensagens:'Mensagens',motoboys:'Motoboys',cardapio:'Editar Cardápio',custos:'Custos & Ficha Técnica',ia:'🤖 IA do Cardápio',qrlinks:'QR Code & Links',relatorios:'Relatórios',configuracoes:'Configurações',usuarios:'Usuários',avaliacoes:'Avaliações',impressao:'Central de Impressão'};
+const PAGE_MIN_ROLE = { cardapio:'admin', custos:'admin', ia:'admin', qrlinks:'admin', relatorios:'admin', configuracoes:'admin', usuarios:'master', avaliacoes:'admin', motoboys:'admin', impressao:'admin' };
 function goPage(id, silent){
   if(PAGE_MIN_ROLE[id] && !hasRole(PAGE_MIN_ROLE[id])){
     showToast('🔒 Acesso restrito','Seu usuário não tem permissão pra essa área.');
@@ -3526,6 +3607,7 @@ function goPage(id, silent){
   if(id==='reservas')renderReservationsList();
   if(id==='cardapio')renderMenuEditor();
   if(id==='custos')renderCustosPage();
+  if(id==='ia')renderIaPage();
   if(id==='qrlinks'){renderQrLinksPage();renderRpEditor();}
   if(id==='relatorios')renderReports();
   if(id==='configuracoes' && !silent)loadSettings();
@@ -3573,9 +3655,9 @@ async function toggleStore(el){
   cfg.open = el.checked ? 1 : 0;
   const txt=document.getElementById('store-status-text');
   txt.textContent=cfg.open?'Restaurante Aberto':'Restaurante Fechado';
-  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
-  const res = await apiPost('/api/store/toggle',{ open: cfg.open });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.open = el.checked?1:0; txt.textContent=cfg.open?'Restaurante Aberto':'Restaurante Fechado'; return; }
+  const res = await apiPost('/api/config',{ cfg:{open:cfg.open}, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  syncAutomationToggles();
   showToast(cfg.open?'✅ Aberto':'❌ Fechado', cfg.open?'Restaurante está aceitando pedidos.':'Restaurante não está aceitando pedidos.');
 }
 
@@ -3586,9 +3668,9 @@ async function toggleStore(el){
 async function toggleAutoAccept(el){
   cfg.autoAcceptOrders = el.checked ? 1 : 0;
   document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado';
-  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
-  const res = await apiPost('/api/auto-accept/toggle',{ autoAcceptOrders: cfg.autoAcceptOrders });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.autoAcceptOrders = el.checked?1:0; document.getElementById('auto-accept-status-sub').textContent = cfg.autoAcceptOrders ? 'ligado — aceita sozinho' : 'desligado'; return; }
+  const res = await apiPost('/api/config',{ cfg:{autoAcceptOrders:cfg.autoAcceptOrders}, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); return; }
+  syncAutomationToggles();
   showToast(cfg.autoAcceptOrders?'🤖 Aceite automático ligado':'✋ Aceite automático desligado', cfg.autoAcceptOrders?'Pedidos novos já entram aceitos, sem precisar clicar em nada.':'Volta a precisar clicar em "Aceitar Pedido" pra cada um.');
 }
 // v78: liga/desliga o aceite automático de RESERVAS — mesma ideia da de pedidos, mas pra
@@ -3596,11 +3678,9 @@ async function toggleAutoAccept(el){
 // /api/reservations no server.js), sem precisar clicar em "Confirmar" no painel.
 async function toggleAutoAcceptReservations(el){
   cfg.autoAcceptReservations = el.checked ? 1 : 0;
-  const subEl = document.getElementById('auto-accept-rsv-status-sub');
-  if(subEl) subEl.textContent = cfg.autoAcceptReservations ? 'ligado — aceita sozinho' : 'desligado';
-  // v91: rota enxuta liberada pra qualquer login (não só admin/master) — ver server.js
-  const res = await apiPost('/api/auto-accept-reservations/toggle',{ autoAcceptReservations: cfg.autoAcceptReservations });
-  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; cfg.autoAcceptReservations = el.checked?1:0; if(subEl) subEl.textContent = cfg.autoAcceptReservations ? 'ligado — aceita sozinho' : 'desligado'; return; }
+  const res = await apiPost('/api/config',{ cfg:{autoAcceptReservations:cfg.autoAcceptReservations}, menu });
+  if(!res.ok){ alert(res.data.error||'Erro ao salvar.'); el.checked = !el.checked; return; }
+  syncAutomationToggles();
   showToast(cfg.autoAcceptReservations?'🤖 Aceite automático de reservas ligado':'✋ Aceite automático de reservas desligado', cfg.autoAcceptReservations?'Reservas novas já entram confirmadas, sem precisar clicar em nada.':'Volta a precisar clicar em "Confirmar" pra cada reserva.');
 }
 
@@ -5994,28 +6074,65 @@ async function carregarFichasCustos(){
   custosFichas = await apiGet('/api/custos/fichas');
   renderFichasCustos();
 }
+const FICHA_STATUS_INFO = {
+  oficial:  { label: '🟢 Oficial',          cls: 'pronto' },
+  estimada: { label: '🟡 Estimada',          cls: 'prep' },
+  revisao:  { label: '🔴 Precisa revisão',   cls: 'cancelado' }
+};
+function popularSelectFichaBase(selectEl, excluirId){
+  const atual = selectEl.value;
+  const opcoes = custosFichas.filter(f=>f.id!==excluirId && !f.fichaBaseId); // só fichas "raiz" viram base
+  selectEl.innerHTML = '<option value="">— Ficha independente (não é variação) —</option>' +
+    opcoes.map(f=>`<option value="${f.id}">${esc(f.nome)}</option>`).join('');
+  if(atual && opcoes.some(f=>f.id===atual)) selectEl.value = atual;
+}
 function renderFichasCustos(){
   const wrap=document.getElementById('custos-lista-fichas');
   const vazio=document.getElementById('custos-fichas-vazio');
+  popularSelectFichaBase(document.getElementById('nf-ficha-base'), null);
   if(custosFichas.length===0){ wrap.innerHTML=''; vazio.style.display='block'; return; }
   vazio.style.display='none';
-  wrap.innerHTML = custosFichas.map(f=>`
+  wrap.innerHTML = custosFichas.map(f=>{
+    const st = FICHA_STATUS_INFO[f.status] || FICHA_STATUS_INFO.oficial;
+    const ehVariacao = !!f.fichaBaseId;
+    return `
     <div class="panel" style="margin-bottom:14px;">
       <div class="panel-header">
-        <span class="panel-title">${esc(f.nome)} ${f.temPrecoDefasado?'<span class="status-badge cancelado" style="margin-left:6px;">⚠ ingrediente defasado</span>':''}</span>
-        <button class="oa-btn cancel sm" style="padding:5px 10px;" onclick="excluirFichaCustos('${f.id}')">Excluir ficha</button>
+        <span class="panel-title">${esc(f.nome)}
+          <span class="status-badge ${st.cls}" style="margin-left:6px;">${st.label}</span>
+          ${f.temPrecoDefasado?'<span class="status-badge cancelado" style="margin-left:6px;">⚠ ingrediente defasado</span>':''}
+        </span>
+        <div style="display:flex;gap:8px;">
+          ${f.status!=='oficial'?`<button class="btn secondary sm" style="padding:5px 10px;" onclick="confirmarFichaOficial('${f.id}')">✅ Confirmar como oficial</button>`:''}
+          <button class="oa-btn cancel sm" style="padding:5px 10px;" onclick="excluirFichaCustos('${f.id}')">Excluir ficha</button>
+        </div>
       </div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${esc(f.categoria||'sem categoria')} · rende ${f.rendimento} porç${f.rendimento==1?'ão':'ões'}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${esc(f.categoria||'sem categoria')} · rende ${f.rendimento} porç${f.rendimento==1?'ão':'ões'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Origem: ${esc(f.origem||'Cadastro manual')}</div>
+        ${ehVariacao?`
+        <div style="font-size:12px;background:var(--panel);border-radius:8px;padding:8px 10px;margin-bottom:10px;">
+          🔗 Variação de <b>${esc(f.nomeFichaBase||'(ficha base removida)')}</b> × <b>${f.multiplicador||1}</b> —
+          a quantidade de cada ingrediente é calculada automaticamente a partir da ficha base.
+          <a href="#" onclick="desvincularFichaBase('${f.id}');return false;" style="margin-left:6px;">desvincular</a>
+        </div>`:`
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px;">
+          <div class="field" style="flex:1;min-width:200px;margin-bottom:0;"><label>Vincular esta ficha como variação de:</label>
+            <select id="vincular-base-${f.id}"></select>
+          </div>
+          <div class="field" style="width:150px;margin-bottom:0;"><label>Fator</label><input id="vincular-mult-${f.id}" type="number" step="0.5" placeholder="Ex: 10"/></div>
+          <button class="btn secondary sm" style="height:34px;" onclick="vincularFichaBase('${f.id}')">Vincular</button>
+        </div>`}
         <div style="margin-bottom:10px;">
           ${(f.itensCalculados||[]).map((it,idx)=>`
             <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;">
               <div>${esc(it.nomeIngrediente||'(ingrediente removido)')}</div>
               <div style="color:var(--muted);">${it.quantidade} ${esc(it.unidade||it.unidadeIngrediente||'')}</div>
               <div style="color:var(--muted);">${fmtMoedaCustos(it.custo)}</div>
-              <button class="oa-btn cancel sm" style="padding:3px 8px;" onclick="removerItemFichaCustos('${f.id}',${idx})">✕</button>
+              ${ehVariacao?'':`<button class="oa-btn cancel sm" style="padding:3px 8px;" onclick="removerItemFichaCustos('${f.id}',${idx})">✕</button>`}
             </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Nenhum ingrediente adicionado ainda.</div>'}
         </div>
+        ${ehVariacao?'':`
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px;">
           <div class="field" style="flex:1;min-width:180px;margin-bottom:0;"><label>Ingrediente</label>
             <select id="sel-ing-${f.id}">
@@ -6033,7 +6150,7 @@ function renderFichasCustos(){
             </select>
           </div>
           <button class="btn secondary" style="height:38px;" onclick="adicionarItemFichaCustos('${f.id}')">+ Adicionar</button>
-        </div>
+        </div>`}
         <div style="display:flex;gap:24px;flex-wrap:wrap;padding:12px;background:var(--panel);border-radius:10px;margin-bottom:10px;">
           <div><div style="font-size:11px;color:var(--muted);">Custo total</div><div style="font-size:16px;font-weight:600;">${fmtMoedaCustos(f.custoTotal)}</div></div>
           <div><div style="font-size:11px;color:var(--muted);">Custo por porção</div><div style="font-size:16px;font-weight:600;color:var(--gold,#e3bd6a);">${fmtMoedaCustos(f.custoPorPorcao)}</div></div>
@@ -6049,19 +6166,166 @@ function renderFichasCustos(){
           </div>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  custosFichas.forEach(f=>{ if(!f.fichaBaseId){ const sel=document.getElementById('vincular-base-'+f.id); if(sel) popularSelectFichaBase(sel, f.id); } });
+}
+async function confirmarFichaOficial(id){
+  const r=await fetch('/api/custos/fichas/'+id+'/confirmar', {method:'POST', headers:authHeaders()});
+  if(r.status===401){ doLogout(); return; }
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.error||'Erro ao confirmar.'); return; }
+  await renderCustosPage();
+  showToast('✅ Ficha confirmada', 'Agora é a ficha oficial do restaurante.');
+}
+async function vincularFichaBase(fichaId){
+  const baseId=document.getElementById('vincular-base-'+fichaId).value;
+  const mult=document.getElementById('vincular-mult-'+fichaId).value;
+  if(!baseId){ alert('Escolha uma ficha base.'); return; }
+  if(!mult || Number(mult)<=0){ alert('Informe o fator de multiplicação (ex: 10 para 10 peças).'); return; }
+  await atualizarFichaCustos(fichaId, {fichaBaseId:baseId, multiplicador:Number(mult)});
+}
+async function desvincularFichaBase(fichaId){
+  if(!confirm('Desvincular? A ficha passa a ter receita própria (vazia) até você adicionar os ingredientes.')) return;
+  await atualizarFichaCustos(fichaId, {fichaBaseId:null, multiplicador:null});
+}
+
+// ── IA do Cardápio — sugestão de produto + Central de Aprovações (v91) ──
+let iaAprovacoesTab='pendente';
+let iaAprovacoesCache=[];
+async function renderIaPage(){
+  if(!custosIngredientes.length) custosIngredientes = await apiGet('/api/custos/ingredientes').catch(()=>[]);
+  await carregarAprovacoesIA();
+}
+async function carregarAprovacoesIA(){
+  const r=await fetch('/api/ia/aprovacoes', {headers:authHeaders()});
+  if(r.status===401){ doLogout(); return; }
+  iaAprovacoesCache = r.ok ? await r.json() : [];
+  renderIaStats();
+  renderIaLista();
+}
+function renderIaStats(){
+  const pendentes = iaAprovacoesCache.filter(a=>a.status==='pendente').length;
+  const aprovadas = iaAprovacoesCache.filter(a=>a.status==='aprovado').length;
+  const rejeitadas = iaAprovacoesCache.filter(a=>a.status==='rejeitado').length;
+  document.getElementById('ia-stats-row').innerHTML = `
+    <div class="stat-card" style="${pendentes?'border-color:var(--orange);':''}"><div style="font-size:11px;color:var(--muted);">Sugestões pendentes</div><div style="font-size:22px;font-weight:600;${pendentes?'color:var(--orange);':''}">${pendentes}</div></div>
+    <div class="stat-card"><div style="font-size:11px;color:var(--muted);">Aprovadas</div><div style="font-size:22px;font-weight:600;color:#4ade80;">${aprovadas}</div></div>
+    <div class="stat-card"><div style="font-size:11px;color:var(--muted);">Rejeitadas</div><div style="font-size:22px;font-weight:600;">${rejeitadas}</div></div>`;
+  const nb=document.getElementById('nb-ia-aprovacoes');
+  if(nb){ nb.style.display = pendentes?'inline-block':'none'; nb.textContent = pendentes; }
+}
+function switchIaTab(tab){
+  iaAprovacoesTab=tab;
+  ['pendente','decidido'].forEach(t=>{
+    const b=document.getElementById('ia-tabbtn-'+t);
+    if(b) b.classList.toggle('active', t===tab);
+  });
+  renderIaLista();
+}
+function renderIaLista(){
+  const wrap=document.getElementById('ia-lista-aprovacoes');
+  const vazio=document.getElementById('ia-aprovacoes-vazio');
+  const lista = iaAprovacoesTab==='pendente'
+    ? iaAprovacoesCache.filter(a=>a.status==='pendente')
+    : iaAprovacoesCache.filter(a=>a.status!=='pendente');
+  if(lista.length===0){ wrap.innerHTML=''; vazio.style.display='block'; return; }
+  vazio.style.display='none';
+  wrap.innerHTML = lista.map(a=>renderPropostaCard(a)).join('');
+}
+function renderPropostaCard(a){
+  const d = a.dados || {};
+  const pendente = a.status==='pendente';
+  const statusBadge = a.status==='aprovado' ? '<span class="status-badge pronto">🟢 Aprovado</span>'
+    : a.status==='rejeitado' ? '<span class="status-badge cancelado">🔴 Rejeitado</span>'
+    : '<span class="status-badge prep">🟡 Pendente</span>';
+  const itensHtml = (d.itensFicha||[]).map(it=>{
+    const nome = it.ingredienteId ? (custosIngredientes.find(i=>i.id===it.ingredienteId)?.nome || 'ingrediente') : `${it.nomeNovoIngrediente||'novo ingrediente'} (novo — será cadastrado ao aprovar)`;
+    return `<div style="font-size:12px;color:var(--muted);">• ${esc(nome)} — ${it.quantidade} ${esc(it.unidade)}</div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--muted);">Nenhum ingrediente detalhado.</div>';
+  return `
+    <div class="panel" style="margin-bottom:14px;">
+      <div class="panel-header">
+        <span class="panel-title">🆕 ${esc(a.titulo||d.nome||'Sugestão')} ${statusBadge}</span>
+      </div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${esc(d.categoria||'')} ${d.descricao?(' · '+esc(d.descricao)):''}</div>
+        <div style="margin-bottom:10px;">${itensHtml}</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;padding:10px;background:var(--panel);border-radius:10px;margin-bottom:10px;font-size:13px;">
+          <div><div style="font-size:11px;color:var(--muted);">Custo estimado</div><b>${fmtMoedaCustos(d.custoEstimado)}</b></div>
+          <div><div style="font-size:11px;color:var(--muted);">Preço sugerido</div><b style="color:#4ade80;">${fmtMoedaCustos(d.precoSugerido)}</b></div>
+          ${d.margemEstimadaPercentual?`<div><div style="font-size:11px;color:var(--muted);">Margem estimada</div><b>${d.margemEstimadaPercentual}%</b></div>`:''}
+          ${d.badgeSugerido?`<div><div style="font-size:11px;color:var(--muted);">Badge sugerido</div><b>${esc(d.badgeSugerido)}</b></div>`:''}
+        </div>
+        ${a.justificativa?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">💭 ${esc(a.justificativa)}</div>`:''}
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">⚠️ ${esc(a.origem||'')}</div>
+        ${a.status==='rejeitado' && a.motivoRejeicao?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Motivo da rejeição: ${esc(a.motivoRejeicao)}</div>`:''}
+        ${a.decididoEm?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Decidido${a.decididoPor?' por '+esc(a.decididoPor):''} em ${new Date(a.decididoEm).toLocaleString('pt-BR')}</div>`:''}
+        ${pendente?`
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn primary sm" onclick="aprovarPropostaIA('${a.id}', true)">✅ Aprovar e publicar</button>
+          <button class="btn secondary sm" onclick="aprovarPropostaIA('${a.id}', false)">🟡 Aprovar como rascunho (não publica)</button>
+          <button class="oa-btn cancel sm" onclick="rejeitarPropostaIA('${a.id}')">🔴 Rejeitar</button>
+        </div>`:`
+        <button class="oa-btn cancel sm" onclick="excluirPropostaIA('${a.id}')">Remover do histórico</button>`}
+      </div>
+    </div>`;
+}
+async function pedirSugestaoIA(){
+  const tema=document.getElementById('ia-sugestao-tema').value.trim();
+  const btn=document.getElementById('btn-ia-sugerir');
+  btn.disabled=true; btn.textContent='🤖 Pensando...';
+  try{
+    const r=await fetch('/api/ia/produtos/sugerir', {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({tema})});
+    if(r.status===401){ doLogout(); return; }
+    const data=await r.json();
+    if(!r.ok){ alert(data.error||'Não consegui gerar uma sugestão agora.'); return; }
+    document.getElementById('ia-sugestao-tema').value='';
+    switchIaTab('pendente');
+    await carregarAprovacoesIA();
+    showToast('✨ Sugestão gerada', data.titulo||'Confira na lista de pendentes.');
+  } finally {
+    btn.disabled=false; btn.textContent='🤖 Gerar sugestão';
+  }
+}
+async function aprovarPropostaIA(id, publicar){
+  if(!confirm(publicar?'Aprovar e publicar esse prato no cardápio agora?':'Aprovar como rascunho? O prato entra no sistema mas fica indisponível pro cliente até você ativar.')) return;
+  const r=await fetch('/api/ia/aprovacoes/'+id+'/aprovar', {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({publicar})});
+  if(r.status===401){ doLogout(); return; }
+  const data=await r.json();
+  if(!r.ok){ alert(data.error||'Erro ao aprovar.'); return; }
+  await carregarAprovacoesIA();
+  showToast('✅ Proposta aprovada', publicar?'O prato já está no cardápio.':'Prato criado como rascunho (indisponível).');
+}
+async function rejeitarPropostaIA(id){
+  const motivo=prompt('Motivo da rejeição (opcional):','');
+  if(motivo===null) return;
+  const r=await fetch('/api/ia/aprovacoes/'+id+'/rejeitar', {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({motivo})});
+  if(r.status===401){ doLogout(); return; }
+  if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.error||'Erro ao rejeitar.'); return; }
+  await carregarAprovacoesIA();
+  showToast('🔴 Proposta rejeitada','');
+}
+async function excluirPropostaIA(id){
+  if(!confirm('Remover esta proposta do histórico?')) return;
+  const r=await fetch('/api/ia/aprovacoes/'+id, {method:'DELETE', headers:authHeaders()});
+  if(r.status===401){ doLogout(); return; }
+  await carregarAprovacoesIA();
 }
 async function criarFichaTecnica(){
   const nome=document.getElementById('nf-nome').value.trim();
   const categoria=document.getElementById('nf-categoria').value.trim();
   const rendimento=document.getElementById('nf-rendimento').value||1;
   const precoVendaAtual=document.getElementById('nf-preco-venda').value||null;
+  const fichaBaseId=document.getElementById('nf-ficha-base').value||null;
+  const multiplicador=document.getElementById('nf-multiplicador').value||null;
   if(!nome){ alert('Dê um nome para o prato.'); return; }
-  const res=await apiPost('/api/custos/fichas', {nome,categoria,rendimento,precoVendaAtual});
+  if(fichaBaseId && (!multiplicador || Number(multiplicador)<=0)){ alert('Informe o fator de multiplicação (ex: 10 para 10 peças).'); return; }
+  const res=await apiPost('/api/custos/fichas', {nome,categoria,rendimento,precoVendaAtual,fichaBaseId,multiplicador});
   if(!res.ok){ alert(res.data.error||'Erro ao criar ficha técnica.'); return; }
-  ['nf-nome','nf-categoria'].forEach(id=>document.getElementById(id).value='');
+  ['nf-nome','nf-categoria','nf-multiplicador'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('nf-rendimento').value=1;
   document.getElementById('nf-preco-venda').value='';
+  document.getElementById('nf-ficha-base').value='';
   await renderCustosPage();
   showToast('✅ Ficha criada', nome);
 }
@@ -7757,6 +8021,7 @@ async function loadIaSettings(){
   const enabledEl=document.getElementById('ia-enabled'); if(enabledEl) enabledEl.checked = !!res?.enabled;
   const providerEl=document.getElementById('ia-provider'); if(providerEl) providerEl.value = res?.provider || 'groq';
   const modeloEl=document.getElementById('ia-modelo'); if(modeloEl) modeloEl.value = res?.modelo || '';
+  const badgesAutoEl=document.getElementById('ia-badges-auto'); if(badgesAutoEl) badgesAutoEl.checked = !!res?.badgesAutoAprovar;
   iaFaqAtual = Array.isArray(res?.faq) ? res.faq : [];
   renderFaqIaLista();
   atualizarDicaProvedorIa();
@@ -7769,8 +8034,9 @@ async function saveIaSettings(){
   const provider = document.getElementById('ia-provider').value;
   const apiKey = document.getElementById('ia-apikey').value.trim();
   const modelo = document.getElementById('ia-modelo').value.trim();
+  const badgesAutoAprovar = document.getElementById('ia-badges-auto').checked;
   statusEl.style.color='var(--muted)'; statusEl.textContent='Salvando...';
-  const res = await apiPost('/api/ia/settings', { enabled, provider, apiKey, modelo, faq: iaFaqAtual });
+  const res = await apiPost('/api/ia/settings', { enabled, provider, apiKey, modelo, faq: iaFaqAtual, badgesAutoAprovar });
   if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao salvar.'; return; }
   document.getElementById('ia-apikey').value='';
   statusEl.style.color='#50c878'; statusEl.textContent='✅ Salvo!';
