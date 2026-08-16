@@ -1,3 +1,38 @@
+# v93 — IA gera fichas do cardápio existente, reserva imprime, correções de impressão e cardápio do cliente
+
+**BUG CRÍTICO CORRIGIDO (regressão da v92): impressão automática ficava sempre bloqueada.** A
+checagem "o Painel está aberto em algum lugar?" (criada na v92) só era preenchida quando
+`stationId` estava configurado no Agente Local — sem isso configurado (o caso mais comum), o
+status nunca era consultado, e a nova trava bloqueava a impressão automática pra sempre, em
+silêncio. Corrigido: a consulta ao servidor agora roda sempre, com ou sem stationId.
+
+**Bug corrigido: botão "🖨 Testar" sempre imprimia no tamanho padrão**, ignorando por completo a
+configuração de tamanho de fonte — provavelmente era o botão usado pra conferir se o ajuste da
+v92 tinha funcionado, e por isso parecia que nunca funcionava. Agora respeita o tamanho
+configurado, igual as vias de pedido de verdade.
+
+**Novo: reserva de mesa também imprime.** Mesma lógica/trava da impressão automática de pedido —
+funciona nos três métodos (rede/USB direto, Agente Local, navegador), usando a impressora
+configurada pra via "caixa".
+
+**Novo: IA gera ficha técnica dos pratos que já estão no cardápio.** Botão em "🤖 IA do Cardápio"
+→ "🧮 Gerar fichas dos pratos sem ficha" — varre o cardápio, acha os itens sem ficha técnica
+cadastrada e pede uma estimativa (ingredientes + custo) pra IA, em lotes de 5. ⚠️ Mesma ressalva
+de sempre: é estimativa do modelo, sem pesquisa real na internet — cada ficha nasce 🟡 Estimada e
+só é criada de verdade depois que você aprovar na Central de Aprovações.
+
+**Cardápio do cliente — mais ajustes:**
+- Marcadores ⚪/🔘 das opções de variação agora têm destaque real (brilho dourado) na opção
+  selecionada, em vez do filtro cinza de antes.
+- Botão "Quero agendar pra outro horário" redesenhado no mesmo formato/tamanho do botão de
+  Finalizar Pedido, em dourado (pra não confundir com "finalizar").
+- Botão "Ver meus pedidos" (histórico) agora ocupa a largura toda da tela, como o resto dos
+  elementos.
+- **BUG CORRIGIDO:** fechar a tela de acompanhamento do pedido pelo botão "voltar" do
+  celular/navegador não mostrava o ícone flutuante de acompanhamento (só aparecia se fechasse
+  pelo botão "Continuar Comprando" de propósito) — agora os dois caminhos sempre levam ao mesmo
+  lugar: o ícone flutuante aparece sempre que o pedido ainda está em andamento.
+
 # v92 — Bugs de impressão corrigidos + visual novo das opções de variação
 
 **Bug real corrigido: tamanho da fonte na impressão não ajustava.** A impressora de rede/USB

@@ -1246,7 +1246,28 @@ function lerImagemIA(base64, mediaType, tipo, iaCfg) {
   });
 }
 
-// v91 — sugestão de novo prato (seção "NOVOS PRATOS" do escopo da IA de gestão). IMPORTANTE:
+// v93 — "IA do Cardápio deve fazer a ficha técnica dos pratos JÁ EXISTENTES no cardápio". Mesma
+// ressalva de sempre: essa IA não pesquisa internet de verdade, então a ficha gerada aqui é
+// sempre uma ESTIMATIVA (nunca vira "oficial" sozinha) até alguém da cozinha conferir.
+function estimarFichaParaProdutoExistente(iaCfg, item, categoria, ingredientes) {
+  const ingredientesTexto = (ingredientes || []).map(i => `- ${i.nome} (R$ ${i.precoUnitario}/${i.unidade})`).join('\n');
+  const instrucao = `Você é uma consultora de fichas técnicas de um restaurante japonês. Esse prato JÁ EXISTE no ` +
+    `cardápio e precisa de uma ficha técnica estimada (ele ainda não tem uma cadastrada):\n\n` +
+    `Nome: ${item.name}\nCategoria: ${categoria}\nDescrição: ${item.description || '(sem descrição)'}\n` +
+    `Preço de venda atual: R$ ${Number(item.price || 0).toFixed(2)}\n\n` +
+    `Ingredientes já cadastrados no sistema (use esses de preferência, pelo NOME exato quando possível):\n${ingredientesTexto || '(nenhum)'}\n\n` +
+    `Estime a receita mais provável pra esse prato (quantidades por porção/peça). Responda APENAS com um JSON ` +
+    `(sem markdown, sem texto antes/depois) no formato exato:\n` +
+    `{"rendimento":1,"ingredientes":[{"nome":"...","quantidade":0,"unidade":"g|kg|ml|l|un"}],"custoEstimado":0.0,"observacao":"o que te fez estimar assim"}`;
+  return chamarIA([{ role: 'user', content: instrucao }], iaCfg, 900).then(texto => {
+    const limpo = texto.replace(/```json|```/g, '').trim();
+    const obj = JSON.parse(limpo);
+    if (!Array.isArray(obj.ingredientes) || !obj.ingredientes.length) throw new Error('A IA não retornou ingredientes válidos.');
+    return obj;
+  });
+}
+
+
 // esta IA (Groq/Anthropic/Gemini/etc, a mesma configurada em Configurações → Atendimento) NÃO
 // navega na internet de verdade — a sugestão vem do conhecimento próprio do modelo, sem citar
 // fonte real com data/preço verificável. Por isso toda ficha técnica gerada aqui sempre nasce
@@ -1320,6 +1341,36 @@ function buildTicketText(lines, cfg) {
   const tam = tamanhoImpressaoTermica(cfg && cfg.printSize);
   const body = tam.on + lines.join('\n') + tam.off;
   return ESC.init + body + ESC.feed + ESC.cut;
+}
+
+// v93 — via de RESERVA DE MESA (impressora de rede/USB direta). Mesma ideia/layout das vias de
+// pedido (buildTicketText acima), só que com os dados da reserva em vez do carrinho.
+function buildReservationTicketText(reservation, cfg) {
+  const HR = '--------------------------------';
+  const HR2 = '================================';
+  const lines = [];
+  lines.push(ESC.center + ESC.boldOn + (cfg.name || 'SHOGATSU').toUpperCase() + ESC.boldOff);
+  lines.push((cfg.tagline || 'CULINARIA ORIENTAL').toUpperCase() + ESC.left);
+  lines.push(HR2);
+  lines.push(ESC.center + 'RESERVA DE MESA' + ESC.left);
+  lines.push('Ref.: ' + reservation.id);
+  lines.push('Status: ' + (reservation.status === 'confirmada' ? 'CONFIRMADA' : 'PENDENTE DE CONFIRMACAO'));
+  lines.push(HR);
+  lines.push(ESC.boldOn + 'CLIENTE' + ESC.boldOff);
+  lines.push(HR);
+  lines.push(reservation.name);
+  lines.push('Tel: ' + reservation.phone);
+  lines.push(HR);
+  lines.push(ESC.boldOn + 'DETALHES' + ESC.boldOff);
+  lines.push(HR);
+  const dataFmt = reservation.date ? new Date(reservation.date + 'T00:00').toLocaleDateString('pt-BR') : '';
+  lines.push('Data: ' + dataFmt);
+  lines.push('Hora: ' + reservation.time);
+  lines.push('Pessoas: ' + reservation.people);
+  if (reservation.notes) { lines.push(HR); lines.push('Obs: ' + reservation.notes); }
+  lines.push(HR2);
+  lines.push(ESC.center + 'Reservado em ' + new Date(reservation.createdAt).toLocaleString('pt-BR') + ESC.left);
+  return buildTicketText(lines, cfg);
 }
 
 // Envia bytes brutos para uma impressora de rede (porta 9100 é o padrão da maioria)
@@ -3223,7 +3274,7 @@ function estimateDeliveryWindow(order, cfg) {
         // v46: não tem como o servidor (na nuvem) mandar isso direto pra impressora — quem
         // imprime é o Agente Local, que fica escutando esse evento também (junto com
         // "new-order") e imprime sozinho assim que o administrador clica em "Testar".
-        broadcast('print-test', { station, text, label: printerCfg.label || station });
+        broadcast('print-test', { station, text, label: printerCfg.label || station, fontSize: cfg.printSize });
         return sendJSON(res, 200, { ok: true, method: 'automatica', delegated: true });
       }
       if (printerCfg.method === 'rede') {
@@ -3893,6 +3944,72 @@ function estimateDeliveryWindow(order, cfg) {
   // ═══════════════════════════════════════════
   const APROVACAO_TIPOS = ['novo_produto', 'alteracao', 'preco', 'ficha', 'badge'];
 
+  // ── POST /api/ia/fichas/gerar-faltantes — v93: varre o cardápio JÁ EXISTENTE e, pros pratos
+  // que ainda não têm ficha técnica cadastrada, pede uma estimativa pra IA e registra como
+  // proposta PENDENTE (tipo "ficha") — não cria nada na planilha de custo sozinho. Limita a
+  // poucos itens por chamada (a IA de texto é lenta pra fazer isso em massa de uma vez). ──
+  if (pathname === '/api/ia/fichas/gerar-faltantes' && req.method === 'POST') {
+    if (!requireRole(getToken(req, query), 'admin')) return sendJSON(res, 403, { error: 'Sem permissão.' });
+    try {
+      const body = await readBody(req).catch(() => ({}));
+      const limite = Math.max(1, Math.min(8, Number(body.limite) || 5));
+      const { cfg, menu } = readConfig();
+      if (!cfg.ia || !cfg.ia.enabled || !cfg.ia.apiKey) return sendJSON(res, 400, { error: 'Configure a IA de Atendimento em Configurações antes de gerar fichas (é a mesma IA usada aqui).' });
+      const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+      const ingredientes = readJSON(INGREDIENTES_FILE, []);
+      const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const nomesComFicha = new Set(fichas.map(f => norm(f.nome)));
+      const aprovacoesExistentes = readJSON(APROVACOES_IA_FILE, []);
+      const nomesJaPendentes = new Set(aprovacoesExistentes.filter(a => a.tipo === 'ficha' && a.status === 'pendente').map(a => norm(a.dados && a.dados.itemNome)));
+
+      const faltando = [];
+      (menu || []).forEach(cat => (cat.items || []).forEach(it => {
+        const n = norm(it.name);
+        if (!nomesComFicha.has(n) && !nomesJaPendentes.has(n)) faltando.push({ item: it, categoria: cat.title });
+      }));
+
+      if (!faltando.length) return sendJSON(res, 200, { totalFaltando: 0, geradas: 0, propostas: [], mensagem: 'Todo o cardápio já tem ficha técnica (oficial, estimada, ou já pendente de aprovação).' });
+
+      const lote = faltando.slice(0, limite);
+      const aprovacoes = readJSON(APROVACOES_IA_FILE, []);
+      const criadas = [];
+      for (const { item, categoria } of lote) {
+        try {
+          const est = await estimarFichaParaProdutoExistente(cfg.ia, item, categoria, ingredientes);
+          const norm2 = norm;
+          const itensFicha = est.ingredientes.map(ing => {
+            const existente = ingredientes.find(i => norm2(i.nome) === norm2(ing.nome));
+            return {
+              ingredienteId: existente ? existente.id : null,
+              nomeNovoIngrediente: existente ? null : String(ing.nome || '').slice(0, 120),
+              quantidade: Number(ing.quantidade) || 0,
+              unidade: ['g', 'kg', 'ml', 'l', 'un'].includes(ing.unidade) ? ing.unidade : 'g',
+            };
+          });
+          const proposta = {
+            id: crypto.randomBytes(8).toString('hex'),
+            tipo: 'ficha',
+            status: 'pendente',
+            titulo: `Ficha técnica: ${item.name}`,
+            dados: {
+              itemNome: item.name, categoria, rendimento: Number(est.rendimento) || 1,
+              itensFicha, custoEstimado: Number(est.custoEstimado) || 0, precoVendaAtual: item.price,
+            },
+            justificativa: String(est.observacao || '').slice(0, 500),
+            fontes: [],
+            origem: 'Estimativa da IA pra um prato que já existe no cardápio, sem ficha técnica cadastrada — sem pesquisa real na internet.',
+            criadoEm: new Date().toISOString(),
+            decididoEm: null, decididoPor: null, motivoRejeicao: null,
+          };
+          aprovacoes.unshift(proposta);
+          criadas.push(proposta);
+        } catch (e) { /* esse item específico falhou (resposta inválida da IA) — pula e tenta os outros do lote */ }
+      }
+      writeJSON(APROVACOES_IA_FILE, aprovacoes);
+      return sendJSON(res, 200, { totalFaltando: faltando.length, geradas: criadas.length, restam: faltando.length - lote.length, propostas: criadas });
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui gerar as fichas agora.' }); }
+  }
+
   // ── POST /api/ia/produtos/sugerir — pede pra IA imaginar um prato novo e registra como
   // proposta PENDENTE (não mexe no cardápio). body.tema é opcional (ex: "algo com atum"). ──
   if (pathname === '/api/ia/produtos/sugerir' && req.method === 'POST') {
@@ -4107,7 +4224,36 @@ function estimateDeliveryWindow(order, cfg) {
         proposta.dados = dados;
         proposta.resultado = { itemId: itObj.id, badgeAplicado: itObj.badgeOverride };
       }
-      // tipos futuros (alteracao/preco/ficha) — aplicados quando essas fases forem construídas;
+      if (proposta.tipo === 'ficha') {
+        const dados = { ...proposta.dados, ...(body.dados || {}) };
+        const ingredientes = readJSON(INGREDIENTES_FILE, []);
+        const itensFichaResolvidos = (dados.itensFicha || []).map(item => {
+          if (item.ingredienteId) return { ingredienteId: item.ingredienteId, quantidade: item.quantidade, unidade: item.unidade };
+          const novoIng = {
+            id: crypto.randomBytes(8).toString('hex'), nome: item.nomeNovoIngrediente || 'Ingrediente sugerido pela IA',
+            categoria: 'Geral', unidade: item.unidade || 'g', precoUnitario: 0,
+            atualizadoEm: new Date().toISOString(), referenciaWeb: true, fornecedor: '',
+          };
+          ingredientes.push(novoIng);
+          return { ingredienteId: novoIng.id, quantidade: item.quantidade, unidade: item.unidade };
+        });
+        writeJSON(INGREDIENTES_FILE, ingredientes);
+        const fichas = readJSON(FICHAS_TECNICAS_FILE, []);
+        const novaFicha = {
+          id: crypto.randomBytes(8).toString('hex'),
+          nome: dados.itemNome, categoria: dados.categoria, rendimento: dados.rendimento || 1,
+          margemDesejada: null, precoVendaAtual: dados.precoVendaAtual || null,
+          itens: itensFichaResolvidos, fichaBaseId: null, multiplicador: null,
+          status: 'estimada',
+          origem: `Gerada pela IA pra um prato que já existia no cardápio, aprovada${quem ? ' por ' + quem : ''} em ${new Date().toLocaleDateString('pt-BR')} — ainda precisa ser conferida na cozinha antes de virar oficial.`,
+          criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+        };
+        fichas.push(novaFicha);
+        writeJSON(FICHAS_TECNICAS_FILE, fichas);
+        proposta.dados = dados;
+        proposta.resultado = { fichaId: novaFicha.id };
+      }
+      // tipos futuros (alteracao/preco) — aplicados quando essas fases forem construídas;
       // por enquanto, aprovar só muda o status (sem efeito automático no sistema).
 
       proposta.status = 'aprovado';
@@ -4186,6 +4332,28 @@ function estimateDeliveryWindow(order, cfg) {
       list.unshift(reservation);
       writeJSON(RESERVATIONS_FILE, list);
       broadcast('new-reservation', reservation); // v39: avisa o painel em tempo real (som + toast), igual já acontece com pedido novo
+      // v93 — NOVO ("reserva de mesa também deve imprimir"): mesma ideia da impressão automática
+      // de pedido novo (cfg.print liga/desliga geral) — usa a impressora configurada pra via
+      // "caixa" (é quem normalmente recebe o cliente/atende a reserva). Se essa via estiver
+      // desativada ou sem impressora configurada, simplesmente não imprime nada (sem erro pro
+      // cliente) — a reserva já foi salva e confirmada normalmente de qualquer jeito.
+      if (Number(cfg.print)) {
+        const printerCfg = cfg.stations && cfg.stations.caixa;
+        if (printerCfg && printerCfg.active !== false) {
+          try {
+            if (printerCfg.method === 'rede' && printerCfg.ip) {
+              sendNetworkPrint(printerCfg.ip, printerCfg.port, buildReservationTicketText(reservation, cfg)).catch(() => {});
+            } else if (printerCfg.method === 'usb' && printerCfg.device) {
+              sendUSBPrint(printerCfg.device, buildReservationTicketText(reservation, cfg)).catch(() => {});
+            } else if (printerCfg.method === 'automatica') {
+              // o Agente Local escuta esse evento e monta a via sozinho (mesmo padrão de "new-order")
+              broadcast('new-reservation-print', { ...reservation, _printFontSize: cfg.printSize, storeName: cfg.name });
+            }
+            // método "navegador": o próprio painel.html escuta "new-reservation" e abre a
+            // janela de impressão do navegador quando essa via está configurada assim.
+          } catch (e) { /* impressão de reserva é best-effort — nunca derruba a criação da reserva */ }
+        }
+      }
       // v79: mesmo alerta push simultâneo (PC + celular) que os pedidos novos já disparam.
       sendAdminPush({
         title: '🪑 Nova reserva!',
