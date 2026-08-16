@@ -1332,6 +1332,20 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
       <div id="ia-stats-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
 
       <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-header"><span class="panel-title">🧮 Fichas técnicas do cardápio já existente</span></div>
+        <div class="panel-body">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+            A IA olha os pratos que já estão no cardápio e, pros que ainda não têm ficha técnica
+            cadastrada na planilha de custo, monta uma estimativa (ingredientes + custo). ⚠️ Mesma
+            ressalva: é estimativa do modelo, não pesquisa real na internet — cada ficha nasce 🟡
+            Estimada e só aparece em Custos → Fichas Técnicas depois que você aprovar aqui embaixo.
+          </div>
+          <button class="btn primary" id="btn-ia-gerar-fichas" onclick="gerarFichasFaltantesIA()">🧮 Gerar fichas dos pratos sem ficha</button>
+          <div id="ia-gerar-fichas-status" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
         <div class="panel-header"><span class="panel-title">✨ Pedir sugestão de prato novo</span></div>
         <div class="panel-body">
           <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
@@ -3509,6 +3523,12 @@ function connectSSE(){
     if(Number(cfg.sound)!==0) playBeep();
     showToast('📅 Nova Reserva!', `${r.id} — ${r.name} — ${r.date?new Date(r.date+'T00:00').toLocaleDateString('pt-BR'):''} às ${r.time} · ${r.people} pessoa(s)`, 6000);
     if(document.getElementById('page-reservas').classList.contains('active')) renderReservationsList();
+    // v93: reserva de mesa também imprime — mesma trava "impressão automática ligada" dos
+    // pedidos (cfg.print); só a via "Navegador" precisa do próprio navegador abrir a janela
+    // (rede/USB/automática já são resolvidas no servidor/Agente Local direto).
+    if(Number(cfg.print) && cfg.stations && cfg.stations.caixa && cfg.stations.caixa.method==='navegador' && cfg.stations.caixa.active!==false){
+      openBrowserReservationTicket(r);
+    }
   });
   evtSource.addEventListener('order-updated', e=>{
     const upd = JSON.parse(e.data);
@@ -5348,6 +5368,56 @@ function printViaExtension(order, station, deliveryWindow){
   });
 }
 
+// v93 — via de RESERVA DE MESA impressa pelo navegador (mesmo padrão do openBrowserTicket
+// abaixo, só que mais simples — reserva não tem itens/carrinho). Só é chamada quando a via
+// "caixa" está configurada como método "Navegador" e a impressão automática está ligada.
+function openBrowserReservationTicket(reservation){
+  const win = window.open('', '_blank', 'width=380,height=600');
+  if(!win){ showToast('⚠️ Pop-up bloqueado', 'Permita pop-ups pra esse site pra imprimir a via da reserva.', 5000); return; }
+  const pf = cfg.printFont||'monospace';
+  const ps = Number(cfg.printSize)||14;
+  const pc = cfg.printColor||'#000000';
+  const scale = ps/14;
+  const dataFmt = reservation.date ? new Date(reservation.date+'T00:00').toLocaleDateString('pt-BR') : '';
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reserva ${reservation.id}</title>
+  <style>
+    @page{ margin:0; }
+    body{font-family:${pf};width:100%;max-width:302px;margin:0 auto;padding:10px 4px;color:${pc};font-size:${ps}px;box-sizing:border-box;}
+    .t-center{text-align:center;}
+    .t-title{font-size:${Math.round(17*scale)}px;font-weight:800;letter-spacing:2px;}
+    .t-sub{font-size:${Math.round(11*scale)}px;letter-spacing:1.5px;margin-top:2px;color:#555;}
+    .t-doctype{font-size:${Math.round(15*scale)}px;font-weight:800;text-align:center;margin:6px 0 2px;}
+    .t-hr{border-top:1px dashed ${pc};margin:8px 0;}
+    .t-hr-solid{border-top:2px solid ${pc};margin:8px 0;}
+    .t-block-title{font-weight:800;font-size:${Math.round(11*scale)}px;letter-spacing:1px;margin:4px 0 6px;}
+    .t-row{font-size:${Math.round(12*scale)}px;margin:3px 0;}
+  </style></head><body>
+    <div class="t-center">
+      <div class="t-title">${(cfg.name||'SHOGATSU').toUpperCase()}</div>
+      <div class="t-sub">${esc(cfg.tagline||'CULINÁRIA ORIENTAL')}</div>
+    </div>
+    <div class="t-hr-solid"></div>
+    <div class="t-doctype">RESERVA DE MESA</div>
+    <div class="t-row">Ref.: ${reservation.id}</div>
+    <div class="t-row">Status: ${reservation.status==='confirmada'?'CONFIRMADA':'PENDENTE DE CONFIRMAÇÃO'}</div>
+    <div class="t-hr"></div>
+    <div class="t-block-title">CLIENTE</div>
+    <div class="t-row">${esc(reservation.name)}</div>
+    <div class="t-row">Tel: ${esc(reservation.phone)}</div>
+    <div class="t-hr"></div>
+    <div class="t-block-title">DETALHES</div>
+    <div class="t-row">Data: ${dataFmt}</div>
+    <div class="t-row">Hora: ${esc(reservation.time)}</div>
+    <div class="t-row">Pessoas: ${reservation.people}</div>
+    ${reservation.notes?`<div class="t-hr"></div><div class="t-row">Obs: ${esc(reservation.notes)}</div>`:''}
+    <div class="t-hr-solid"></div>
+    <div class="t-row t-center">Reservado em ${new Date(reservation.createdAt).toLocaleString('pt-BR')}</div>
+    <script>window.onload=function(){setTimeout(function(){window.print();},60);};<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
 function openBrowserTicket(order, station, deliveryWindow, existingWin){
   const isCaixa = station==='caixa';
   const items = isCaixa ? order.items : order.items.filter(i=>(i.stations||[]).includes(station));
@@ -6260,15 +6330,41 @@ function renderPropostaCard(a){
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">⚠️ ${esc(a.origem||'')}</div>
         ${a.status==='rejeitado' && a.motivoRejeicao?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Motivo da rejeição: ${esc(a.motivoRejeicao)}</div>`:''}
         ${a.decididoEm?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Decidido${a.decididoPor?' por '+esc(a.decididoPor):''} em ${new Date(a.decididoEm).toLocaleString('pt-BR')}</div>`:''}
-        ${pendente?`
+        ${pendente?(a.tipo==='novo_produto'?`
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button class="btn primary sm" onclick="aprovarPropostaIA('${a.id}', true)">✅ Aprovar e publicar</button>
           <button class="btn secondary sm" onclick="aprovarPropostaIA('${a.id}', false)">🟡 Aprovar como rascunho (não publica)</button>
           <button class="oa-btn cancel sm" onclick="rejeitarPropostaIA('${a.id}')">🔴 Rejeitar</button>
         </div>`:`
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn primary sm" onclick="aprovarPropostaIA('${a.id}', true)">✅ Aprovar</button>
+          <button class="oa-btn cancel sm" onclick="rejeitarPropostaIA('${a.id}')">🔴 Rejeitar</button>
+        </div>`):`
         <button class="oa-btn cancel sm" onclick="excluirPropostaIA('${a.id}')">Remover do histórico</button>`}
       </div>
     </div>`;
+}
+async function gerarFichasFaltantesIA(){
+  const btn=document.getElementById('btn-ia-gerar-fichas');
+  const status=document.getElementById('ia-gerar-fichas-status');
+  btn.disabled=true; btn.textContent='🧮 Analisando cardápio...';
+  status.textContent='';
+  try{
+    const r=await fetch('/api/ia/fichas/gerar-faltantes', {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({limite:5})});
+    if(r.status===401){ doLogout(); return; }
+    const data=await r.json();
+    if(!r.ok){ status.style.color='var(--red-lt)'; status.textContent=data.error||'Não consegui gerar as fichas agora.'; return; }
+    status.style.color='var(--muted)';
+    if(data.totalFaltando===0){
+      status.textContent='✅ '+(data.mensagem||'Todo o cardápio já tem ficha técnica.');
+    } else {
+      status.textContent = `Gerei ${data.geradas} ficha(s) — confira em "Pendentes" abaixo. ${data.restam>0?`Ainda faltam ${data.restam} prato(s) sem ficha — clique de novo pra continuar o lote.`:'Pronto, todo o cardápio foi coberto!'}`;
+      switchIaTab('pendente');
+      await carregarAprovacoesIA();
+    }
+  } finally {
+    btn.disabled=false; btn.textContent='🧮 Gerar fichas dos pratos sem ficha';
+  }
 }
 async function pedirSugestaoIA(){
   const tema=document.getElementById('ia-sugestao-tema').value.trim();
@@ -6288,7 +6384,12 @@ async function pedirSugestaoIA(){
   }
 }
 async function aprovarPropostaIA(id, publicar){
-  if(!confirm(publicar?'Aprovar e publicar esse prato no cardápio agora?':'Aprovar como rascunho? O prato entra no sistema mas fica indisponível pro cliente até você ativar.')) return;
+  const proposta = iaAprovacoesCache.find(a=>a.id===id);
+  const tipo = proposta ? proposta.tipo : null;
+  const msg = tipo==='ficha' ? 'Aprovar essa ficha técnica estimada? Ela entra em Custos → Fichas Técnicas como 🟡 Estimada.'
+    : tipo==='badge' ? 'Aplicar esse badge no item do cardápio agora?'
+    : (publicar?'Aprovar e publicar esse prato no cardápio agora?':'Aprovar como rascunho? O prato entra no sistema mas fica indisponível pro cliente até você ativar.');
+  if(!confirm(msg)) return;
   const r=await fetch('/api/ia/aprovacoes/'+id+'/aprovar', {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify({publicar})});
   if(r.status===401){ doLogout(); return; }
   const data=await r.json();

@@ -222,8 +222,8 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .vopt-chip:active{transform:scale(.98);}
 .vopt-chip:hover{border-color:var(--gold);}
 .vopt-chip.selected{border-color:var(--gold);background:rgba(201,168,76,.10);box-shadow:0 0 0 1px var(--gold) inset;}
-.vopt-marker{font-size:20px;line-height:1;flex-shrink:0;filter:grayscale(1) opacity(.55);}
-.vopt-chip.selected .vopt-marker{filter:none;}
+.vopt-marker{font-size:22px;line-height:1;flex-shrink:0;opacity:.5;transition:transform .15s,opacity .15s,filter .15s;}
+.vopt-chip.selected .vopt-marker{opacity:1;transform:scale(1.15);filter:drop-shadow(0 0 5px rgba(201,168,76,.75));}
 .vopt-chip-body{flex:1;min-width:0;}
 .vopt-chip-name{font-size:14px;font-weight:600;display:block;}
 .vopt-chip.selected .vopt-chip-name{color:var(--gold);}
@@ -451,6 +451,14 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .order-summary-mini .summary-row.total{background:rgba(201,168,76,.08);margin:12px -16px -16px;padding:14px 16px;border-radius:0 0 9px 9px;border-top:1px solid var(--gold);}
 
 .place-btn{width:100%;background:var(--green);border:none;border-radius:8px;padding:14px;color:#fff;font-size:14px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s,opacity .2s;position:sticky;bottom:20px;box-shadow:0 4px 20px rgba(39,174,96,.4);}
+/* v93 — botão "Quero agendar pra outro horário" no mesmo formato/tamanho do botão de
+   Finalizar Pedido (place-btn acima), só que em dourado — pra ficar claramente do MESMO nível
+   de importância visual, com cor diferente pra não confundir com "finalizar". Continua sendo
+   um checkbox por baixo (mesma lógica de sempre, toggleScheduleFields()), só o visual mudou. */
+.schedule-toggle-btn{width:100%;background:transparent;border:2px solid var(--gold);border-radius:8px;padding:12px 14px;color:var(--gold);font-size:13px;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:background .2s,color .2s;text-align:center;margin-bottom:10px;-webkit-tap-highlight-color:transparent;}
+.schedule-toggle-btn small{font-weight:400;opacity:.85;font-size:11px;}
+.schedule-toggle-btn input{position:absolute;opacity:0;width:0;height:0;pointer-events:none;}
+.schedule-toggle-btn:has(input:checked), .schedule-toggle-btn.checked{background:var(--gold);color:#2a2015;box-shadow:0 4px 16px rgba(201,168,76,.35);}
 .place-btn:disabled{opacity:.7;cursor:not-allowed;box-shadow:none;}
 .btn-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:btnSpin .7s linear infinite;}
 @keyframes btnSpin{to{transform:rotate(360deg);}}
@@ -876,7 +884,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
       <div class="form-section" id="account-history-panel" style="display:none;">
         <div class="form-section-title">📦 Meus Pedidos</div>
         <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-history-pin" placeholder="••••"/></div>
-        <button class="btn secondary sm" style="margin-bottom:10px;" onclick="loadAccountHistory()">🔍 Ver meus pedidos</button>
+        <button class="btn secondary sm" style="margin-bottom:10px;width:100%;" onclick="loadAccountHistory()">🔍 Ver meus pedidos</button>
         <div id="account-history-list"></div>
       </div>
 
@@ -967,8 +975,9 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 
     <div class="form-section" id="schedule-section" style="display:none;">
       <div class="form-section-title">🕐 Agendar Pedido</div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px;">
-        <input type="checkbox" id="f-schedule-toggle" onchange="toggleScheduleFields()"/> Quero agendar pra outro horário (em vez de "o quanto antes")
+      <label class="schedule-toggle-btn" for="f-schedule-toggle">
+        <input type="checkbox" id="f-schedule-toggle" onchange="toggleScheduleFields()"/>
+        <span>🕐 Quero agendar pra outro horário <small>(em vez de "o quanto antes")</small></span>
       </label>
       <div id="schedule-fields" style="display:none;">
         <div class="form-group"><label>Data</label><input type="date" id="f-schedule-date"/></div>
@@ -1489,8 +1498,13 @@ function selectScheduleSlot(t){
 function timeStrToMinutes(t) { const [h, m] = String(t || '00:00').split(':').map(Number); return h * 60 + (m || 0); }
 function minutesToTimeStr(m) { m = Math.max(0, Math.min(1439, m)); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 function toggleScheduleFields() {
-  const on = document.getElementById('f-schedule-toggle').checked;
+  const cb = document.getElementById('f-schedule-toggle');
+  const on = cb.checked;
   document.getElementById('schedule-fields').style.display = on ? 'block' : 'none';
+  // v93: alterna a classe também via JS (não só :has() no CSS) — garante o mesmo visual em
+  // TODOS os aparelhos, inclusive navegadores mais antigos sem suporte a :has().
+  const btn = cb.closest('.schedule-toggle-btn');
+  if (btn) btn.classList.toggle('checked', on);
   if (on) initScheduleSection();
 }
 function getScheduledForValue() {
@@ -4177,6 +4191,14 @@ updatePushButtonState();
     if (el.id === 'cart-drawer') return closeCart();
     if (el.id === 'variant-drawer') return closeVariantPicker();
     if (el.id === 'contact-overlay' || el.classList.contains('drawer') && el.id.includes('contact')) return closeContactSheet();
+    // v93 — BUG CORRIGIDO ("ao fazer pedido, a tela de pedidos deve continuar aberta ou, se
+    // fechar, aparecer um ícone pra reabrir ela, sempre igual"): fechar a tela de
+    // acompanhamento (success-screen) pelo botão "voltar" do celular/navegador só tirava a
+    // classe "open" — sem chamar minimizeOrderTracking(), o ícone flutuante de acompanhamento
+    // nunca aparecia por esse caminho (só aparecia se a pessoa fechasse pelo botão "Continuar
+    // Comprando" de propósito). Agora os dois caminhos de fechar dão sempre no mesmo lugar: o
+    // ícone flutuante SEMPRE aparece enquanto o pedido ainda está em andamento.
+    if (el.id === 'success-screen') return minimizeOrderTracking();
     el.classList.remove('open');
   }
 
