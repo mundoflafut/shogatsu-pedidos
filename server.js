@@ -3415,6 +3415,19 @@ function estimateDeliveryWindow(order, cfg) {
     return sendJSON(res, 200, { orders });
   }
 
+  // ── GET /api/customer/reservations — v94: cliente vê as PRÓPRIAS reservas (mesmo padrão de
+  // /api/customer/orders acima — telefone + senha de 4 dígitos). Faltava esse endpoint pra dar
+  // pra montar a tela "Minhas Reservas" no app do cliente. ──
+  if (pathname === '/api/customer/reservations' && req.method === 'GET') {
+    const p = normalizePhone(query.phone);
+    const customers = readJSON(CUSTOMERS_FILE);
+    const customer = findCustomer(customers, p);
+    if (!customer || customer.pinHash !== hashPin(p, query.pin)) return sendJSON(res, 401, { error: 'Não autorizado.' });
+    const reservations = readJSON(RESERVATIONS_FILE).filter(r => normalizePhone(r.phone) === p)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return sendJSON(res, 200, { reservations });
+  }
+
   // ── POST /api/customer/update — cliente edita o próprio cadastro (nome / endereço salvo) ──
   if (pathname === '/api/customer/update' && req.method === 'POST') {
     try {

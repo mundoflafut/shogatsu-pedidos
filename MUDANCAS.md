@@ -1,3 +1,24 @@
+# v94 — "Minhas Reservas" no app do cliente, botão único "+ Pedir aqui", ajustes de responsividade
+
+**Novo: tela "Minhas Reservas" no app do cliente.** Antes só existia a tela pra *criar* uma
+reserva — não tinha como o cliente ver as próprias reservas depois. Agora, em "Minha Conta", tem
+um botão "📅 Minhas Reservas" (mesmo padrão do "📦 Meus Pedidos" — telefone + senha de 4 dígitos)
+que lista as reservas com ícone de calendário, badge de status (Confirmado/Pendente/Cancelado) e
+botão "Ver reserva" com os detalhes.
+
+**Botão "🎛 Personalizar" removido — agora é sempre "+ Pedir aqui".** Pratos com variação (ex:
+escolha de acompanhamento) usavam um botão diferente do resto do cardápio; agora usam exatamente
+o mesmo botão/ícone/estilo — só muda o que acontece ao tocar (abre o seletor de variação).
+
+**Responsividade (iPhone notch/Dynamic Island/home indicator + toque confortável):**
+- `viewport-fit=cover` + `env(safe-area-inset-*)` aplicado no cabeçalho, botão de finalizar
+  pedido, flutuantes de carrinho/acompanhamento, toast e a gaveta (drawer) — nada mais fica
+  escondido atrás do notch ou da barra de gestos do iPhone.
+- **Bug corrigido:** as classes `.btn`, `.secondary` e `.sm` (usadas em vários botões — Aplicar
+  cupom, Ver meus pedidos, Fazer nova reserva) nunca tiveram CSS de verdade nesse arquivo —
+  viravam botões sem nenhum estilo do navegador, com área de toque pequena demais pro celular.
+  Agora têm uma base consistente com a identidade visual do app e altura mínima de toque de 44px.
+
 # v93 — IA gera fichas do cardápio existente, reserva imprime, correções de impressão e cardápio do cliente
 
 **BUG CRÍTICO CORRIGIDO (regressão da v92): impressão automática ficava sempre bloqueada.** A
