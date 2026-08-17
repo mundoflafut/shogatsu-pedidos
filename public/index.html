@@ -69,28 +69,26 @@ body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;fo
 a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
 
-/* v96 — STICKY HEADER + SAFE AREA (causa raiz corrigida): o cabeçalho usava position:sticky,
-   empilhado com MAIS DUAS barras sticky por baixo (.mode-bar e .sticky-menu-bar) — sticky
-   aninhado em 3 níveis é um padrão conhecido por falhar de forma intermitente no Safari/iOS
-   (PWA "standalone", troca de orientação, recolhimento da barra de endereço), mesmo com todos
-   os workarounds de overflow já aplicados nas versões anteriores (v63/v83/v95). A barra de
-   categorias (.sticky-menu-bar) já tinha um "watchdog" em JS pra depois desse caso (ver
-   fixarBarraCategoriasMobile()) — agora o CABEÇALHO PRINCIPAL, que é o que precisa ficar 100%
-   garantido (nome da loja, status Aberto/Fechado, botão Carrinho), passa a usar
-   position:fixed de verdade: um valor que o navegador NUNCA reinterpreta ou perde durante a
-   rolagem, independente de aninhamento de sticky, overflow do body ou bug do WebKit. Como
-   position:fixed tira o header do fluxo normal do documento, o espaçador #header-fixed-spacer
-   (HTML, logo abaixo do </header>) ocupa o lugar dele pra nada pular/ficar escondido atrás —
-   a altura desse espaçador vem de --header-h, que já era medida em JS de verdade em
-   updateStickyOffsets() (linha ~4177) toda vez que o cabeçalho muda de tamanho (quebra em 2
-   linhas no celular, banner de fechado, etc.), então funciona automaticamente em qualquer
-   iPhone (com/sem Dynamic Island/notch), Android, tablet, notebook ou monitor grande — sem
-   nenhuma altura fixa "chutada". padding-top:env(safe-area-inset-top) continua aqui dentro do
-   cabeçalho: como o fundo do header cobre até o topo físico da tela (top:0), esse padding
-   empurra SÓ o conteúdo (logo/status/carrinho) pra baixo da área da câmera/Dynamic
-   Island/notch, exatamente como pede o requisito — sem depender de altura fixa por modelo. */
-.header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;padding-top:env(safe-area-inset-top);position:fixed;top:0;left:0;right:0;width:100%;z-index:200;}
-#header-fixed-spacer{width:100%;height:var(--header-h,60px);}
+/* v97 — TOPO INTEIRO FIXO (header + mode-bar) EM UM ÚNICO CONTAINER: #top-fixed-bar é o ÚNICO
+   elemento com position:fixed do bloco superior — header e mode-bar ficam dentro dele em fluxo
+   normal (uma embaixo da outra), então SEMPRE se movem juntos, sem depender de nenhum cálculo
+   de "top" em JS pra alinhar uma sobre a outra (o que existia antes e é uma fonte comum de
+   dessincronização de 1 frame em resize/rotação). Isso resolve de vez o mesmo bug de sticky
+   aninhado do WebKit que motivou a mudança pra fixed na v96 — agora vale pra todo o bloo
+   (nome/status/carrinho + Delivery/Retirada/Reservar), não só pro header. */
+#top-fixed-bar{position:fixed;top:0;left:0;right:0;width:100%;z-index:200;}
+/* padding-top:env(safe-area-inset-top) empurra SÓ o conteúdo do header pra baixo da área da
+   câmera/Dynamic Island/notch — o fundo do wrapper (#top-fixed-bar) já cobre até o topo físico
+   da tela (top:0), então a cor de fundo continua contínua atrás da área da câmera, e nenhum
+   botão fica embaixo dela. Sem altura fixa "chutada": tudo medido de verdade em JS (ver
+   updateStickyOffsets(), perto do fim do arquivo). */
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;padding-top:env(safe-area-inset-top);position:relative;z-index:2;}
+/* espaçador único: ocupa, no fluxo normal do documento, a altura TOTAL do bloco fixo
+   (header + mode-bar, incluindo a safe area) — pra nada pular ou ficar escondido atrás dele.
+   Altura vem de --sticky-total-h, medida de verdade em JS a cada mudança de tamanho do topo
+   (quebra de linha no celular, banner "fechado" aparecendo, etc.) — funciona automaticamente
+   em qualquer iPhone (com/sem notch/Dynamic Island), Android, tablet, notebook ou monitor. */
+#top-fixed-spacer{width:100%;height:var(--sticky-total-h,108px);}
 .header-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;min-height:60px;flex-wrap:wrap;gap:8px 0;padding:8px 0;}
 .header-brand{display:flex;align-items:center;gap:10px;}
 .header-logo{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;color:var(--white);}
@@ -118,7 +116,13 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
    (.mode-btn) com padding/fonte menores nesse tamanho, evitando texto cortado/espremido. */
 @media (max-width:480px){
   .header-inner{gap:6px 0;}
-  .header-status{display:none;} /* já existe o "🌙/☀️" e o badge de status some daqui pra caber; o essencial (aberto/fechado) já aparece no banner e no hero-strip */
+  /* v97 — BUG CORRIGIDO: antes o status Aberto/Fechado era escondido aqui em telas
+     estreitas, assumindo que "já aparecia no banner e no hero-strip" — mas agora que o
+     hero-strip rola normalmente com a página (só o bloco de cima é fixo), esconder o status
+     deixaria ele indisponível durante boa parte da rolagem, o que quebra o requisito de
+     "Status Aberto/Fechado nunca desaparecer". Em vez de escondido, só fica mais compacto. */
+  .header-status{font-size:9px;letter-spacing:1px;gap:4px;}
+  .header-status::before{width:5px;height:5px;}
   .cart-btn{padding:7px 10px;font-size:11px;gap:5px;}
   #header-track-btn span,#account-btn span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .mode-bar{padding:8px 10px;}
@@ -138,7 +142,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .chip{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;}
 .chip span{color:var(--white);}
 
-.mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:-webkit-sticky;position:sticky;top:var(--header-h,60px);z-index:190;}
+.mode-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;position:relative;z-index:1;}
 .mode-bar-inner{max-width:800px;margin:0 auto;display:flex;gap:10px;align-items:center;}
 .mode-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.3px;transition:all .2s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;max-width:180px;display:flex;flex-direction:column;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent;}
 /* v53: animação premium ao passar o mouse (desktop) ou tocar (celular) */
@@ -682,6 +686,18 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
   <div class="splash-tap-hint">👆 Toque para entrar</div>
 </div>
 
+<!-- v97 — TOPO 100% FIXO: header + mode-bar (Delivery/Retirada/Reservar) agora vivem DENTRO de
+     um único container (#top-fixed-bar) que recebe position:fixed UMA vez só. Antes, cada
+     barra tinha sua própria regra de posicionamento (header fixed, mode-bar sticky/fixed
+     calculado por cima de --header-h via JS) — funcionava, mas eram DOIS mecanismos
+     independentes que podiam, em teoria, dessincronizar por 1 frame (ex.: resize no meio de um
+     scroll). Com as duas barras como filhas normais (fluxo normal, uma embaixo da outra) de UM
+     único elemento fixo, elas se movem sempre como uma unidade só, garantido pelo navegador,
+     sem depender de nenhum cálculo de "top" em JS pra alinhar uma por cima da outra. Nenhum
+     botão foi duplicado nem recriado — é exatamente o mesmo <header> e a mesma .mode-bar que já
+     existiam, só que a .mode-bar mudou de lugar no HTML (de baixo do hero-strip pra dentro
+     deste wrapper) preservando 100% dos ids, onclick e estrutura internos. -->
+<div id="top-fixed-bar">
 <header class="header">
   <div class="header-inner">
     <div class="header-brand">
@@ -702,7 +718,16 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
     </div>
   </div>
 </header>
-<div id="header-fixed-spacer" aria-hidden="true"></div>
+<div class="mode-bar">
+  <div class="mode-bar-inner">
+    <button class="mode-btn active" data-color="delivery" id="btn-delivery" onclick="setMode('delivery')"><span class="mode-btn-icon">🛵</span>Delivery</button>
+    <button class="mode-btn" data-color="retirada" id="btn-retirada" onclick="setMode('retirada')"><span class="mode-btn-icon">🏪</span>Retirada</button>
+    <button class="mode-btn" data-color="reservar" id="btn-reservar" style="display:none;" onclick="openReservationScreen()"><span class="mode-btn-icon">📅</span>Reservar Mesa</button>
+    <div id="review-status-badge" style="display:none;"></div>
+  </div>
+</div>
+</div><!-- /#top-fixed-bar -->
+<div id="top-fixed-spacer" aria-hidden="true"></div>
 
 <div id="closed-banner-wrap"></div>
 
@@ -724,15 +749,6 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
       <div class="chip">📦 mín. <span id="chip-min">—</span></div>
       <div class="chip" id="chip-phone-wrap" style="display:none;cursor:pointer;" onclick="openContactSheet()">📞 <span id="chip-phone">—</span></div>
     </div>
-  </div>
-</div>
-
-<div class="mode-bar">
-  <div class="mode-bar-inner">
-    <button class="mode-btn active" data-color="delivery" id="btn-delivery" onclick="setMode('delivery')"><span class="mode-btn-icon">🛵</span>Delivery</button>
-    <button class="mode-btn" data-color="retirada" id="btn-retirada" onclick="setMode('retirada')"><span class="mode-btn-icon">🏪</span>Retirada</button>
-    <button class="mode-btn" data-color="reservar" id="btn-reservar" style="display:none;" onclick="openReservationScreen()"><span class="mode-btn-icon">📅</span>Reservar Mesa</button>
-    <div id="review-status-badge" style="display:none;"></div>
   </div>
 </div>
 
@@ -4199,13 +4215,20 @@ function setupCategoryObserver(){
 function updateStickyOffsets(){
   const header = document.querySelector('.header');
   const modeBar = document.querySelector('.mode-bar');
+  const topBar = document.getElementById('top-fixed-bar');
   if (!header) return;
   const headerH = Math.round(header.getBoundingClientRect().height) || 60;
   const modeBarH = modeBar ? Math.round(modeBar.getBoundingClientRect().height) : 0;
+  // v97: --sticky-total-h passa a vir direto da altura real do wrapper único #top-fixed-bar
+  // (header + mode-bar já empilhados nele) quando disponível — mais confiável que somar as
+  // duas alturas separadas, pois reflete exatamente o espaço que o bloco fixo ocupa na tela,
+  // mesmo se algum espaçamento interno do wrapper mudar no futuro. Mantém a soma como
+  // fallback (ex.: se o wrapper ainda não existir por algum motivo).
+  const totalH = topBar ? Math.round(topBar.getBoundingClientRect().height) : (headerH + modeBarH);
   const root = document.documentElement.style;
   root.setProperty('--header-h', headerH + 'px');
   root.setProperty('--modebar-h', modeBarH + 'px');
-  root.setProperty('--sticky-total-h', (headerH + modeBarH) + 'px');
+  root.setProperty('--sticky-total-h', totalH + 'px');
 }
 window.addEventListener('resize', updateStickyOffsets);
 window.addEventListener('orientationchange', () => setTimeout(updateStickyOffsets, 300));
