@@ -1206,6 +1206,22 @@ function chamarIA(mensagens, iaCfg, maxTokens) {
   }
   const provedor = IA_PROVEDORES[iaCfg.provider] ? iaCfg.provider : 'anthropic';
   const modelo = iaCfg.modelo || IA_PROVEDORES[provedor].modeloPadrao;
+  // v95 — BUG CORRIGIDO ("messages[0].content must be a string"): a leitura de FOTO (nota
+  // fiscal/catálogo em Custos & Ficha Técnica — ver lerImagemIA) manda o conteúdo da mensagem
+  // como uma LISTA [texto, imagem], não como texto puro. Isso é o formato certo pra modelos
+  // com visão — mas os modelos padrão do Groq/OpenRouter/Hugging Face configurados aqui
+  // (ex.: openai/gpt-oss-120b, llama-3.3-70b-instruct) são só de TEXTO, sem visão — e a API
+  // desses provedores rejeitava com um erro cru e confuso em vez de avisar o motivo real.
+  // Só a Anthropic e o Google Gemini, nesse sistema, usam modelos com visão de verdade por
+  // padrão. Agora a mensagem de erro já sai clara, direto em português, apontando a solução.
+  const temImagem = mensagens.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image'));
+  if (temImagem && (provedor === 'groq' || provedor === 'openrouter' || provedor === 'huggingface')) {
+    return Promise.reject(new Error(
+      `O modelo configurado em "${IA_PROVEDORES[provedor].label}" (${modelo}) não lê fotos, só texto — ` +
+      `essa função de ler foto (nota fiscal/catálogo) só funciona com Anthropic (Claude) ou Google Gemini. ` +
+      `Troque o provedor em Configurações → Atendimento pra usar a leitura de foto, ou digite os itens na mão.`
+    ));
+  }
   if (provedor === 'anthropic') return chamarAnthropic(mensagens, iaCfg.apiKey, modelo, maxTokens);
   if (provedor === 'gemini') return chamarGemini(mensagens, iaCfg.apiKey, modelo, maxTokens);
   if (provedor === 'groq') return chamarOpenAICompativel('api.groq.com', '/openai/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens);

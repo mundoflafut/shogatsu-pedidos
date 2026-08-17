@@ -37,6 +37,16 @@ novo num modelo descontinuado tão cedo). Se seu restaurante já tinha um modelo
 digitado nesse campo, nada muda sozinho — só o texto de ajuda foi atualizado; troque manualmente
 em Configurações → Atendimento se for o seu caso.
 
+**BUG CORRIGIDO: erro cru "messages[0].content must be a string" ao ler foto de nota
+fiscal/catálogo (Custos & Ficha Técnica).** Causa real: os modelos padrão do Groq/OpenRouter/
+Hugging Face configurados no sistema (ex.: `openai/gpt-oss-120b`) só leem texto, sem visão — a
+leitura de foto manda o conteúdo como lista [texto, imagem], formato que esses modelos/provedores
+rejeitam com esse erro confuso. Agora o sistema avisa com clareza, em português, que essa função
+específica (ler foto) só funciona com Anthropic (Claude) ou Google Gemini, e sugere trocar o
+provedor em Configurações → Atendimento — sem tentar mais a chamada fadada a falhar. O chat de
+atendimento por texto com o cliente continua funcionando normalmente em qualquer provedor (nunca
+manda foto pra IA, mesmo antes dessa correção).
+
 # v94 — "Minhas Reservas" no app do cliente, botão único "+ Pedir aqui", ajustes de responsividade
 
 **Novo: tela "Minhas Reservas" no app do cliente.** Antes só existia a tela pra *criar* uma
