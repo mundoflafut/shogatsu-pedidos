@@ -450,20 +450,19 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .acc-stat-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);}
 
 .acc-nav-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
-.acc-nav-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);color:#fff;text-align:left;transition:transform .2s ease,box-shadow .2s ease;}
+.acc-nav-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:var(--card);color:#fff;text-align:left;transition:transform .2s ease,box-shadow .2s ease;}
 .acc-nav-btn:hover{transform:translateY(-2px);}
 .acc-nav-btn .acc-nav-left{display:flex;align-items:center;gap:10px;min-width:0;}
 .acc-nav-btn .acc-nav-icon{width:36px;height:36px;border-radius:9px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .acc-nav-btn .acc-nav-label{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .acc-nav-btn .acc-nav-arrow{opacity:.7;flex-shrink:0;}
-.acc-nav-pedidos{background:linear-gradient(135deg,var(--red),var(--red-dk));}
-.acc-nav-pedidos:hover{box-shadow:0 10px 22px -8px rgba(192,57,43,.5);}
-.acc-nav-editar{background:linear-gradient(135deg,var(--red-lt),#7a2015);}
-.acc-nav-editar:hover{box-shadow:0 10px 22px -8px rgba(224,90,74,.5);}
-.acc-nav-notif{background:linear-gradient(135deg,var(--gold),#8f6f1a);}
-.acc-nav-notif:hover{box-shadow:0 10px 22px -8px rgba(201,168,76,.5);}
-.acc-nav-fidelidade{background:linear-gradient(135deg,#b98cd6,#6a3f8a);}
-.acc-nav-fidelidade:hover{box-shadow:0 10px 22px -8px rgba(185,140,214,.5);}
+.acc-nav-pedidos .acc-nav-icon{background:rgba(192,57,43,.18);color:#e05a4a;}
+.acc-nav-editar .acc-nav-icon{background:rgba(192,57,43,.18);color:#e05a4a;}
+.acc-nav-notif .acc-nav-icon{background:rgba(201,168,76,.18);color:var(--gold);}
+.acc-nav-fidelidade .acc-nav-icon{background:rgba(185,140,214,.18);color:#b98cd6;}
+.acc-nav-reservas .acc-nav-icon{background:rgba(192,57,43,.18);color:#e05a4a;}
+.acc-nav-conta .acc-nav-icon{background:rgba(192,57,43,.18);color:#e05a4a;}
+.acc-nav-btn:hover{box-shadow:0 10px 22px -10px rgba(0,0,0,.5);}
 @media (max-width:420px){.acc-nav-grid{grid-template-columns:1fr;}}
 
 .acc-loyalty-tier{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;}
@@ -829,7 +828,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
 <div class="screen" id="account-screen">
   <div class="screen-header">
     <button class="back-btn" onclick="closeAccountScreen()">←</button>
-    <span class="screen-title">Minha Conta</span>
+    <span class="screen-title" id="account-screen-title">Minha Conta</span>
   </div>
   <div class="screen-body">
 
@@ -893,7 +892,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
         </div>
       </div>
 
-      <button class="btn-order-here" style="margin-bottom:20px;" onclick="closeAccountScreen()">🍽️ Fazer Pedido</button>
+      <button class="btn-order-here" style="margin-bottom:20px;" onclick="closeAccountScreen()">🍽️ Pedir aqui</button>
 
       <div class="acc-nav-grid">
         <button type="button" class="acc-nav-btn acc-nav-pedidos" onclick="toggleAccountPanel('history')">
@@ -912,21 +911,25 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
           <span class="acc-nav-left"><span class="acc-nav-icon">❤️</span><span class="acc-nav-label">Fidelidade</span></span>
           <span class="acc-nav-arrow">›</span>
         </button>
-        <button type="button" class="acc-nav-btn acc-nav-reservas" style="grid-column:1/-1;" onclick="toggleAccountPanel('reservations')">
+        <button type="button" class="acc-nav-btn acc-nav-reservas" onclick="toggleAccountPanel('reservations')">
           <span class="acc-nav-left"><span class="acc-nav-icon">📅</span><span class="acc-nav-label">Minhas Reservas</span></span>
+          <span class="acc-nav-arrow">›</span>
+        </button>
+        <button type="button" class="acc-nav-btn acc-nav-conta" onclick="toggleAccountPanel('home')">
+          <span class="acc-nav-left"><span class="acc-nav-icon">👤</span><span class="acc-nav-label">Minha Conta</span></span>
           <span class="acc-nav-arrow">›</span>
         </button>
       </div>
 
       <div class="form-section" id="account-history-panel" style="display:none;">
-        <div class="form-section-title">📦 Meus Pedidos</div>
+        <div class="form-section-title">📦 HISTÓRICO DE PEDIDOS</div>
         <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-history-pin" placeholder="••••"/></div>
         <button class="btn secondary sm" style="margin-bottom:10px;width:100%;" onclick="loadAccountHistory()">🔍 Ver meus pedidos</button>
         <div id="account-history-list"></div>
       </div>
 
       <div class="form-section" id="account-reservations-panel" style="display:none;">
-        <div class="form-section-title">📅 Minhas Reservas</div>
+        <div class="form-section-title">📅 AGENDAMENTOS</div>
         <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-reservations-pin" placeholder="••••"/></div>
         <button class="btn secondary sm" style="margin-bottom:10px;width:100%;" onclick="loadAccountReservations()">🔍 Ver minhas reservas</button>
         <div id="account-reservations-list"></div>
@@ -1479,6 +1482,8 @@ async function openAccountScreen() {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
+    const titleEl = document.getElementById('account-screen-title');
+    if (titleEl) titleEl.textContent = 'Minha Conta';
   } else {
     closeRecoveryBox();
   }
@@ -1708,6 +1713,14 @@ function startReservationPolling() {
 }
 function stopReservationPolling() { if (reservationPollTimer) { clearInterval(reservationPollTimer); reservationPollTimer = null; } }
 
+// v95 — REORGANIZAÇÃO DA ÁREA DO CLIENTE (seguindo a imagem de referência): o título no topo
+// da tela agora reflete qual painel está aberto — "Meus Pedidos" com o histórico, "Reserva de
+// Mesas" com os agendamentos, "Minha Conta" no estado padrão/repouso (equivalente ao botão
+// "Minha Conta" recém-adicionado no grid, que serve pra "voltar pro início" da tela — mesma
+// tela e mesmas funções de sempre, só reorganizadas). Nada aqui troca a lógica real de nenhum
+// botão (login, histórico, reservas, fidelidade, editar cadastro) — só o texto do título e
+// quais painéis ficam visíveis.
+const ACCOUNT_PANEL_TITLES = { history: 'Meus Pedidos', reservations: 'Reserva de Mesas', edit: 'Editar Cadastro', loyalty: 'Fidelidade', home: 'Minha Conta' };
 function toggleAccountPanel(which) {
   const histP = document.getElementById('account-history-panel'), editP = document.getElementById('account-edit-panel'), loyP = document.getElementById('account-loyalty-panel'), resP = document.getElementById('account-reservations-panel');
   const showHist = which === 'history' && histP.style.display === 'none';
@@ -1718,6 +1731,14 @@ function toggleAccountPanel(which) {
   editP.style.display = showEdit ? 'block' : 'none';
   loyP.style.display = showLoy ? 'block' : 'none';
   resP.style.display = showRes ? 'block' : 'none';
+  const titleEl = document.getElementById('account-screen-title');
+  if (titleEl) {
+    if (showHist) titleEl.textContent = ACCOUNT_PANEL_TITLES.history;
+    else if (showRes) titleEl.textContent = ACCOUNT_PANEL_TITLES.reservations;
+    else if (showEdit) titleEl.textContent = ACCOUNT_PANEL_TITLES.edit;
+    else if (showLoy) titleEl.textContent = ACCOUNT_PANEL_TITLES.loyalty;
+    else titleEl.textContent = ACCOUNT_PANEL_TITLES.home; // nenhum painel aberto (inclusive quando 'which' é 'home')
+  }
   if (showEdit && customer) {
     document.getElementById('acc-edit-name').value = customer.name || '';
     document.getElementById('acc-edit-address').value = customer.lastAddress || '';

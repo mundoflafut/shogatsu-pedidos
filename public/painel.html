@@ -8997,8 +8997,18 @@ async function refreshPrintAgentStatus(){
   try{
     const res = await apiGet('/api/print-agent/status');
     if(!res.ok){ box.innerHTML = '⚠️ Não consegui verificar o status do Agente Local.'; return; }
-    const { online, agents, coveredStations, terminalsOnline } = res.data;
+    const { online, agents, coveredStations, terminalsOnline, currentAgentBuild } = res.data;
     const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
+    // v95 — diagnóstico de build desatualizado: o Agente Local é um processo persistente que
+    // NÃO recarrega sozinho quando os arquivos são atualizados no servidor — se alguém trocou
+    // print-agent.js mas esqueceu de rodar REINICIAR-AGENTE.bat na loja, o processo antigo
+    // continua rodando com o código de antes (ex.: uma correção de tamanho de fonte "não
+    // funciona" simplesmente porque o processo rodando ainda é o de antes da correção).
+    const agentesDesatualizados = currentAgentBuild ? (agents||[]).filter(a => a.build && a.build !== currentAgentBuild) : [];
+    const agentesSemBuild = (agents||[]).filter(a => !a.build);
+    const buildWarning = agentesDesatualizados.length
+      ? `<br><br>⚠️ <b>Agente rodando código desatualizado</b> (build ${esc(agentesDesatualizados.map(a=>a.build).join(', '))}, mais recente é ${esc(currentAgentBuild)}) — correções recentes (ex.: tamanho de fonte) só valem depois de reiniciar. No computador da loja, rode <code>REINICIAR-AGENTE.bat</code> (pasta print-agent) ou <code>REINICIAR-AGENTE.bat</code> de novo depois de qualquer atualização do sistema.`
+      : (agentesSemBuild.length ? `<br><br>ℹ️ Esse Agente é de uma versão bem antiga (não informa build ainda) — recomendo rodar <code>REINICIAR-AGENTE.bat</code> pra atualizar.` : '');
     // v85: vias ativas em modo "🖥 Navegador" — essas dependem de algum computador estar
     // marcado como Terminal de Impressão E com o painel aberto; se nenhum terminal está
     // conectado agora, essas vias NÃO vão imprimir sozinhas em pedido nenhum.
@@ -9019,11 +9029,11 @@ async function refreshPrintAgentStatus(){
       if(noTerminalWarning) box.style.borderColor = '#c0392b';
       return;
     }
-    box.style.borderColor = noTerminalWarning ? '#c0392b' : '#2e7d32';
+    box.style.borderColor = (noTerminalWarning || buildWarning) ? '#c0392b' : '#2e7d32';
     const covered = (coveredStations||[]).map(s=>stationLabels[s]||s).join(', ') || '—';
-    const detail = (agents||[]).map(a => (a.printers||[]).map(p => `${esc(p.label)} → ${(p.stations||[]).map(s=>stationLabels[s]||s).join(', ')||'—'}`).join('; ')).filter(Boolean).join(' | ');
+    const detail = (agents||[]).map(a => (a.printers||[]).map(p => `${esc(p.label)} → ${(p.stations||[]).map(s=>stationLabels[s]||s).join(', ')||'—'}${a.build?` [build ${esc(a.build)}]`:''}`).join('; ')).filter(Boolean).join(' | ');
     let html = `✅ <b>${agents.length} Agente(s) Local(is) conectado(s)</b> — vias cobertas: ${esc(covered)}.`+
-      (detail ? `<br><span style="color:var(--muted);">${esc(detail)}</span>` : '');
+      (detail ? `<br><span style="color:var(--muted);">${esc(detail)}</span>` : '')+buildWarning;
     // v83 — diagnóstico direto pro caso mais comum ("via X marcada Automática mas não
     // imprime"): compara as vias ATIVAS + em modo Automática (cfg.stations) contra as vias que
     // algum agente conectado realmente cobre (coveredStations). Se uma via estiver nos dois
