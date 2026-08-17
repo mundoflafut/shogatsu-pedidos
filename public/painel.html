@@ -1141,7 +1141,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
           </div>
           <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: llama-3.3-70b-versatile"/></div>
+            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: openai/gpt-oss-120b"/></div>
           </div>
           <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
           <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
@@ -3509,7 +3509,20 @@ function connectSSE(){
     // por isso pedidos de teste (uma única chamada) sempre funcionavam, mas pedidos reais
     // vindos de cliente (que passam por aqui) às vezes perdiam via. Passando isAuto=true, o
     // servidor pula o aviso duplicado, exatamente como já era a intenção original.
-    if(Number(cfg.print)) printOrder(o.id, null, null, true);
+    // v95 — BUG CORRIGIDO ("impressão automática disparava mesmo com o pedido NÃO
+    // automático"): esse gatilho (evento "new-order" recebido pelo Painel no navegador)
+    // só olhava pra cfg.print ("imprimir automaticamente" ligado) e ignorava por completo
+    // se o pedido nasceu ACEITO sozinho (aceite automático) ou PENDENTE aguardando alguém
+    // aceitar manualmente. O Agente Local (print-agent.js) já tinha essa mesma trava desde a
+    // v92 — aqui no Painel (usada pelas vias com método "Navegador"/"Automática" com a
+    // Extensão) ela nunca tinha sido replicada, então um pedido pendente (aceite automático
+    // desligado) podia sair impresso sozinho pelo navegador mesmo assim, gastando papel de
+    // pedido que ainda nem foi aceito/pode ser recusado. o._autoAcceptOn vem do servidor (ver
+    // broadcast('new-order', ...) em server.js) refletindo cfg.autoAcceptOrders no instante
+    // exato da criação do pedido. Impressão MANUAL (botão "🖨 Imprimir" clicado por alguém)
+    // continua funcionando sempre, com ou sem aceite automático — só o disparo AUTOMÁTICO
+    // daqui é que passa a respeitar essa condição.
+    if(Number(cfg.print) && o._autoAcceptOn) printOrder(o.id, null, null, true);
   });
   // v39: alerta de nova reserva (novidade pedida) — mesmo som + toast do pedido novo, e
   // atualiza o contador da aba Reservas na hora, mesmo se o operador estiver em outra aba.
@@ -8015,7 +8028,7 @@ function loadSettings(){
 // Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
 // ═══════════════════════════════════════════
 const IA_DICAS_PROVEDOR = {
-  groq: 'Grátis. Crie a chave em console.groq.com/keys. Modelo padrão: llama-3.3-70b-versatile.',
+  groq: 'Grátis. Crie a chave em console.groq.com/keys. Modelo padrão: openai/gpt-oss-120b.',
   openrouter: 'Grátis (nos modelos marcados ":free"). Crie a chave em openrouter.ai/keys.',
   huggingface: 'Grátis. Crie a chave (token de leitura) em huggingface.co/settings/tokens.',
   gemini: 'Grátis. Crie a chave em aistudio.google.com/apikey. Modelo padrão: gemini-2.0-flash.',
