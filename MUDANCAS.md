@@ -47,6 +47,16 @@ provedor em Configurações → Atendimento — sem tentar mais a chamada fadada
 atendimento por texto com o cliente continua funcionando normalmente em qualquer provedor (nunca
 manda foto pra IA, mesmo antes dessa correção).
 
+**REFORÇO: barra de categorias/busca do cardápio no celular agora tem uma segurança extra.**
+Além do `position:sticky` nativo (que continua sendo o método principal, sem mudar nada — Desktop
+inclusive), foi adicionado um watchdog em JS que só entra em ação no celular (abaixo de 900px) e
+só SE detectar, de verdade, que o navegador não está segurando a barra no lugar certo enquanto
+o usuário rola o cardápio (ex.: Android/PWA em modo standalone que não posiciona certo um 3º
+nível de sticky aninhado). Quando isso acontece, a MESMA barra (sem duplicar) passa a usar
+`position:fixed`, com um espaçador do mesmo tamanho no lugar dela pra não pular o conteúdo — e
+volta pro comportamento normal assim que a rolagem sobe de novo. Desktop/PC nunca aciona esse
+reforço.
+
 # v94 — "Minhas Reservas" no app do cliente, botão único "+ Pedir aqui", ajustes de responsividade
 
 **Novo: tela "Minhas Reservas" no app do cliente.** Antes só existia a tela pra *criar* uma
