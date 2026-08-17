@@ -156,6 +156,21 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
    prefixo), foi adicionado o prefixo -webkit-sticky abaixo — não muda nada visualmente em
    navegadores atuais, só amplia a garantia de funcionamento em aparelhos mais antigos. */
 .sticky-menu-bar{position:-webkit-sticky;position:sticky;top:var(--sticky-total-h,108px);z-index:180;background:color-mix(in srgb, var(--black) 85%, transparent);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 6px 20px rgba(0,0,0,.28);border-bottom:1px solid var(--border);}
+/* v95 — REFORÇO MOBILE (celular): a barra de categorias/busca do cardápio é a 3ª barra
+   "sticky" empilhada (dentro de header sticky > mode-bar sticky > esta) — algumas
+   combinações de navegador/Android/PWA em modo "standalone" não posicionam corretamente
+   sticky aninhado 3 níveis de fundo, mesmo com todo o cuidado já documentado acima
+   (v52/v63/v83). SÓ no celular (max-width:900px, onde a barra existia e foi reportada como
+   removida), quando fixarBarraCategoriasMobile() (ver fim do arquivo) detecta que chegou a
+   hora de grudar a barra, ela troca pra position:fixed de verdade — universal, sem depender
+   de nenhum comportamento de sticky aninhado do navegador — e o espaçador
+   #sticky-menu-bar-spacer (inserido logo acima dela no HTML) ganha a mesma altura, pra nada
+   pular/sobrepor o cardápio embaixo. Sem isso ativo (ou no Desktop, que nunca ativa essa
+   classe), a barra continua exatamente como sempre foi: position:sticky normal. Não duplica
+   nem substitui a barra — é a MESMA barra, só trocando de posicionamento quando necessário. */
+@media (max-width:900px){
+  .sticky-menu-bar.js-pinned-mobile{position:fixed;top:var(--sticky-total-h,108px);left:0;right:0;}
+}
 /* v52 — BUG CORRIGIDO ("cardápio cortado" no mobile): ao clicar numa categoria, scrollIntoView()
    rolava a seção até o TOPO ABSOLUTO da tela — escondendo o título dela atrás do
    header+mode-bar+barra de categorias (todos "sticky", sobrepostos). scroll-margin-top avisa o
@@ -700,6 +715,7 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
   </div>
 </div>
 
+<div id="sticky-menu-bar-spacer" style="display:none;"></div>
 <div class="sticky-menu-bar" id="sticky-menu-bar">
   <div class="cat-nav">
     <div class="cat-nav-inner" id="cat-nav-inner"></div>
@@ -4162,6 +4178,65 @@ if (typeof ResizeObserver !== 'undefined') {
 } else {
   document.addEventListener('DOMContentLoaded', updateStickyOffsets);
 }
+
+// v95 — REFORÇO MOBILE: garante de verdade que a barra de categorias/busca do cardápio
+// (#sticky-menu-bar) fica presa no topo ao rolar no celular, mesmo em navegadores/PWAs que
+// não posicionam corretamente um 3º nível de position:sticky aninhado (ver comentário da
+// classe .js-pinned-mobile no <style>, acima). Funciona como um WATCHDOG: a barra continua
+// usando position:sticky normalmente (não muda nada por padrão, inclusive no Desktop/PC,
+// que fica de fora — só entra em ação abaixo de 900px); só se, DE FATO, o navegador não
+// estiver posicionando ela no lugar certo enquanto o usuário já rolou o suficiente pra ela
+// deveria estar grudada, é que ela troca pra position:fixed (mesma barra, sem duplicar).
+// Roda em requestAnimationFrame (throttle), então não pesa na rolagem.
+(function fixarBarraCategoriasMobile(){
+  const bar = document.getElementById('sticky-menu-bar');
+  const spacer = document.getElementById('sticky-menu-bar-spacer');
+  if (!bar || !spacer) return;
+  let ticking = false;
+  function checar(){
+    ticking = false;
+    if (window.innerWidth > 900) {
+      // Desktop/PC — nunca mexe aqui, sticky nativo continua sozinho como sempre funcionou.
+      if (bar.classList.contains('js-pinned-mobile')) { bar.classList.remove('js-pinned-mobile'); spacer.style.display = 'none'; }
+      return;
+    }
+    const stickyTotalH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-total-h')) || 108;
+    const jaEstaFixada = bar.classList.contains('js-pinned-mobile');
+    // Enquanto NÃO fixada por JS, mede onde o sticky nativo colocou a barra de verdade na
+    // tela — se ela já deveria estar grudada (rolagem passou do ponto) mas o topo dela na
+    // tela não bate com o esperado (diferença maior que 1px de folga por arredondamento),
+    // é sinal de que o sticky nativo falhou aqui — aí sim entra o reforço.
+    if (!jaEstaFixada) {
+      const rectAntes = bar.getBoundingClientRect();
+      const folga = 1.5; // tolerância pra arredondamento de subpixel
+      // Se o navegador estivesse segurando a barra corretamente com sticky nativo, o topo
+      // dela NUNCA ficaria menor que stickyTotalH (o CSS trava nesse valor) — só sobe até lá
+      // e para. Se o topo estiver ABAIXO desse valor, é sinal de que o sticky nativo não
+      // conseguiu segurá-la aqui (ela "vazou" pra cima, escondida atrás do header/mode-bar).
+      if (rectAntes.top < stickyTotalH - folga) {
+        spacer.style.height = bar.offsetHeight + 'px';
+        spacer.style.display = 'block';
+        bar.classList.add('js-pinned-mobile');
+      }
+    } else {
+      // Já fixada por JS — solta de novo quando a rolagem volta antes do ponto de grudar,
+      // senão a barra ficaria flutuando errada no topo do cardápio quando ele nem começou.
+      const naturalTop = spacer.getBoundingClientRect().top;
+      if (naturalTop > stickyTotalH + 1) {
+        bar.classList.remove('js-pinned-mobile');
+        spacer.style.display = 'none';
+      }
+    }
+  }
+  function onScrollOrResize(){
+    if (!ticking) { ticking = true; requestAnimationFrame(checar); }
+  }
+  window.addEventListener('scroll', onScrollOrResize, { passive: true });
+  window.addEventListener('resize', onScrollOrResize);
+  window.addEventListener('orientationchange', () => setTimeout(checar, 300));
+  document.addEventListener('DOMContentLoaded', () => setTimeout(checar, 300));
+  window.addEventListener('load', () => setTimeout(checar, 300));
+})();
 
 
 loadCustomerSession();
