@@ -57,7 +57,31 @@ nível de sticky aninhado). Quando isso acontece, a MESMA barra (sem duplicar) p
 volta pro comportamento normal assim que a rolagem sobe de novo. Desktop/PC nunca aciona esse
 reforço.
 
-# v94 — "Minhas Reservas" no app do cliente, botão único "+ Pedir aqui", ajustes de responsividade
+**Reformulação da área do cliente (Meus Pedidos / Reserva de Mesas), seguindo imagem de
+referência.** Reorganização visual, sem criar nenhuma função nova ou fictícia:
+- Removido o "← Minha Conta" fixo do cabeçalho — o título agora é dinâmico: mostra "Meus
+  Pedidos" com o histórico aberto, "Reserva de Mesas" com os agendamentos abertos, "Minha
+  Conta" no estado inicial/repouso.
+- Botão "Fazer Pedido" renomeado pra "🍽️ Pedir aqui" (mesma função — fecha a tela e volta pro
+  cardápio).
+- Novo botão "Minha Conta" no grid de opções, formando o par "[Minhas Reservas] [Minha Conta]"
+  — sua função real é resetar a tela pro estado inicial (fecha qualquer painel aberto).
+- Cards de navegação da conta trocaram o fundo em degradê colorido por fundo escuro uniforme
+  com ícone colorido (igual à imagem de referência) — texto/seções renomeados pra "📦 HISTÓRICO
+  DE PEDIDOS" / "📅 AGENDAMENTOS", reaproveitando o mesmo componente visual de sempre.
+- Não foi criado o botão "Ver todos os pedidos/agendamentos" da imagem, porque a lista já
+  mostra tudo que existe — não haveria nenhuma função real pra conectar nele.
+
+**Diagnóstico de build desatualizado do Agente Local (print-agent.js).** O Agente roda como
+processo persistente (Tarefa Agendada do Windows) que NÃO recarrega sozinho quando os arquivos
+do sistema são atualizados — é bem provável que seja essa a causa de correções (como a de
+tamanho de fonte) parecerem "não funcionar" mesmo depois de aplicadas: o processo antigo
+continua rodando até alguém rodar `REINICIAR-AGENTE.bat`. Agora o Agente informa seu número de
+build no log e pro painel a cada heartbeat, e a Central de Impressão (Configurações) mostra um
+aviso vermelho claro quando o Agente conectado está rodando código mais antigo que o do
+servidor — apontando exatamente pra rodar `REINICIAR-AGENTE.bat`.
+
+
 
 **Novo: tela "Minhas Reservas" no app do cliente.** Antes só existia a tela pra *criar* uma
 reserva — não tinha como o cliente ver as próprias reservas depois. Agora, em "Minha Conta", tem

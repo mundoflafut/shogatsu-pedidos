@@ -728,7 +728,15 @@ function broadcast(event, data) {
 // logar e de novo a cada ~45s como "sinal de vida") e o painel mostra um aviso ✅/❌ bem visível
 // em Central de Impressão. Guardado só em memória (não precisa persistir): cada entrada expira
 // sozinha (ver PRINT_AGENT_TTL_MS) se o agente cair sem avisar (queda de luz, processo morto).
-const printAgents = new Map(); // agentId -> { label, stations, printers, lastSeen }
+// v95 — build mais recente do print-agent.js distribuído junto com ESTE server.js. Usado só
+// pra COMPARAR com o build que cada Agente Local conectado informa (ver /api/print-agent/announce
+// e /api/print-agent/status) e avisar no painel quando algum agente está rodando código velho —
+// o processo do agente é persistente (Tarefa Agendada do Windows) e NÃO recarrega sozinho
+// quando os arquivos do sistema são atualizados; precisa de REINICIAR-AGENTE.bat. Atualizar esse
+// valor sempre que print-agent.js mudar de verdade (não precisa mudar em toda alteração de
+// server.js — só quando o AGENT_BUILD de lá também mudar).
+const CURRENT_AGENT_BUILD = 'v95';
+const printAgents = new Map(); // agentId -> { label, stations, printers, build, lastSeen }
 const PRINT_AGENT_TTL_MS = 90 * 1000; // sem novo aviso em 90s, considera o agente offline
 function getOnlinePrintAgents() {
   const now = Date.now();
@@ -2948,13 +2956,14 @@ function estimateDeliveryWindow(order, cfg) {
   if (pathname === '/api/print-agent/announce' && req.method === 'POST') {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
-      const { agentId, printers } = await readBody(req);
+      const { agentId, printers, build } = await readBody(req);
       if (!agentId) return sendJSON(res, 400, { error: 'agentId obrigatório.' });
       printAgents.set(String(agentId), {
         printers: Array.isArray(printers) ? printers.slice(0, 20).map(p => ({
           label: String(p.label || 'Impressora').slice(0, 60),
           stations: Array.isArray(p.stations) ? p.stations.slice(0, 20) : []
         })) : [],
+        build: build ? String(build).slice(0, 20) : null, // v95: qual build do print-agent.js está rodando de fato
         lastSeen: Date.now()
       });
       return sendJSON(res, 200, { ok: true });
@@ -2981,7 +2990,7 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     const agents = getOnlinePrintAgents();
     const coveredStations = [...new Set(agents.flatMap(a => a.printers.flatMap(p => p.stations)))];
-    return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations, terminalsOnline: getOnlinePrintTerminalsCount() });
+    return sendJSON(res, 200, { online: agents.length > 0, agents, coveredStations, terminalsOnline: getOnlinePrintTerminalsCount(), currentAgentBuild: CURRENT_AGENT_BUILD });
   }
 
   // ── POST /api/print-station/register — o Painel avisa que abriu/está ativo AGORA e assume
