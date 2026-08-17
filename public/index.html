@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#c0392b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -69,7 +69,7 @@ body{background:var(--black);color:var(--white);font-family:'Jost',sans-serif;fo
 a{text-decoration:none;color:inherit;}
 button{cursor:pointer;font-family:'Jost',sans-serif;}
 
-.header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:200;}
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;padding-top:env(safe-area-inset-top);position:sticky;top:0;z-index:200;}
 .header-inner{max-width:800px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;min-height:60px;flex-wrap:wrap;gap:8px 0;padding:8px 0;}
 .header-brand{display:flex;align-items:center;gap:10px;}
 .header-logo{font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;color:var(--white);}
@@ -197,6 +197,15 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .item-promo-tag{margin-top:6px;font-size:11px;font-weight:700;color:#3a2a00;background:linear-gradient(90deg,#FFD54A,#FFB300);padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.3px;}
 
 .add-btn{background:var(--red);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;-webkit-tap-highlight-color:transparent;}
+/* v94 — BUG CORRIGIDO: ".btn"/".secondary"/".sm" eram usadas em vários botões (Aplicar cupom,
+   Ver meus pedidos, Fazer nova reserva, etc.) mas nunca tiveram CSS de verdade nesse arquivo —
+   viravam botões sem estilo nenhum do navegador, com padding mínimo (ruim pro toque no
+   celular) e fora da identidade visual do resto do app. Base consistente, com altura mínima de
+   toque confortável (44px), igual o resto dos botões do app. */
+.btn{border-radius:8px;padding:12px 18px;font-size:13px;font-weight:600;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--gold);background:transparent;color:var(--gold);transition:background .2s,color .2s;}
+.btn.primary{background:var(--red);border-color:var(--red);color:#fff;}
+.btn.secondary{background:transparent;border-color:var(--border2,var(--border));color:var(--white);}
+.btn.sm{padding:8px 14px;font-size:12px;min-height:36px;}
 /* v87: "+ Pedir aqui" — mesmo botão vermelho, agora em formato pílula com texto (melhor área de toque e mais claro que só "+"). */
 .add-btn.add-btn-text{width:auto;height:40px;border-radius:20px;padding:0 16px;font-size:13px;font-weight:700;gap:5px;white-space:nowrap;}
 .add-btn:hover{background:var(--red-lt);transform:scale(1.12);box-shadow:0 4px 12px rgba(196,30,58,.4);}
@@ -264,10 +273,10 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 @keyframes locatePulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 .mi-in-cart-tag{font-size:10px;color:var(--gold);margin-top:2px;}
 
-.order-track-float{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:290;width:calc(100% - 32px);max-width:500px;display:none;}
+.order-track-float{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:290;width:calc(100% - 32px);max-width:500px;display:none;}
 .order-track-float.visible{display:block;}
 .order-track-btn{background:linear-gradient(90deg,var(--gold),#a9873c);border:none;border-radius:12px;padding:16px 24px;color:#1a1a1a;width:100%;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.5px;box-shadow:0 8px 32px rgba(201,168,76,.4);cursor:pointer;}
-.cart-float{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:300;width:calc(100% - 32px);max-width:500px;display:none;}
+.cart-float{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:300;width:calc(100% - 32px);max-width:500px;display:none;}
 .cart-float.visible{display:block;}
 .cart-float-btn{background:var(--red);border:none;border-radius:12px;padding:16px 24px;color:#fff;width:100%;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;letter-spacing:1px;box-shadow:0 8px 32px rgba(192,57,43,.5);transition:background .2s;}
 .cart-float-btn:hover{background:var(--red-lt);}
@@ -277,7 +286,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .drawer-overlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.7);display:none;backdrop-filter:blur(4px);}
 .drawer-overlay.open{display:block;}
-.drawer{position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--panel);border-radius:16px 16px 0 0;max-height:90vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);}
+.drawer{position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--panel);border-radius:16px 16px 0 0;max-height:90vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);padding-bottom:env(safe-area-inset-bottom);}
 .drawer.open{transform:translateY(0);}
 .drawer-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0;}
 .drawer-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
@@ -388,7 +397,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 
 .screen{display:none;position:fixed;inset:0;z-index:600;background:var(--black);overflow-y:auto;}
 .screen.open{display:block;}
-.screen-header{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;}
+.screen-header{background:var(--panel);border-bottom:1px solid var(--border);padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top));display:flex;align-items:center;gap:12px;position:sticky;top:0;}
 .back-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:50%;width:36px;height:36px;font-size:18px;display:flex;align-items:center;justify-content:center;}
 .screen-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--white);letter-spacing:2px;}
 .screen-body{max-width:600px;margin:0 auto;padding:24px 20px 100px;}
@@ -450,7 +459,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .order-summary-mini .summary-row{font-size:12px;}
 .order-summary-mini .summary-row.total{background:rgba(201,168,76,.08);margin:12px -16px -16px;padding:14px 16px;border-radius:0 0 9px 9px;border-top:1px solid var(--gold);}
 
-.place-btn{width:100%;background:var(--green);border:none;border-radius:8px;padding:14px;color:#fff;font-size:14px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s,opacity .2s;position:sticky;bottom:20px;box-shadow:0 4px 20px rgba(39,174,96,.4);}
+.place-btn{width:100%;background:var(--green);border:none;border-radius:8px;padding:14px;color:#fff;font-size:14px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s,opacity .2s;position:sticky;bottom:calc(20px + env(safe-area-inset-bottom));box-shadow:0 4px 20px rgba(39,174,96,.4);}
 /* v93 — botão "Quero agendar pra outro horário" no mesmo formato/tamanho do botão de
    Finalizar Pedido (place-btn acima), só que em dourado — pra ficar claramente do MESMO nível
    de importância visual, com cor diferente pra não confundir com "finalizar". Continua sendo
@@ -472,7 +481,7 @@ button{cursor:pointer;font-family:'Jost',sans-serif;}
 .pix-copy-btn{background:var(--red);border:none;border-radius:6px;padding:10px 20px;color:#fff;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
 .pix-copy-btn.done{background:var(--green);}
 
-.mini-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--white);box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);transition:transform .3s ease;pointer-events:none;}
+.mini-toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(100px);z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--white);box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:calc(100% - 32px);transition:transform .3s ease;pointer-events:none;}
 .mini-toast.visible{transform:translateX(-50%) translateY(0);}
 
 .success-screen{display:none;position:fixed;inset:0;z-index:700;background:var(--black);overflow-y:auto;font-family:'Inter',sans-serif;}
@@ -879,6 +888,10 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
           <span class="acc-nav-left"><span class="acc-nav-icon">❤️</span><span class="acc-nav-label">Fidelidade</span></span>
           <span class="acc-nav-arrow">›</span>
         </button>
+        <button type="button" class="acc-nav-btn acc-nav-reservas" style="grid-column:1/-1;" onclick="toggleAccountPanel('reservations')">
+          <span class="acc-nav-left"><span class="acc-nav-icon">📅</span><span class="acc-nav-label">Minhas Reservas</span></span>
+          <span class="acc-nav-arrow">›</span>
+        </button>
       </div>
 
       <div class="form-section" id="account-history-panel" style="display:none;">
@@ -886,6 +899,13 @@ button:active, .btn:active, [role="button"]:active, .pay-opt:active, .cat-tab:ac
         <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-history-pin" placeholder="••••"/></div>
         <button class="btn secondary sm" style="margin-bottom:10px;width:100%;" onclick="loadAccountHistory()">🔍 Ver meus pedidos</button>
         <div id="account-history-list"></div>
+      </div>
+
+      <div class="form-section" id="account-reservations-panel" style="display:none;">
+        <div class="form-section-title">📅 Minhas Reservas</div>
+        <div class="form-group"><label>Confirme sua senha (4 dígitos)</label><input type="tel" inputmode="numeric" maxlength="4" id="acc-reservations-pin" placeholder="••••"/></div>
+        <button class="btn secondary sm" style="margin-bottom:10px;width:100%;" onclick="loadAccountReservations()">🔍 Ver minhas reservas</button>
+        <div id="account-reservations-list"></div>
       </div>
 
       <div class="form-section" id="account-edit-panel" style="display:none;">
@@ -1431,7 +1451,7 @@ async function openAccountScreen() {
     });
     // Reseta os painéis expansíveis (Meus Pedidos / Editar / Fidelidade) toda vez que a
     // tela abre, pra sempre começar fechada e nunca reaproveitar dado de outra sessão.
-    ['account-history-panel', 'account-edit-panel', 'account-loyalty-panel'].forEach(id => {
+    ['account-history-panel', 'account-edit-panel', 'account-loyalty-panel', 'account-reservations-panel'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
@@ -1665,13 +1685,15 @@ function startReservationPolling() {
 function stopReservationPolling() { if (reservationPollTimer) { clearInterval(reservationPollTimer); reservationPollTimer = null; } }
 
 function toggleAccountPanel(which) {
-  const histP = document.getElementById('account-history-panel'), editP = document.getElementById('account-edit-panel'), loyP = document.getElementById('account-loyalty-panel');
+  const histP = document.getElementById('account-history-panel'), editP = document.getElementById('account-edit-panel'), loyP = document.getElementById('account-loyalty-panel'), resP = document.getElementById('account-reservations-panel');
   const showHist = which === 'history' && histP.style.display === 'none';
   const showEdit = which === 'edit' && editP.style.display === 'none';
   const showLoy = which === 'loyalty' && loyP.style.display === 'none';
+  const showRes = which === 'reservations' && resP.style.display === 'none';
   histP.style.display = showHist ? 'block' : 'none';
   editP.style.display = showEdit ? 'block' : 'none';
   loyP.style.display = showLoy ? 'block' : 'none';
+  resP.style.display = showRes ? 'block' : 'none';
   if (showEdit && customer) {
     document.getElementById('acc-edit-name').value = customer.name || '';
     document.getElementById('acc-edit-address').value = customer.lastAddress || '';
@@ -1738,6 +1760,56 @@ async function loadAccountHistory() {
         <div style="font-size:13px;font-weight:600;color:var(--gold);">R$ ${Number(o.total).toFixed(2).replace('.', ',')}</div>
       </div>`).join('');
   } catch (e) { listEl.innerHTML = '<p class="hint" style="color:var(--red-lt);">Erro de conexão.</p>'; }
+}
+
+// v94 — "Minhas Reservas" no app do cliente (mesmo padrão de loadAccountHistory acima, card com
+// cara de agendamento em vez de pedido — igual a referência visual mandada: ícone de calendário,
+// badge de status Confirmado/Pendente/Cancelado, botão "Ver reserva").
+async function loadAccountReservations() {
+  const pin = document.getElementById('acc-reservations-pin').value.trim();
+  const listEl = document.getElementById('account-reservations-list');
+  if (!customer || pin.length !== 4) { listEl.innerHTML = '<p class="hint" style="color:var(--red-lt);">Digite sua senha de 4 dígitos.</p>'; return; }
+  listEl.innerHTML = '<p class="hint">Carregando...</p>';
+  try {
+    const r = await fetch(`/api/customer/reservations?phone=${encodeURIComponent(customer.phone)}&pin=${encodeURIComponent(pin)}`);
+    const data = await r.json();
+    if (!r.ok) { listEl.innerHTML = `<p class="hint" style="color:var(--red-lt);">${esc(data.error||'Senha incorreta.')}</p>`; return; }
+    if (!data.reservations.length) { listEl.innerHTML = '<p class="hint">Você ainda não fez nenhuma reserva.</p>'; return; }
+    const statusInfo = {
+      confirmada: { label: 'Confirmado', bg: 'rgba(39,174,96,.15)', color: '#4ade80' },
+      pendente:   { label: 'Pendente',   bg: 'rgba(201,168,76,.15)', color: 'var(--gold)' },
+      cancelada:  { label: 'Cancelado',  bg: 'rgba(224,90,74,.15)', color: 'var(--red-lt)' },
+    };
+    let reservationsCache = data.reservations;
+    listEl.innerHTML = data.reservations.map(res => {
+      const st = statusInfo[res.status] || statusInfo.pendente;
+      const dataFmt = res.date ? new Date(res.date + 'T00:00').toLocaleDateString('pt-BR') : '';
+      return `
+      <div style="display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--border);padding:12px 0;">
+        <div style="width:36px;height:36px;border-radius:8px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">📅</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13.5px;font-weight:600;">Mesa para ${res.people} pessoa${res.people==1?'':'s'}</div>
+          <div style="font-size:12px;color:var(--muted);margin:2px 0 6px;">${dataFmt} • ${esc(res.time||'')}</div>
+          <div style="font-size:11px;color:var(--muted);">Código: #${esc(String(res.id).slice(-6).toUpperCase())}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+          <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:${st.bg};color:${st.color};white-space:nowrap;">${st.label}</span>
+          <button class="btn secondary sm" style="padding:5px 10px;font-size:11px;" onclick="verDetalheReservaConta('${res.id}')">Ver reserva</button>
+        </div>
+      </div>`;
+    }).join('');
+    window.__minhasReservasCache = reservationsCache;
+  } catch (e) { listEl.innerHTML = '<p class="hint" style="color:var(--red-lt);">Erro de conexão.</p>'; }
+}
+
+// v94: "Ver reserva" mostra os detalhes completos (inclusive observações, se houver) sem abrir
+// a API crua numa aba nova — usa os dados já carregados em loadAccountReservations().
+function verDetalheReservaConta(id) {
+  const res = (window.__minhasReservasCache || []).find(r => r.id === id);
+  if (!res) return;
+  const dataFmt = res.date ? new Date(res.date + 'T00:00').toLocaleDateString('pt-BR') : '';
+  const statusTxt = res.status === 'confirmada' ? 'Confirmada ✅' : res.status === 'cancelada' ? 'Cancelada ⛔' : 'Pendente de confirmação 🕓';
+  alert(`Reserva #${String(res.id).slice(-6).toUpperCase()}\n\nMesa para ${res.people} pessoa(s)\nData: ${dataFmt}\nHorário: ${res.time || ''}\nStatus: ${statusTxt}${res.notes ? `\n\nObservações: ${res.notes}` : ''}`);
 }
 
 async function saveAccountEdit() {
@@ -2810,7 +2882,7 @@ function renderMenu() {
               ${!isAvail
                 ? `<span style="font-size:11px;color:var(--muted);">Indisponível</span>`
                 : hasVariants
-                ? `<button class="add-btn" style="width:auto;padding:0 14px;border-radius:20px;font-size:12px;" onclick="openVariantPicker('${key}')">🎛 Personalizar</button>`
+                ? `<button class="add-btn add-btn-text" onclick="openVariantPicker('${key}')">+ Pedir aqui</button>`
                 : inCart
                 ? `<div class="qty-ctrl"><button onclick="changeQty('${key}',-1)">−</button><span>${inCart.qty}</span><button onclick="changeQty('${key}',1)">+</button></div>`
                 : `<button class="add-btn add-btn-text" onclick="addToCart('${key}')" data-key="${key}">+ Pedir aqui</button>`
