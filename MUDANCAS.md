@@ -1,3 +1,42 @@
+# v95 — Bug corrigido (impressão automática indevida) + investigação/reforço de barra fixa mobile e fonte de impressão + modelo padrão da IA (Groq) atualizado
+
+**BUG CORRIGIDO: impressão automática pelo Painel (navegador) disparava mesmo com o pedido NÃO
+automático.** O Agente Local (print-agent.js) já respeitava desde a v92 a regra "só imprime
+sozinho se o aceite automático estiver ligado" — mas esse mesmo gatilho dentro do Painel (usado
+pelas vias com método "Navegador" ou "Automática com a Extensão"), disparado ao chegar o evento
+"new-order", só checava se "imprimir automaticamente" (cfg.print) estava ligado, sem olhar se o
+pedido realmente nasceu aceito sozinho. Resultado: com aceite automático desligado, um pedido
+ainda pendente podia sair impresso sozinho pelo navegador do Painel mesmo assim — desperdiçando
+papel de pedidos que ainda nem foram aceitos e podem ser recusados. Agora o Painel também só
+imprime sozinho quando o pedido nasceu automático (`o._autoAcceptOn`), igual o Agente Local. A
+impressão MANUAL (botão "🖨 Imprimir") continua funcionando sempre, com ou sem aceite automático.
+
+**Investigado: barra de categorias/busca fixa no topo (celular).** Revisão completa do CSS/HTML/
+JS não encontrou nenhuma remoção dessa função — `position:sticky`, a hierarquia dos elementos
+(sem nenhum ancestral com overflow/transform escondido no meio) e o cálculo de offset
+(`updateStickyOffsets()`) continuam intactos e consistentes com as correções documentadas em
+v52/v63/v83. Por segurança, foi adicionado o prefixo `-webkit-sticky` (compatibilidade com iOS
+mais antigo) — sem qualquer mudança visual em aparelhos atuais. Se o problema persistir depois
+desta atualização, é importante testar em aba anônima/navegador atualizado (pra descartar cache
+antigo do Service Worker) e informar: aparelho, versão do iOS/Android e navegador exatos.
+
+**Investigado: tamanho da fonte da impressão não aumenta.** As três correções anteriores sobre
+esse exato sintoma (v92: rede/USB direta e Agente Local; v93: botão "🖨 Testar") continuam
+presentes e ativas no código — não foi encontrada nenhuma regressão nova. Pra localizar o que
+ainda falha, preciso de mais detalhes: isso acontece em qual via de impressão (Rede/USB,
+Agente Local/Automática, ou Navegador)? E acontece ao aumentar o campo "Tamanho da fonte" em
+Configurações → Central de Impressão, ou depois de editar um item do cardápio o tamanho volta
+sozinho pro padrão?
+
+**Atualizado: modelo padrão da IA de atendimento (provedor Groq).** A Groq descontinuou o
+`llama-3.3-70b-versatile` (aviso oficial em 17/06/2026) — quem estava usando Groq com o campo
+"Modelo" em branco (padrão) parava de receber resposta da IA sem nenhum aviso claro na tela. O
+padrão agora é `openai/gpt-oss-120b`, o substituto oficial recomendado pela própria Groq: mesma
+faixa de qualidade, gratuito, com bom limite no plano free e mantido ativamente (evita cair de
+novo num modelo descontinuado tão cedo). Se seu restaurante já tinha um modelo específico
+digitado nesse campo, nada muda sozinho — só o texto de ajuda foi atualizado; troque manualmente
+em Configurações → Atendimento se for o seu caso.
+
 # v94 — "Minhas Reservas" no app do cliente, botão único "+ Pedir aqui", ajustes de responsividade
 
 **Novo: tela "Minhas Reservas" no app do cliente.** Antes só existia a tela pra *criar* uma

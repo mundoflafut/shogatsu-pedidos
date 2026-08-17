@@ -1089,7 +1089,7 @@ function sendSMS(toPhone, body, smsCfg) {
 // abaixo, seção "Atendimento — conversas").
 const IA_PROVEDORES = {
   anthropic:   { label: 'Anthropic (Claude) — pago',        modeloPadrao: 'claude-sonnet-5' },
-  groq:        { label: 'Groq — grátis',                    modeloPadrao: 'llama-3.3-70b-versatile' },
+  groq:        { label: 'Groq — grátis',                    modeloPadrao: 'openai/gpt-oss-120b' },
   openrouter:  { label: 'OpenRouter — grátis',               modeloPadrao: 'meta-llama/llama-3.3-70b-instruct:free' },
   huggingface: { label: 'Hugging Face — grátis',             modeloPadrao: 'meta-llama/Llama-3.3-70B-Instruct' },
   gemini:      { label: 'Google Gemini — grátis',            modeloPadrao: 'gemini-2.0-flash' }
