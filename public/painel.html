@@ -704,6 +704,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
     <button class="nav-item" data-page="custos" data-min-role="admin" onclick="goPage('custos')"><span class="ni">💰</span> Custos</button>
+    <!-- v99 — ferramenta isolada, abre em nova aba; não usa goPage()/roteamento do SPA, não mexe em nenhum outro item -->
+    <button class="nav-item" data-min-role="admin" onclick="window.open('/nota-fiscal.html','_blank')"><span class="ni">📷</span> Ler Nota Fiscal</button>
     <button class="nav-item" data-page="ia" data-min-role="admin" onclick="goPage('ia')"><span class="ni">🤖</span> IA do Cardápio <span class="nb" id="nb-ia-aprovacoes" style="display:none">0</span></button>
     <button class="nav-item" data-page="qrlinks" data-min-role="admin" onclick="goPage('qrlinks')"><span class="ni">🔗</span> QR Code &amp; Links</button>
     <button class="nav-item" data-page="relatorios" data-min-role="admin" onclick="goPage('relatorios')"><span class="ni">📈</span> Relatórios</button>

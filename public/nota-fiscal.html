@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shogatsu — Ler Nota Fiscal</title>
+<!--
+  v99 — FERRAMENTA ISOLADA "📷 LER NOTA FISCAL"
+  Página nova, independente, autocontida (CSS + JS todos aqui dentro). Não importa nem depende de
+  nenhum script do painel.html — só reaproveita o token de login já salvo em
+  localStorage('shog_token') pra chamar a API autenticado, e usa a rota de backend já existente
+  desde a v98: POST /api/custos/ler-nota-fiscal (isolada, sem nenhuma outra tela usando).
+  Fluxo: Selecionar/Tirar foto → Groq Vision (via backend) → Conferência → Confirmar / Editar / Cancelar.
+  Não grava nada em banco/estoque — é só leitura + conferência visual.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f0f0f;--panel:#1a1a1a;--card:#202020;--border:#2a2a2a;--border2:#333;
+    --red:#c0392b;--red-lt:#e05a4a;--red-bg:rgba(192,57,43,.1);
+    --green:#27ae60;--green-lt:#2ecc71;--green-bg:rgba(39,174,96,.1);
+    --gold:#c9a84c;--white:#f0f0f0;--muted:#888;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--white);font-family:'Inter',sans-serif;min-height:100vh;}
+  .topbar{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:5;}
+  .topbar a{color:var(--muted);text-decoration:none;font-size:13px;}
+  .topbar a:hover{color:var(--white);}
+  .topbar h1{font-size:16px;margin:0;font-weight:600;}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 16px 60px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+  .muted{color:var(--muted);font-size:13px;}
+  .btn{display:inline-flex;align-items:center;gap:8px;justify-content:center;padding:11px 18px;border-radius:7px;border:1px solid var(--border2);background:var(--panel);color:var(--white);font-size:14px;cursor:pointer;font-weight:500;}
+  .btn:hover{border-color:var(--gold);}
+  .btn.primary{background:var(--red);border-color:var(--red);color:#fff;}
+  .btn.primary:hover{background:var(--red-lt);}
+  .btn.success{background:var(--green);border-color:var(--green);color:#fff;}
+  .btn.success:hover{background:var(--green-lt);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  input[type=file]{display:none;}
+  .preview{max-width:100%;max-height:340px;border-radius:8px;border:1px solid var(--border);display:block;margin:14px 0;}
+  .status{font-size:13px;padding:10px 12px;border-radius:7px;margin:10px 0;}
+  .status.info{background:var(--panel);color:var(--muted);border:1px solid var(--border);}
+  .status.error{background:var(--red-bg);color:var(--red-lt);border:1px solid var(--red);}
+  .status.ok{background:var(--green-bg);color:var(--green-lt);border:1px solid var(--green);}
+  .field{margin-bottom:10px;}
+  .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;}
+  .field input{width:100%;padding:9px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--panel);color:var(--white);font-size:14px;}
+  .field input[readonly]{opacity:.7;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  @media(max-width:560px){.grid2,.grid3{grid-template-columns:1fr;}}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--gold);margin:18px 0 10px;border-bottom:1px solid var(--border);padding-bottom:6px;}
+  h3:first-child{margin-top:0;}
+  table{width:100%;border-collapse:collapse;margin-top:6px;}
+  th,td{padding:8px 6px;text-align:left;font-size:12px;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:500;text-transform:uppercase;font-size:10px;}
+  td input{width:100%;padding:5px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--panel);color:var(--white);font-size:12px;}
+  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--white);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .null-hint{color:var(--muted);font-style:italic;}
+  .confirmado-box{text-align:center;padding:30px 16px;}
+  .confirmado-box textarea{width:100%;min-height:220px;background:var(--panel);color:var(--white);border:1px solid var(--border2);border-radius:8px;padding:12px;font-family:monospace;font-size:12px;margin-top:14px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/painel.html">← Voltar ao painel</a>
+  <h1 style="margin-left:6px;">📷 Ler Nota Fiscal</h1>
+</div>
+
+<div class="wrap">
+
+  <!-- ETAPA 1: sem sessão -->
+  <div class="card" id="nf-sem-login" style="display:none;">
+    <div class="status error">Você precisa estar logado no painel pra usar essa ferramenta.</div>
+    <a class="btn primary" href="/painel.html">Ir para o login</a>
+  </div>
+
+  <div id="nf-app" style="display:none;">
+
+    <!-- ETAPA 2: selecionar foto -->
+    <div class="card" id="nf-etapa-upload">
+      <div class="muted" style="margin-bottom:12px;">Selecione ou tire uma foto da NF-e/DANFE. A imagem é enviada só pra leitura — nada é gravado automaticamente.</div>
+      <div class="row">
+        <label class="btn primary" for="nf-input-camera">📷 Tirar foto</label>
+        <label class="btn" for="nf-input-arquivo">🖼️ Escolher da galeria</label>
+      </div>
+      <input type="file" id="nf-input-camera" accept="image/jpeg,image/png,image/jpg" capture="environment"/>
+      <input type="file" id="nf-input-arquivo" accept="image/jpeg,image/png,image/jpg"/>
+      <img id="nf-preview" class="preview" style="display:none;"/>
+      <div id="nf-status-upload"></div>
+      <div class="row" id="nf-row-enviar" style="display:none;margin-top:6px;">
+        <button class="btn success" id="nf-btn-enviar" onclick="nfEnviarParaLeitura()">✅ Enviar pra leitura (Groq)</button>
+        <button class="btn" onclick="nfResetar()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 3: conferência -->
+    <div class="card" id="nf-etapa-conferencia" style="display:none;">
+      <div class="muted" style="margin-bottom:10px;">Confira os dados abaixo antes de confirmar. Campos que a IA não conseguiu ler aparecem em branco — preencha na mão se precisar.</div>
+
+      <h3>Nota</h3>
+      <div class="grid3">
+        <div class="field"><label>Número da NF-e</label><input id="nf-f-numero"/></div>
+        <div class="field"><label>Série</label><input id="nf-f-serie"/></div>
+        <div class="field"><label>Data de emissão</label><input id="nf-f-data"/></div>
+      </div>
+      <div class="field"><label>Chave de acesso</label><input id="nf-f-chave"/></div>
+
+      <h3>Emitente / Fornecedor</h3>
+      <div class="grid2">
+        <div class="field"><label>Nome</label><input id="nf-f-emit-nome"/></div>
+        <div class="field"><label>CNPJ</label><input id="nf-f-emit-cnpj"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Inscrição estadual</label><input id="nf-f-emit-ie"/></div>
+        <div class="field"><label>Endereço</label><input id="nf-f-emit-end"/></div>
+      </div>
+
+      <h3>Destinatário</h3>
+      <div class="grid2">
+        <div class="field"><label>Nome</label><input id="nf-f-dest-nome"/></div>
+        <div class="field"><label>CNPJ</label><input id="nf-f-dest-cnpj"/></div>
+      </div>
+
+      <h3>Produtos</h3>
+      <div style="overflow-x:auto;">
+        <table id="nf-tabela-produtos">
+          <thead><tr>
+            <th>Código</th><th>Descrição</th><th>NCM</th><th>CST</th><th>CFOP</th><th>Un.</th><th>Qtd</th><th>Vl. Unit.</th><th>Vl. Total</th>
+          </tr></thead>
+          <tbody id="nf-tbody-produtos"></tbody>
+        </table>
+      </div>
+
+      <h3>Totais</h3>
+      <div class="grid3">
+        <div class="field"><label>Base ICMS</label><input id="nf-f-base-icms"/></div>
+        <div class="field"><label>Valor ICMS</label><input id="nf-f-valor-icms"/></div>
+        <div class="field"><label>Desconto</label><input id="nf-f-desconto"/></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Frete</label><input id="nf-f-frete"/></div>
+        <div class="field"><label>Valor total da nota</label><input id="nf-f-total-nota"/></div>
+      </div>
+
+      <div class="row" style="margin-top:16px;">
+        <button class="btn success" onclick="nfConfirmar()">✅ Confirmar</button>
+        <button class="btn" onclick="nfVoltarParaEditar()">✏️ Já estou editando</button>
+        <button class="btn" style="border-color:var(--red);color:var(--red-lt);" onclick="nfResetar()">✖️ Cancelar</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 4: confirmado -->
+    <div class="card confirmado-box" id="nf-etapa-confirmado" style="display:none;">
+      <div style="font-size:40px;">✅</div>
+      <div style="font-size:15px;margin-top:8px;">Dados conferidos e confirmados.</div>
+      <div class="muted" style="margin-top:4px;">Nada foi gravado automaticamente no sistema — copie os dados abaixo pra onde precisar (planilha, ficha técnica, etc.).</div>
+      <textarea id="nf-json-final" readonly></textarea>
+      <div class="row" style="justify-content:center;margin-top:14px;">
+        <button class="btn" onclick="nfCopiarJson()">📋 Copiar JSON</button>
+        <button class="btn primary" onclick="nfResetar()">📷 Ler outra nota</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── auth: reaproveita a sessão já feita no painel.html, sem refazer login ──
+const nfToken = localStorage.getItem('shog_token') || null;
+if (!nfToken) {
+  document.getElementById('nf-sem-login').style.display = 'block';
+} else {
+  document.getElementById('nf-app').style.display = 'block';
+}
+
+let nfImagemBase64 = null;
+let nfImagemMediaType = null;
+let nfDadosLidos = null;
+
+function nfStatus(elId, tipo, texto){
+  const el = document.getElementById(elId);
+  el.innerHTML = texto ? `<div class="status ${tipo}">${texto}</div>` : '';
+}
+
+function nfLerArquivo(file){
+  if (!file) return;
+  if (!['image/jpeg','image/jpg','image/png'].includes(file.type)) {
+    nfStatus('nf-status-upload','error','Formato não suportado. Use JPG, JPEG ou PNG.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    nfImagemBase64 = dataUrl.split(',')[1];
+    nfImagemMediaType = file.type;
+    document.getElementById('nf-preview').src = dataUrl;
+    document.getElementById('nf-preview').style.display = 'block';
+    document.getElementById('nf-row-enviar').style.display = 'flex';
+    nfStatus('nf-status-upload','', '');
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById('nf-input-camera').addEventListener('change', e => nfLerArquivo(e.target.files[0]));
+document.getElementById('nf-input-arquivo').addEventListener('change', e => nfLerArquivo(e.target.files[0]));
+
+async function nfEnviarParaLeitura(){
+  if (!nfImagemBase64) return;
+  const btn = document.getElementById('nf-btn-enviar');
+  btn.disabled = true;
+  nfStatus('nf-status-upload','info','<span class="spinner"></span> Lendo a nota com a IA (Groq)... pode levar alguns segundos.');
+  try {
+    const r = await fetch('/api/custos/ler-nota-fiscal', {
+      method: 'POST',
+      headers: { 'Authorization':'Bearer '+nfToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ imagemBase64: nfImagemBase64, mediaType: nfImagemMediaType })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Não consegui ler essa nota.');
+    nfDadosLidos = data.nota || {};
+    nfPreencherConferencia(nfDadosLidos);
+    document.getElementById('nf-etapa-upload').style.display = 'none';
+    document.getElementById('nf-etapa-conferencia').style.display = 'block';
+  } catch (e) {
+    nfStatus('nf-status-upload','error', e.message || 'Erro ao ler a nota fiscal.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function nfV(v){ return (v === null || v === undefined) ? '' : v; }
+
+function nfPreencherConferencia(nota){
+  const emit = nota.emitente || {};
+  const dest = nota.destinatario || {};
+  const totais = nota.totais || {};
+  document.getElementById('nf-f-numero').value = nfV(nota.numero_nota);
+  document.getElementById('nf-f-serie').value = nfV(nota.serie);
+  document.getElementById('nf-f-data').value = nfV(nota.data_emissao);
+  document.getElementById('nf-f-chave').value = nfV(nota.chave_acesso);
+  document.getElementById('nf-f-emit-nome').value = nfV(emit.nome);
+  document.getElementById('nf-f-emit-cnpj').value = nfV(emit.cnpj);
+  document.getElementById('nf-f-emit-ie').value = nfV(emit.inscricao_estadual);
+  document.getElementById('nf-f-emit-end').value = nfV(emit.endereco);
+  document.getElementById('nf-f-dest-nome').value = nfV(dest.nome);
+  document.getElementById('nf-f-dest-cnpj').value = nfV(dest.cnpj);
+  document.getElementById('nf-f-base-icms').value = nfV(totais.base_icms);
+  document.getElementById('nf-f-valor-icms').value = nfV(totais.valor_icms);
+  document.getElementById('nf-f-desconto').value = nfV(totais.desconto);
+  document.getElementById('nf-f-frete').value = nfV(totais.frete);
+  document.getElementById('nf-f-total-nota').value = nfV(totais.valor_total_nota);
+
+  const produtos = Array.isArray(nota.produtos) ? nota.produtos : [];
+  const tbody = document.getElementById('nf-tbody-produtos');
+  if (produtos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="null-hint">Nenhum produto identificado na nota.</td></tr>`;
+  } else {
+    tbody.innerHTML = produtos.map((p, i) => `
+      <tr>
+        <td><input data-i="${i}" data-campo="codigo" value="${nfV(p.codigo)}"/></td>
+        <td><input data-i="${i}" data-campo="descricao" value="${nfV(p.descricao)}"/></td>
+        <td><input data-i="${i}" data-campo="ncm" value="${nfV(p.ncm)}"/></td>
+        <td><input data-i="${i}" data-campo="cst" value="${nfV(p.cst)}"/></td>
+        <td><input data-i="${i}" data-campo="cfop" value="${nfV(p.cfop)}"/></td>
+        <td><input data-i="${i}" data-campo="unidade" value="${nfV(p.unidade)}"/></td>
+        <td><input data-i="${i}" data-campo="quantidade" value="${nfV(p.quantidade)}"/></td>
+        <td><input data-i="${i}" data-campo="valor_unitario" value="${nfV(p.valor_unitario)}"/></td>
+        <td><input data-i="${i}" data-campo="valor_total" value="${nfV(p.valor_total)}"/></td>
+      </tr>
+    `).join('');
+  }
+}
+
+function nfColetarConferencia(){
+  const produtos = Array.from(document.querySelectorAll('#nf-tbody-produtos tr')).map(tr => {
+    const inputs = tr.querySelectorAll('input');
+    if (!inputs.length) return null;
+    const obj = {};
+    inputs.forEach(inp => obj[inp.dataset.campo] = inp.value || null);
+    return obj;
+  }).filter(Boolean);
+
+  return {
+    numero_nota: document.getElementById('nf-f-numero').value || null,
+    serie: document.getElementById('nf-f-serie').value || null,
+    chave_acesso: document.getElementById('nf-f-chave').value || null,
+    data_emissao: document.getElementById('nf-f-data').value || null,
+    emitente: {
+      nome: document.getElementById('nf-f-emit-nome').value || null,
+      cnpj: document.getElementById('nf-f-emit-cnpj').value || null,
+      inscricao_estadual: document.getElementById('nf-f-emit-ie').value || null,
+      endereco: document.getElementById('nf-f-emit-end').value || null
+    },
+    destinatario: {
+      nome: document.getElementById('nf-f-dest-nome').value || null,
+      cnpj: document.getElementById('nf-f-dest-cnpj').value || null
+    },
+    produtos,
+    totais: {
+      base_icms: document.getElementById('nf-f-base-icms').value || null,
+      valor_icms: document.getElementById('nf-f-valor-icms').value || null,
+      desconto: document.getElementById('nf-f-desconto').value || null,
+      frete: document.getElementById('nf-f-frete').value || null,
+      valor_total_nota: document.getElementById('nf-f-total-nota').value || null
+    }
+  };
+}
+
+function nfConfirmar(){
+  const dados = nfColetarConferencia();
+  document.getElementById('nf-json-final').value = JSON.stringify(dados, null, 2);
+  document.getElementById('nf-etapa-conferencia').style.display = 'none';
+  document.getElementById('nf-etapa-confirmado').style.display = 'block';
+}
+function nfVoltarParaEditar(){
+  // "Editar" — os campos já são editáveis na própria tela de conferência, isso só dá foco no primeiro campo.
+  document.getElementById('nf-f-numero').focus();
+}
+function nfCopiarJson(){
+  const ta = document.getElementById('nf-json-final');
+  ta.select();
+  document.execCommand('copy');
+}
+function nfResetar(){
+  nfImagemBase64 = null; nfImagemMediaType = null; nfDadosLidos = null;
+  document.getElementById('nf-input-camera').value = '';
+  document.getElementById('nf-input-arquivo').value = '';
+  document.getElementById('nf-preview').style.display = 'none';
+  document.getElementById('nf-row-enviar').style.display = 'none';
+  nfStatus('nf-status-upload','', '');
+  document.getElementById('nf-etapa-upload').style.display = 'block';
+  document.getElementById('nf-etapa-conferencia').style.display = 'none';
+  document.getElementById('nf-etapa-confirmado').style.display = 'none';
+}
+</script>
+</body>
+</html>
