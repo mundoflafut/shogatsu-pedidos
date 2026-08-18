@@ -1672,6 +1672,13 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div style="font-size:10px;color:var(--muted);margin-top:4px;">
               Só o computador com o Painel aberto e conectado pode imprimir de verdade (Agente Local ou modo Navegador). Se abrir o Painel em outro computador, ele assume a impressão automaticamente. Pra travar um Agente Local específico nesta estação, copie este código e cole em "stationId" no config.json dele.
             </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+              Já colocou um nome escolhido por você (ex.: <code>PC-CAIXA</code>) no config.json do Agente Local, em vez do código acima? Digite o MESMO nome aqui pra esta estação assumir com ele:
+            </div>
+            <div style="margin-top:4px;display:flex;gap:6px;">
+              <input type="text" id="print-station-id-input" placeholder="ex.: PC-CAIXA" style="flex:1;font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);"/>
+              <button type="button" class="btn primary sm" style="padding:3px 10px;" onclick="renameStationId()">Salvar e assumir</button>
+            </div>
           </div>
           <div class="field" style="margin-top:10px;display:flex;align-items:center;gap:8px;">
             <input type="checkbox" id="cfg-print-terminal" style="width:16px;height:16px;" onchange="localStorage.setItem('shogatsu_print_terminal', this.checked?'1':'0'); updatePrintTerminalHeartbeat();"/>
@@ -2873,8 +2880,29 @@ function getOrCreateStationId(){
   }
   return id;
 }
-const PRINT_STATION_ID = getOrCreateStationId();
+// v100 — BUG CORRIGIDO ("PC-CAIXA não é a Estação Ativa de Impressão"): antes só existia o
+// código aleatório gerado por getOrCreateStationId() acima (ex.: "st1a2b3c4d5e6f"), que o
+// usuário precisava COPIAR e colar manualmente no "stationId" do config.json do Agente Local.
+// Se a pessoa digitasse um nome dela mesma no config.json (ex.: "PC-CAIXA") em vez de copiar o
+// código gerado, o Painel continuava reivindicando a Estação Ativa com o código aleatório — que
+// nunca bate com "PC-CAIXA" — e o Agente Local ficava bloqueado pra sempre, mesmo com o Painel
+// aberto e conectado no computador certo. Agora dá pra RENOMEAR a estação deste computador
+// direto no Painel (ver renameStationId() abaixo); o nome escolhido fica salvo no mesmo
+// localStorage (substitui o código aleatório) e o Painel se reregistra na hora com o novo nome.
+let PRINT_STATION_ID = getOrCreateStationId();
 try{ const stEl = document.getElementById('print-station-id-display'); if(stEl) stEl.textContent = PRINT_STATION_ID; }catch(e){}
+function renameStationId(){
+  const inp = document.getElementById('print-station-id-input');
+  if(!inp) return;
+  const v = (inp.value || '').trim();
+  if(!v){ showToast('⚠️ Nome inválido', 'Digite um nome para identificar esta estação (ex.: PC-CAIXA).', 3000); return; }
+  localStorage.setItem('shogatsu_station_id', v);
+  PRINT_STATION_ID = v;
+  try{ const stEl = document.getElementById('print-station-id-display'); if(stEl) stEl.textContent = PRINT_STATION_ID; }catch(e){}
+  inp.value = '';
+  registerPrintStation(); // reivindica a Estação Ativa AGORA com o novo nome
+  showToast('🖥️ Estação renomeada', `Este computador agora é a estação "${v}". Confira se é o mesmo valor em "stationId" no config.json do Agente Local.`, 5000);
+}
 // Rótulo só pra identificação humana no indicador/log — não precisa ser único, é só exibição.
 function printStationLabel(){
   const who = userName || 'Painel';
