@@ -793,7 +793,10 @@ function isActiveStationAlive() {
   return !!activeStation && (Date.now() - activeStation.lastSeen) < ACTIVE_STATION_TIMEOUT_MS;
 }
 function claimActiveStation(stationId, label) {
-  activeStation = { stationId: String(stationId), label: String(label || stationId || '').slice(0, 60), lastSeen: Date.now() };
+  // v100: trim defensivo — um espaço a mais/menos (copy-paste do config.json do Agente Local,
+  // ou digitado à mão no Painel via renameStationId()) não pode quebrar a comparação exata feita
+  // em isStationAuthorized()/isAuthorizedToPrint().
+  activeStation = { stationId: String(stationId).trim(), label: String(label || stationId || '').slice(0, 60), lastSeen: Date.now() };
   knownStations.set(activeStation.stationId, { label: activeStation.label, lastSeen: activeStation.lastSeen });
   broadcast('active-station-changed', { activeStationId: activeStation.stationId, activeLabel: activeStation.label });
   return activeStation;
@@ -806,8 +809,8 @@ function claimActiveStation(stationId, label) {
 // que ainda não manda esse campo) também não bloqueia — mesmo motivo.
 function isStationAuthorized(stationId) {
   if (!isActiveStationAlive()) return true;
-  if (!stationId) return true;
-  return String(stationId) === activeStation.stationId;
+  if (!stationId || !String(stationId).trim()) return true;
+  return String(stationId).trim() === activeStation.stationId;
 }
 
 // ─── Clientes conectados via SSE no SITE DO CLIENTE (só avisa "cardápio mudou",
@@ -3235,7 +3238,7 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const { stationId, label } = await readBody(req);
-      if (!stationId) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
+      if (!stationId || !String(stationId).trim()) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
       claimActiveStation(stationId, label);
       return sendJSON(res, 200, { ok: true, activeStationId: activeStation.stationId, activeLabel: activeStation.label });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
@@ -3250,8 +3253,8 @@ function estimateDeliveryWindow(order, cfg) {
     if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
     try {
       const { stationId, label } = await readBody(req);
-      if (!stationId) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
-      const sid = String(stationId);
+      if (!stationId || !String(stationId).trim()) return sendJSON(res, 400, { error: 'stationId obrigatório.' });
+      const sid = String(stationId).trim();
       if (activeStation && activeStation.stationId === sid) {
         activeStation.lastSeen = Date.now();
         knownStations.set(sid, { label: activeStation.label, lastSeen: activeStation.lastSeen });

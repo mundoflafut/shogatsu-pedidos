@@ -1,3 +1,42 @@
+# v100 — BUG CORRIGIDO: "PC-CAIXA não é a Estação Ativa de Impressão" (sincronização Painel → servidor → Print Agent)
+
+**Corrigido só o bug pedido, nada mais.** Estoque, cardápio, pedidos, reservas, motoboys, IA,
+Custos e a própria impressora continuam exatamente como estavam — a trava da Estação Ativa de
+Impressão (v90) **não foi removida** e `isAuthorizedToPrint()` **não sofreu bypass**.
+
+**Causa raiz encontrada:** o Painel gera um código aleatório único por navegador
+(`getOrCreateStationId()`, ex.: `st1a2b3c4d5e6f`) e é ESSE código que ele manda pro servidor em
+`POST /api/print-station/register`/`heartbeat` como estação ativa. O campo `"stationId"` do
+`config.json` do Agente Local precisa ser **exatamente igual** a esse código pra
+`isAuthorizedToPrint()` bater (`stationStatus.activeStationId === STATION_ID`). Quando alguém
+digita um nome escolhido à mão no `config.json` (ex.: `"PC-CAIXA"`) em vez de copiar o código
+gerado, o Painel continua reivindicando a estação com o código aleatório — que nunca é igual a
+`"PC-CAIXA"` — e o Agente Local fica bloqueado pra sempre, mesmo com o Painel aberto e conectado
+no computador certo.
+
+**Correção em `public/painel.html`:** a Central de Impressão (Configurações → 🔔 Impressão
+Automática) agora tem um campo pra **renomear a estação deste computador** pra qualquer nome
+escolhido (função nova `renameStationId()`) — o nome digitado substitui o código aleatório no
+mesmo `localStorage('shogatsu_station_id')` e o Painel se reregistra na hora como Estação Ativa
+com esse nome. Assim, digitando `PC-CAIXA` no Painel (o mesmo valor já usado no `config.json` do
+Agente Local), a sincronização passa a bater. O código aleatório original continua existindo e
+funcionando normalmente pra quem não mexer em nada (comportamento padrão inalterado).
+
+**Correção defensiva em `server.js`:** `claimActiveStation()` e os endpoints
+`POST /api/print-station/register`, `POST /api/print-station/heartbeat` e a comparação em
+`isStationAuthorized()` agora aplicam `.trim()` no `stationId` recebido — um espaço a mais/menos
+(copy-paste do `config.json` ou digitado no campo novo do Painel) não quebra mais a comparação
+exata. O endpoint `GET /api/print-station/status` e a lógica de failover (estação anterior cai →
+outra assume sozinha) não mudaram.
+
+**Fluxo confirmado:** Painel conectado (com o nome certo, igual ao `config.json`) → estação ativa
+registrada no servidor com esse nome → Agente Local consulta `/api/print-station/status`,
+reconhece `activeStationId === STATION_ID` → impressão liberada. Só 1 estação ativa por vez
+continua valendo; Painel fechado/desconectado continua deixando nenhuma estação autorizada
+(depois de `ACTIVE_STATION_TIMEOUT_MS` sem heartbeat).
+
+---
+
 # v99 — Ferramenta isolada "📷 Ler Nota Fiscal" (módulo independente, não altera nenhuma função existente)
 
 **Zero alteração em qualquer função pré-existente.** Esta versão adiciona só a ferramenta pedida,
