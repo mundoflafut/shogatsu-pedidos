@@ -1446,17 +1446,28 @@ function lerImagemIA(base64, mediaType, tipo, iaCfg) {
 // lerImagemIA(tipo='nota') — que continua existindo do jeito de sempre pra não quebrar quem já
 // usa. Esta função é aditiva: nova rota /api/custos/ler-nota-fiscal (ver mais abaixo), sem mudar
 // o contrato de /api/custos/ler-imagem. Nunca inventa dado: campo ilegível vem null.
+// v99 — ampliada pra ferramenta isolada "📷 Ler Nota Fiscal" (public/nota-fiscal.html): agora
+// também extrai chave de acesso, série, IE, endereço do emitente, destinatário+CNPJ, e por
+// produto NCM/CST/CFOP, além de base ICMS, valor ICMS, desconto e frete da nota. Nenhuma outra
+// tela/função do sistema chama esta função — ampliar o schema aqui não afeta nada existente.
 function lerNotaFiscalEstruturadaIA(base64, mediaType, iaCfg) {
-  const hash = hashImagemIA(base64) + ':nota-estruturada';
+  const hash = hashImagemIA(base64) + ':nota-estruturada-v99';
   const doCache = cacheImagemIA_ler(hash);
   if (doCache) return Promise.resolve(doCache.resultado);
-  const instrucao = 'Leia esta imagem de uma nota fiscal. Extraia fornecedor, CNPJ, número da nota, série, data, ' +
-    'e cada produto (código, quantidade, unidade, preço unitário, preço total) e o valor total da nota. ' +
+  const instrucao = 'Leia esta imagem de uma Nota Fiscal Eletrônica (NF-e/DANFE). Extraia SOMENTE o que estiver ' +
+    'visível e legível na nota — número da NF-e, série, chave de acesso, data de emissão, dados do emitente/' +
+    'fornecedor (nome, CNPJ, inscrição estadual, endereço), dados do destinatário (nome, CNPJ), e cada produto ' +
+    '(código, descrição, NCM, CST, CFOP, unidade, quantidade, valor unitário, valor total), e os totais da nota ' +
+    '(base de cálculo do ICMS, valor do ICMS, desconto, frete, valor total da nota). ' +
     'Responda APENAS com um JSON (sem markdown, sem texto antes/depois) no formato exato: ' +
-    '{"fornecedor":"","cnpj":"","numero_nota":"","serie":"","data":"","valor_total":0,"produtos":[{"codigo":"","nome":"","quantidade":0,"unidade":"","preco_unitario":0,"preco_total":0}]}. ' +
-    'Se algum campo não estiver legível, use null nesse campo específico — nunca invente um valor.';
+    '{"numero_nota":"","serie":"","chave_acesso":"","data_emissao":"",' +
+    '"emitente":{"nome":"","cnpj":"","inscricao_estadual":"","endereco":""},' +
+    '"destinatario":{"nome":"","cnpj":""},' +
+    '"produtos":[{"codigo":"","descricao":"","ncm":"","cst":"","cfop":"","unidade":"","quantidade":0,"valor_unitario":0,"valor_total":0}],' +
+    '"totais":{"base_icms":0,"valor_icms":0,"desconto":0,"frete":0,"valor_total_nota":0}}. ' +
+    'Se algum campo não estiver legível ou não existir na nota, use null nesse campo específico — nunca invente um valor.';
   const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
-  return chamarIA([{ role: 'user', content }], iaCfg, 1800).then(texto => {
+  return chamarIA([{ role: 'user', content }], iaCfg, 2200).then(texto => {
     const limpo = texto.replace(/```json|```/g, '').trim();
     const resultado = JSON.parse(limpo);
     cacheImagemIA_salvar(hash, resultado);

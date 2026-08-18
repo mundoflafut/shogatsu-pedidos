@@ -1,3 +1,40 @@
+# v99 — Ferramenta isolada "📷 Ler Nota Fiscal" (módulo independente, não altera nenhuma função existente)
+
+**Zero alteração em qualquer função pré-existente.** Esta versão adiciona só a ferramenta pedida,
+como módulo isolado — pedidos, cardápio, reservas, estoque, impressão, Print Agent, login,
+banco de dados (arquivos JSON em `data/`) e a tela de Custos existente (com seu próprio fluxo de
+foto → ingrediente, `/api/custos/ler-imagem`) continuam **exatamente** como estavam.
+
+**Arquivo novo:** `public/nota-fiscal.html` — página independente e autocontida (HTML+CSS+JS tudo
+num arquivo só, sem importar nada do painel.html). Reaproveita o token de login já salvo em
+`localStorage('shog_token')`, sem precisar logar de novo. Fluxo: **Tirar/selecionar foto → Groq
+Vision (via backend) → Conferência → Confirmar / Editar / Cancelar.** Não grava nada em
+banco/estoque/ingredientes — ao confirmar, só mostra o JSON conferido pra copiar pra onde for
+preciso (nenhuma tabela nova foi criada, porque não houve necessidade real de persistir nada).
+
+**Alteração mínima e isolada em `server.js`:** ampliado o schema/prompt de
+`lerNotaFiscalEstruturadaIA()` — função criada na v98, sem nenhuma outra tela usando — pra extrair
+também chave de acesso, série, inscrição estadual, endereço do emitente, destinatário+CNPJ, e por
+produto NCM/CST/CFOP, além de base ICMS/valor ICMS/desconto/frete/valor total da nota. A rota já
+existente `POST /api/custos/ler-nota-fiscal` (v98) continua com o mesmo nome e mesmo formato de
+entrada; só o JSON de saída (`nota`) ficou mais completo. Nenhuma outra função do sistema chama
+essa rota ou essa função — ampliar o schema aqui não tem como afetar nada além da nova tela.
+A chave `GROQ_API_KEY`/chave configurada em Configurações → Atendimento continua só no backend,
+nunca exposta ao navegador — reaproveita o mesmo `chamarIA()` com fallback automático da v98.
+
+**Alteração de uma linha em `public/painel.html`:** um botão novo `📷 Ler Nota Fiscal` na barra
+lateral (ao lado de "Custos"), que abre `nota-fiscal.html` numa aba nova — não usa o roteamento
+`goPage()` do SPA, não mexe em nenhum outro botão/página/CSS/JS já existente. Some da tela pra
+quem não é admin, do mesmo jeito que os outros botões de gestão (usa o mesmo mecanismo já
+existente de `data-min-role`).
+
+**Testado:** `/painel.html`, `/nota-fiscal.html` e `/` respondendo 200; rota nova
+`/api/custos/ler-nota-fiscal` funcionando (falha graciosamente no ambiente de teste sem internet,
+sem travar, com a mesma mensagem clara da v98); rota antiga `/api/custos/ler-imagem` **inalterada**
+no contrato; pedidos, reservas, motoboys e config respondendo normalmente depois da mudança.
+
+---
+
 # v98 — AI ROUTER: Groq passa a ler fotos sozinho, fallback automático, modo básico e leitura estruturada de nota fiscal
 
 **Evolução da IA de Atendimento — sem remover nenhum provedor, tela ou botão que já existia.**
