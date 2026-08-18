@@ -1,3 +1,60 @@
+# v98 — AI ROUTER: Groq passa a ler fotos sozinho, fallback automático, modo básico e leitura estruturada de nota fiscal
+
+**Evolução da IA de Atendimento — sem remover nenhum provedor, tela ou botão que já existia.**
+Tudo abaixo é ADITIVO em cima do que a v57/v95 já tinham: Anthropic, OpenRouter, Hugging Face e
+Google Gemini continuam disponíveis exatamente como antes, com a mesma tela em Configurações →
+Atendimento (só com campos novos, opcionais).
+
+**NOVO: Groq agora lê foto sozinho (nota fiscal, catálogo, cardápio).** Antes (v95), quando o
+provedor era Groq e chegava uma imagem, o sistema recusava de propósito com um aviso claro
+("esse provedor não lê fotos"), porque o modelo padrão configurado (`openai/gpt-oss-120b`) só lê
+texto. Agora o AI ROUTER detecta sozinho se a mensagem tem imagem: se tiver, usa
+`qwen/qwen3.6-27b` (modelo multimodal da Groq, texto + visão); se não tiver, continua usando
+`openai/gpt-oss-120b` pra texto, do jeito de sempre. Ninguém precisa trocar nada em
+Configurações — quem já usava Groq só ganhou a função de ler foto de graça. OpenRouter e Hugging
+Face continuam avisando que não leem foto (função de visão desses dois provedores nunca existiu).
+
+**NOVO: fallback automático.** Se o modelo/provedor principal responder com limite atingido
+(429), quota estourada, tempo esgotado ou indisponibilidade temporária (502/503/504), o sistema
+tenta sozinho a próxima opção disponível — nunca fica preso em loop, nunca derruba o servidor,
+nunca exige reiniciar nada. Ordem: Groq (texto ou visão, conforme o caso) → Google Gemini, SE e
+somente se a variável de ambiente `GEMINI_API_KEY` estiver configurada no servidor (opcional,
+nunca obrigatório — sem ela, tudo continua funcionando normalmente só com Groq). Pode ser
+desligado em Configurações → Atendimento → "Fallback automático" (padrão: ligado).
+
+**NOVO: modo básico no chat de atendimento.** Se nenhuma IA responder (não configurada, ou todo
+o fallback já foi tentado e falhou), o cliente deixa de receber só um aviso genérico — agora
+recebe uma orientação local simples (horário de funcionamento, como fazer pedido, sugestão de
+falar com atendente), sempre sem inventar informação que o sistema não tem de verdade. Pode ser
+desligado em Configurações → Atendimento → "Modo básico" (padrão: ligado; desligado, volta ao
+aviso genérico de sempre).
+
+**NOVO: cache de leitura de imagem.** A mesma foto de nota fiscal/catálogo enviada duas vezes não
+é reanalisada pela IA de novo — o sistema guarda um hash da imagem e reaproveita o resultado
+anterior, mais rápido e sem gastar limite de API à toa.
+
+**NOVO: log de uso da IA** (provedor, modelo, tempo de resposta, erro, se usou fallback) — fica
+em `data/ia-log.json`, nunca grava a chave de API. Alimenta um status real em Configurações →
+Atendimento: 🟢 IA online / 🟡 IA com fallback / 🟠 IA limitada / IA desativada.
+
+**NOVO (aditivo): leitura ESTRUTURADA de nota fiscal.** Rota nova `/api/custos/ler-nota-fiscal`
+devolve fornecedor, CNPJ, número, série, data, valor total e a lista de produtos (código,
+quantidade, unidade, preço unitário, preço total) num único JSON. Não troca nem remove a rota
+antiga `/api/custos/ler-imagem`, que continua exatamente como estava (mesmo formato de resposta),
+usada pela tela de Custos & Ficha Técnica.
+
+**Preservado, testado e confirmado intacto nesta versão:** pedidos, clientes, cardápio,
+categorias, preços, reservas, impressão/impressoras/vias, painel, motoboys, notificações push,
+sons, autenticação/permissões, responsividade mobile/desktop, layout de Configurações →
+Atendimento (só campos novos adicionados, nada removido/reposicionado). Testado: texto normal,
+foto simulada (bloqueio de rede do ambiente de teste confirma que o roteador falha rápido e limpo,
+sem loop, sem travar a interface, com mensagem clara "leitura visual temporariamente
+indisponível" quando nenhuma opção responde), fallback OpenRouter/Hugging Face + imagem (aviso
+mantido), modo básico respondendo com dado real do restaurante, log sem API key, e todas as rotas
+já existentes (pedidos, motoboys, painel, config) respondendo normalmente.
+
+---
+
 # v95 — Bug corrigido (impressão automática indevida) + investigação/reforço de barra fixa mobile e fonte de impressão + modelo padrão da IA (Groq) atualizado
 
 **BUG CORRIGIDO: impressão automática pelo Painel (navegador) disparava mesmo com o pedido NÃO

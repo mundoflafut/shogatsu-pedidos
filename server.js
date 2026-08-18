@@ -53,6 +53,11 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 // v60: log de falhas de impressão (impressão remota/automática) — fica em disco pra dar pra
 // conferir depois o que falhou e por quê, além do aviso mostrado na hora pra quem clicou em imprimir.
 const PRINT_LOG_FILE = path.join(DATA_DIR, 'print-log.json');
+// v98 — AI ROUTER: cache de leitura de imagem (evita reanalisar a mesma foto de nota fiscal/
+// catálogo duas vezes) e log de uso da IA (provedor, modelo, tempo, erro, fallback usado — NUNCA
+// a chave de API). Ver seção "AI ROUTER" mais abaixo, perto de chamarIA().
+const IA_CACHE_FILE = path.join(DATA_DIR, 'ia-cache.json');
+const IA_LOG_FILE = path.join(DATA_DIR, 'ia-log.json');
 const webpush = require('./webpush');
 
 // ═══════════════════════════════════════════════════════════
@@ -289,7 +294,13 @@ const DEFAULT_CFG = {
   // v91: badgesAutoAprovar — "☑ Permitir alteração automática de badges" do escopo da IA de
   // gestão. Só afeta sugestões de BADGE (tipo='badge'); novo produto e demais tipos continuam
   // sempre exigindo aprovação manual, sem exceção.
-  ia: { enabled: false, provider: 'groq', apiKey: '', modelo: '', faq: [], badgesAutoAprovar: false },
+  // v98 — AI ROUTER: `modelo` continua sendo o modelo de TEXTO (compatibilidade — mesmo campo de
+  // sempre); `modeloVisao` é novo e opcional, só usado quando o provedor for 'groq' e houver
+  // imagem (padrão: qwen/qwen3.6-27b, ver IA_PROVEDORES). `fallbackAutomatico` liga a troca
+  // automática de modelo/provedor quando o principal falha (429/limite/indisponível — nunca troca
+  // por erro de conteúdo). `modoBasico` liga respostas locais simples no chat de atendimento
+  // quando nenhuma IA está disponível, em vez de deixar o cliente sem nenhuma resposta.
+  ia: { enabled: false, provider: 'groq', apiKey: '', modelo: '', modeloVisao: '', faq: [], badgesAutoAprovar: false, fallbackAutomatico: true, modoBasico: true },
   // ── Redes sociais (v56) — botão de pedido direto no Instagram/Facebook do cardápio online.
   // Deixe em branco pra não mostrar o botão correspondente.
   social: { instagram: '', facebook: '' },
@@ -393,6 +404,8 @@ if (!fs.existsSync(CONTATOS_IMPORTADOS_FILE)) fs.writeFileSync(CONTATOS_IMPORTAD
 if (!fs.existsSync(ATENDIMENTO_FILE)) fs.writeFileSync(ATENDIMENTO_FILE, '{}');
 if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '{}');
 if (!fs.existsSync(PRINT_LOG_FILE)) fs.writeFileSync(PRINT_LOG_FILE, '[]');
+if (!fs.existsSync(IA_CACHE_FILE)) fs.writeFileSync(IA_CACHE_FILE, '{}'); // v98
+if (!fs.existsSync(IA_LOG_FILE)) fs.writeFileSync(IA_LOG_FILE, '[]');     // v98
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -1097,7 +1110,10 @@ function sendSMS(toPhone, body, smsCfg) {
 // abaixo, seção "Atendimento — conversas").
 const IA_PROVEDORES = {
   anthropic:   { label: 'Anthropic (Claude) — pago',        modeloPadrao: 'claude-sonnet-5' },
-  groq:        { label: 'Groq — grátis',                    modeloPadrao: 'openai/gpt-oss-120b' },
+  // v98 — AI ROUTER: Groq agora tem um modelo de TEXTO e um modelo de VISÃO separados.
+  // modeloPadrao continua existindo (= modeloPadraoTexto) só pra não quebrar nada que já lia esse
+  // campo antes da v98. qwen/qwen3.6-27b é multimodal (lê imagem) — ver detecção em chamarIA().
+  groq:        { label: 'Groq — grátis',                    modeloPadrao: 'openai/gpt-oss-120b', modeloPadraoTexto: 'openai/gpt-oss-120b', modeloPadraoVisao: 'qwen/qwen3.6-27b' },
   openrouter:  { label: 'OpenRouter — grátis',               modeloPadrao: 'meta-llama/llama-3.3-70b-instruct:free' },
   huggingface: { label: 'Hugging Face — grátis',             modeloPadrao: 'meta-llama/Llama-3.3-70B-Instruct' },
   gemini:      { label: 'Google Gemini — grátis',            modeloPadrao: 'gemini-2.0-flash' }
@@ -1207,35 +1223,185 @@ function chamarGemini(mensagens, apiKey, modelo, maxTokens) {
     req.end();
   });
 }
-// Despachante único — todo o resto do sistema chama só isso, sem saber qual provedor está por trás.
+// ═══════════════════════════════════════════════════════════
+// v98 — AI ROUTER: detecta texto x imagem, escolhe o melhor modelo, tenta de novo sozinho num
+// fallback quando o provedor principal falha por limite/indisponibilidade (nunca por erro de
+// conteúdo), registra o uso em log (sem chave de API) e cacheia leitura de imagem repetida.
+// Fluxo: USUÁRIO → chamarIA() → detecta tipo → escolhe modelo → executa → se falhar (erro
+// transitório) → fallback automático → se todos falharem → erro claro (nunca inventa dado; quem
+// chama decide se cai pro modo básico local, ver respostaModoBasico()).
+// ═══════════════════════════════════════════════════════════
+
+// Erros que valem tentar de novo com outro modelo/provedor (limite de uso, indisponibilidade
+// temporária) — bem diferente de erro de credencial/formato, que fallback nenhum resolve.
+function ehErroTransitorio(err) {
+  const msg = String((err && err.message) || err || '').toLowerCase();
+  return /429|rate.?limit|quota|timeout|tempo esgotado|503|502|504|unavailable|indispon[íi]vel|overloaded|sobrecarreg/.test(msg);
+}
+function hashImagemIA(base64) {
+  return crypto.createHash('sha1').update(String(base64 || '')).digest('hex');
+}
+// Cache simples em disco (arquivo JSON) pra não reanalisar a mesma foto de nota fiscal/catálogo
+// duas vezes. Capado em 200 entradas (mais antigas saem primeiro) — restaurante não precisa disso
+// crescendo pra sempre.
+function cacheImagemIA_ler(hash) {
+  try { const c = readJSON(IA_CACHE_FILE); return c[hash] || null; } catch (e) { return null; }
+}
+function cacheImagemIA_salvar(hash, resultado) {
+  try {
+    const c = readJSON(IA_CACHE_FILE);
+    c[hash] = { resultado, ts: new Date().toISOString() };
+    const chaves = Object.keys(c);
+    if (chaves.length > 200) {
+      chaves.sort((a, b) => new Date(c[a].ts) - new Date(c[b].ts));
+      chaves.slice(0, chaves.length - 200).forEach(k => delete c[k]);
+    }
+    writeJSON(IA_CACHE_FILE, c);
+  } catch (e) { /* cache é só otimização — nunca derruba a leitura por causa dele */ }
+}
+// Log de uso da IA — provedor, modelo, tempo de resposta, erro e se usou fallback. NUNCA grava
+// API Key. Capado em 300 linhas (mais antigas saem primeiro). Também alimenta o "status da IA".
+function logIA({ provedor, modelo, tipo, tempoMs, erro, fallbackUsado }) {
+  try {
+    const log = readJSON(IA_LOG_FILE);
+    log.push({ ts: new Date().toISOString(), provedor, modelo, tipo, tempoMs, erro: erro ? String(erro).slice(0, 300) : null, fallbackUsado: !!fallbackUsado });
+    if (log.length > 300) log.splice(0, log.length - 300);
+    writeJSON(IA_LOG_FILE, log);
+  } catch (e) { /* log nunca pode derrubar a chamada de IA em si */ }
+}
+// Status visível em Configurações → Atendimento, calculado a partir do log recente (últimos 20
+// registros) — reflete a situação real, não um valor fixo.
+function calcularStatusIA(iaCfg) {
+  if (!iaCfg || !iaCfg.enabled || !iaCfg.apiKey) return { status: 'desativada', label: 'IA desativada' };
+  let log = [];
+  try { log = readJSON(IA_LOG_FILE); } catch (e) {}
+  const recentes = log.slice(-20);
+  if (!recentes.length) return { status: 'online', label: '🟢 IA online' };
+  const ultimoErro = [...recentes].reverse().find(l => l.erro);
+  const teveFallback = recentes.some(l => l.fallbackUsado);
+  if (ultimoErro && ultimoErro === recentes[recentes.length - 1]) return { status: 'limitada', label: '🟠 IA limitada (última tentativa falhou)' };
+  if (teveFallback) return { status: 'fallback', label: '🟡 IA com fallback (usando modelo alternativo)' };
+  return { status: 'online', label: '🟢 IA online' };
+}
+
+// Detecta se existe imagem dentro das mensagens (formato interno, ver comentário acima de
+// chamarOpenAICompativel).
+function mensagensTemImagem(mensagens) {
+  return mensagens.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image'));
+}
+
+// Executa uma única tentativa (provedor+modelo) e devolve a Promise de texto, sem fallback —
+// usado internamente pelo roteador abaixo.
+function executarTentativaIA(provedor, apiKey, modelo, mensagens, maxTokens) {
+  if (provedor === 'anthropic') return chamarAnthropic(mensagens, apiKey, modelo, maxTokens);
+  if (provedor === 'gemini') return chamarGemini(mensagens, apiKey, modelo, maxTokens);
+  if (provedor === 'groq') return chamarOpenAICompativel('api.groq.com', '/openai/v1/chat/completions', mensagens, apiKey, modelo, maxTokens);
+  if (provedor === 'openrouter') return chamarOpenAICompativel('openrouter.ai', '/api/v1/chat/completions', mensagens, apiKey, modelo, maxTokens, { 'HTTP-Referer': 'https://shogatsu.local', 'X-Title': 'Shogatsu' });
+  if (provedor === 'huggingface') return chamarOpenAICompativel('router.huggingface.co', '/v1/chat/completions', mensagens, apiKey, modelo, maxTokens);
+  return Promise.reject(new Error('Provedor de IA desconhecido: ' + provedor));
+}
+
+// Despachante único — todo o resto do sistema chama só isso, sem saber qual provedor está por
+// trás. A partir da v98 isso é o AI ROUTER: escolhe o modelo certo pra texto/imagem, tenta de
+// novo sozinho (fallback) quando o principal falha por limite/indisponibilidade, e nunca deixa a
+// chamada travada (todo fallback é tentado em sequência, nunca em loop).
 function chamarIA(mensagens, iaCfg, maxTokens) {
   if (!iaCfg || !iaCfg.enabled || !iaCfg.apiKey) {
     return Promise.reject(new Error('IA de atendimento não configurada. Cadastre em Configurações → Atendimento.'));
   }
   const provedor = IA_PROVEDORES[iaCfg.provider] ? iaCfg.provider : 'anthropic';
-  const modelo = iaCfg.modelo || IA_PROVEDORES[provedor].modeloPadrao;
-  // v95 — BUG CORRIGIDO ("messages[0].content must be a string"): a leitura de FOTO (nota
-  // fiscal/catálogo em Custos & Ficha Técnica — ver lerImagemIA) manda o conteúdo da mensagem
-  // como uma LISTA [texto, imagem], não como texto puro. Isso é o formato certo pra modelos
-  // com visão — mas os modelos padrão do Groq/OpenRouter/Hugging Face configurados aqui
-  // (ex.: openai/gpt-oss-120b, llama-3.3-70b-instruct) são só de TEXTO, sem visão — e a API
-  // desses provedores rejeitava com um erro cru e confuso em vez de avisar o motivo real.
-  // Só a Anthropic e o Google Gemini, nesse sistema, usam modelos com visão de verdade por
-  // padrão. Agora a mensagem de erro já sai clara, direto em português, apontando a solução.
-  const temImagem = mensagens.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image'));
-  if (temImagem && (provedor === 'groq' || provedor === 'openrouter' || provedor === 'huggingface')) {
+  const temImagem = mensagensTemImagem(mensagens);
+  const fallbackLigado = iaCfg.fallbackAutomatico !== false; // padrão: ligado
+
+  // v95/v98 — modelos padrão do OpenRouter/Hugging Face configurados aqui são só de TEXTO, sem
+  // visão de verdade — mantém o aviso claro em português (Groq NÃO entra mais aqui: a partir da
+  // v98 o Groq lê foto sozinho usando qwen/qwen3.6-27b, escolhido automaticamente abaixo).
+  if (temImagem && (provedor === 'openrouter' || provedor === 'huggingface')) {
     return Promise.reject(new Error(
-      `O modelo configurado em "${IA_PROVEDORES[provedor].label}" (${modelo}) não lê fotos, só texto — ` +
-      `essa função de ler foto (nota fiscal/catálogo) só funciona com Anthropic (Claude) ou Google Gemini. ` +
+      `O provedor "${IA_PROVEDORES[provedor].label}" não lê fotos, só texto — ` +
+      `essa função de ler foto (nota fiscal/catálogo) funciona com Groq, Anthropic (Claude) ou Google Gemini. ` +
       `Troque o provedor em Configurações → Atendimento pra usar a leitura de foto, ou digite os itens na mão.`
     ));
   }
-  if (provedor === 'anthropic') return chamarAnthropic(mensagens, iaCfg.apiKey, modelo, maxTokens);
-  if (provedor === 'gemini') return chamarGemini(mensagens, iaCfg.apiKey, modelo, maxTokens);
-  if (provedor === 'groq') return chamarOpenAICompativel('api.groq.com', '/openai/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens);
-  if (provedor === 'openrouter') return chamarOpenAICompativel('openrouter.ai', '/api/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens, { 'HTTP-Referer': 'https://shogatsu.local', 'X-Title': 'Shogatsu' });
-  if (provedor === 'huggingface') return chamarOpenAICompativel('router.huggingface.co', '/v1/chat/completions', mensagens, iaCfg.apiKey, modelo, maxTokens);
-  return Promise.reject(new Error('Provedor de IA desconhecido: ' + provedor));
+
+  // Monta a lista de tentativas (router), na ordem em que devem ser feitas.
+  const tentativas = [];
+  if (provedor === 'groq') {
+    const modeloTexto = iaCfg.modelo || IA_PROVEDORES.groq.modeloPadraoTexto;
+    const modeloVisao = iaCfg.modeloVisao || IA_PROVEDORES.groq.modeloPadraoVisao;
+    if (temImagem) {
+      tentativas.push({ provedor: 'groq', modelo: modeloVisao });
+    } else {
+      tentativas.push({ provedor: 'groq', modelo: modeloTexto });
+      // fallback dentro do próprio Groq: o modelo multimodal também responde texto puro.
+      if (fallbackLigado && modeloVisao !== modeloTexto) tentativas.push({ provedor: 'groq', modelo: modeloVisao });
+    }
+    // Gemini como fallback OPCIONAL (nunca obrigatório) — só entra se GEMINI_API_KEY existir nas
+    // variáveis de ambiente do servidor. Sem isso, o sistema segue funcionando só com Groq.
+    if (fallbackLigado && process.env.GEMINI_API_KEY) {
+      tentativas.push({ provedor: 'gemini', modelo: 'gemini-2.0-flash', apiKey: process.env.GEMINI_API_KEY });
+    }
+  } else {
+    // Outros provedores (anthropic/openrouter/huggingface/gemini escolhidos manualmente): mantém
+    // o comportamento de sempre — uma tentativa, com o modelo configurado ou o padrão.
+    const modelo = iaCfg.modelo || IA_PROVEDORES[provedor].modeloPadrao;
+    tentativas.push({ provedor, modelo });
+  }
+
+  let ultimoErro = null;
+  let indice = 0;
+  function tentarProxima() {
+    if (indice >= tentativas.length) {
+      logIA({ provedor, modelo: tentativas[0] && tentativas[0].modelo, tipo: temImagem ? 'imagem' : 'texto', tempoMs: 0, erro: ultimoErro, fallbackUsado: indice > 1 });
+      return Promise.reject(ultimoErro || new Error('Nenhum provedor de IA disponível no momento.'));
+    }
+    const t = tentativas[indice];
+    const apiKeyDaTentativa = t.apiKey || iaCfg.apiKey;
+    const inicio = Date.now();
+    return executarTentativaIA(t.provedor, apiKeyDaTentativa, t.modelo, mensagens, maxTokens)
+      .then(resultado => {
+        logIA({ provedor: t.provedor, modelo: t.modelo, tipo: temImagem ? 'imagem' : 'texto', tempoMs: Date.now() - inicio, erro: null, fallbackUsado: indice > 0 });
+        return resultado;
+      })
+      .catch(err => {
+        ultimoErro = err;
+        const podeTentarProxima = fallbackLigado && ehErroTransitorio(err) && indice + 1 < tentativas.length;
+        logIA({ provedor: t.provedor, modelo: t.modelo, tipo: temImagem ? 'imagem' : 'texto', tempoMs: Date.now() - inicio, erro: err.message, fallbackUsado: indice > 0 });
+        if (!podeTentarProxima) {
+          // Erro definitivo (não é limite/indisponibilidade, ou fallback está desligado, ou
+          // acabaram as tentativas) — nunca fica preso tentando pra sempre.
+          if (temImagem && indice + 1 >= tentativas.length) {
+            return Promise.reject(new Error('A leitura visual está temporariamente indisponível. As outras funções do sistema continuam funcionando normalmente.'));
+          }
+          return Promise.reject(err);
+        }
+        indice++;
+        return tentarProxima();
+      });
+  }
+  return tentarProxima();
+}
+
+// v98 — MODO BÁSICO: resposta local, sem nenhuma IA, pra o chat de atendimento nunca ficar sem
+// nenhuma resposta quando nenhuma API está disponível (não configurada, ou todo o fallback já foi
+// tentado e falhou). Nunca inventa informação — só orienta o cliente com o que o sistema sabe de
+// verdade (cardápio/config), e sempre oferece "falar com atendente".
+function respostaModoBasico(historicoMensagens, cfg) {
+  const ultima = (historicoMensagens[historicoMensagens.length - 1] || {}).texto || '';
+  const t = ultima.toLowerCase();
+  if (/^(oi|ol[áa]|bom dia|boa tarde|boa noite|e a[ií]|hey)\b/.test(t.trim())) {
+    return `Oi! No momento o atendimento automático está limitado, mas posso te orientar: dá uma olhada no cardápio aí em cima pra ver os pratos e preços, ou toque em "Falar com atendente" que alguém te ajuda rapidinho.`;
+  }
+  if (/pedido|pedir|comprar|fazer.*pedido/.test(t)) {
+    return `Pra fazer seu pedido: escolha os pratos no cardápio, adicione ao carrinho e finalize com seus dados de entrega. Qualquer dúvida no meio do caminho, é só tocar em "Falar com atendente".`;
+  }
+  if (/hor[áa]rio|aberto|fechado|funcionamento/.test(t)) {
+    return `Nosso horário de funcionamento: ${cfg.days || ''}, ${cfg.hours || ''}. Se estiver em dúvida se estamos abertos agora, toque em "Falar com atendente" pra confirmar.`;
+  }
+  if (/foto|imagem|print|nota fiscal/.test(t)) {
+    return `No momento não consigo analisar fotos automaticamente — toque em "Falar com atendente" que alguém confere pra você.`;
+  }
+  return `No momento não consigo responder automaticamente com detalhes. Toque em "Falar com atendente" que alguém te responde, ou dá uma olhada no cardápio aí em cima.`;
 }
 // Responde a dúvida de um cliente do cardápio, usando o cardápio atual e o histórico da conversa
 // como contexto. Se houver FAQ pré-cadastrada, ela entra também — a IA prioriza essas respostas.
@@ -1259,14 +1425,42 @@ function perguntarIA(historicoMensagens, iaCfg, cfg, menu) {
 }
 // Lê uma foto de nota fiscal (custo de compra) ou catálogo/cardápio (preço de venda) e devolve uma
 // lista de itens em JSON — usada em Custos & Ficha Técnica pra sugerir ingredientes sem digitar.
+// v98: passa a usar cache por hash da imagem (evita reanalisar a mesma foto) — resultado idêntico
+// de antes pra quem chama esta função, só mais rápido/barato na segunda vez.
 function lerImagemIA(base64, mediaType, tipo, iaCfg) {
+  const hash = hashImagemIA(base64) + ':' + tipo;
+  const doCache = cacheImagemIA_ler(hash);
+  if (doCache) return Promise.resolve(doCache.resultado);
   const instrucao = tipo === 'catalogo'
     ? 'Leia esta imagem de um catálogo ou cardápio com preços. Extraia cada produto e seu preço de venda. Responda APENAS com um JSON array no formato [{"nome":"...","preco":0.0}], sem texto antes ou depois, sem markdown.'
     : 'Leia esta imagem de uma nota fiscal de compra. Extraia cada item comprado, a quantidade e o valor total pago por ele. Responda APENAS com um JSON array no formato [{"nome":"...","quantidade":0,"valorTotal":0.0}], sem texto antes ou depois, sem markdown.';
   const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
   return chamarIA([{ role: 'user', content }], iaCfg, 1500).then(texto => {
     const limpo = texto.replace(/```json|```/g, '').trim();
-    return JSON.parse(limpo);
+    const resultado = JSON.parse(limpo);
+    cacheImagemIA_salvar(hash, resultado);
+    return resultado;
+  });
+}
+// v98 — leitura ESTRUTURADA de nota fiscal (cabeçalho + itens), formato mais completo que
+// lerImagemIA(tipo='nota') — que continua existindo do jeito de sempre pra não quebrar quem já
+// usa. Esta função é aditiva: nova rota /api/custos/ler-nota-fiscal (ver mais abaixo), sem mudar
+// o contrato de /api/custos/ler-imagem. Nunca inventa dado: campo ilegível vem null.
+function lerNotaFiscalEstruturadaIA(base64, mediaType, iaCfg) {
+  const hash = hashImagemIA(base64) + ':nota-estruturada';
+  const doCache = cacheImagemIA_ler(hash);
+  if (doCache) return Promise.resolve(doCache.resultado);
+  const instrucao = 'Leia esta imagem de uma nota fiscal. Extraia fornecedor, CNPJ, número da nota, série, data, ' +
+    'e cada produto (código, quantidade, unidade, preço unitário, preço total) e o valor total da nota. ' +
+    'Responda APENAS com um JSON (sem markdown, sem texto antes/depois) no formato exato: ' +
+    '{"fornecedor":"","cnpj":"","numero_nota":"","serie":"","data":"","valor_total":0,"produtos":[{"codigo":"","nome":"","quantidade":0,"unidade":"","preco_unitario":0,"preco_total":0}]}. ' +
+    'Se algum campo não estiver legível, use null nesse campo específico — nunca invente um valor.';
+  const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
+  return chamarIA([{ role: 'user', content }], iaCfg, 1800).then(texto => {
+    const limpo = texto.replace(/```json|```/g, '').trim();
+    const resultado = JSON.parse(limpo);
+    cacheImagemIA_salvar(hash, resultado);
+    return resultado;
   });
 }
 
@@ -1812,7 +2006,13 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, {
       enabled: !!cfg.ia.enabled, hasKey: !!cfg.ia.apiKey, provider: cfg.ia.provider || 'groq',
       modelo: cfg.ia.modelo || '', faq: cfg.ia.faq || [], provedores: IA_PROVEDORES,
-      badgesAutoAprovar: !!cfg.ia.badgesAutoAprovar
+      badgesAutoAprovar: !!cfg.ia.badgesAutoAprovar,
+      // v98 — AI ROUTER
+      modeloVisao: cfg.ia.modeloVisao || '',
+      fallbackAutomatico: cfg.ia.fallbackAutomatico !== false,
+      modoBasico: cfg.ia.modoBasico !== false,
+      hasGeminiEnvKey: !!process.env.GEMINI_API_KEY,
+      status: calcularStatusIA(cfg.ia)
     });
   }
   if (pathname === '/api/ia/settings' && req.method === 'POST') {
@@ -1827,7 +2027,11 @@ const server = http.createServer(async (req, res) => {
         apiKey: (typeof body.apiKey === 'string' && body.apiKey.trim()) ? body.apiKey.trim() : iaAtual.apiKey || '',
         modelo: typeof body.modelo === 'string' ? body.modelo.trim() : (iaAtual.modelo || ''),
         faq: Array.isArray(body.faq) ? body.faq.slice(0, 100).map(f => ({ pergunta: String(f.pergunta || '').slice(0, 200), resposta: String(f.resposta || '').slice(0, 600) })).filter(f => f.pergunta && f.resposta) : (iaAtual.faq || []),
-        badgesAutoAprovar: body.badgesAutoAprovar !== undefined ? !!body.badgesAutoAprovar : !!iaAtual.badgesAutoAprovar
+        badgesAutoAprovar: body.badgesAutoAprovar !== undefined ? !!body.badgesAutoAprovar : !!iaAtual.badgesAutoAprovar,
+        // v98 — AI ROUTER
+        modeloVisao: typeof body.modeloVisao === 'string' ? body.modeloVisao.trim() : (iaAtual.modeloVisao || ''),
+        fallbackAutomatico: body.fallbackAutomatico !== undefined ? !!body.fallbackAutomatico : (iaAtual.fallbackAutomatico !== false),
+        modoBasico: body.modoBasico !== undefined ? !!body.modoBasico : (iaAtual.modoBasico !== false)
       };
       writeJSON(CONFIG_FILE, { cfg: data.cfg, menu: data.menu });
       return sendJSON(res, 200, { ok: true, enabled: data.cfg.ia.enabled, hasKey: !!data.cfg.ia.apiKey, badgesAutoAprovar: data.cfg.ia.badgesAutoAprovar });
@@ -1844,6 +2048,18 @@ const server = http.createServer(async (req, res) => {
       const itens = await lerImagemIA(imagemBase64, mediaType, tipo, cfg.ia);
       return sendJSON(res, 200, { itens });
     } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui ler essa imagem.' }); }
+  }
+  // v98 — POST /api/custos/ler-nota-fiscal — leitura ESTRUTURADA (fornecedor/CNPJ/número/série/
+  // data/produtos com código-quantidade-unidade-preço) — aditivo, não substitui /ler-imagem acima.
+  if (pathname === '/api/custos/ler-nota-fiscal' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { imagemBase64, mediaType } = await readBody(req, 15e6);
+      if (!imagemBase64) return sendJSON(res, 400, { error: 'Nenhuma imagem recebida.' });
+      const { cfg } = readConfig();
+      const nota = await lerNotaFiscalEstruturadaIA(imagemBase64, mediaType, cfg.ia);
+      return sendJSON(res, 200, { nota });
+    } catch (e) { return sendJSON(res, 400, { error: e.message || 'Não consegui ler essa nota fiscal.' }); }
   }
 
   // ── Atendimento — conversas (v57) ── janela de chat do cliente, estilo WhatsApp: começa com a
@@ -1955,7 +2171,13 @@ const server = http.createServer(async (req, res) => {
         const resposta = await perguntarIA(conversa.mensagens, cfg.ia, cfg, menu);
         conversa.mensagens.push({ de: 'ia', texto: resposta || 'Não consegui pensar numa resposta agora — quer falar com um atendente?', ts: new Date().toISOString() });
       } catch (e) {
-        conversa.mensagens.push({ de: 'ia', texto: 'No momento não consigo responder automaticamente. Toque em "Falar com atendente" que alguém te responde.', ts: new Date().toISOString() });
+        // v98 — MODO BÁSICO: em vez de só um aviso genérico, tenta uma resposta local útil quando
+        // ativado (padrão: ligado). Nunca inventa informação — só orienta com o que o sistema já
+        // sabe de verdade (cardápio/config) e sempre oferece "falar com atendente".
+        const texto = (cfg.ia && cfg.ia.modoBasico !== false)
+          ? respostaModoBasico(conversa.mensagens, cfg)
+          : 'No momento não consigo responder automaticamente. Toque em "Falar com atendente" que alguém te responde.';
+        conversa.mensagens.push({ de: 'ia', texto, ts: new Date().toISOString() });
       }
       salvarAtendimentos(todas);
       return sendJSON(res, 200, { conversa });
