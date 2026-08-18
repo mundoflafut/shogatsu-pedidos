@@ -1126,6 +1126,7 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           </div>
           <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px;">
             <input type="checkbox" id="ia-enabled"/> Ativar respostas automáticas no cardápio
+            <span id="ia-status-badge" style="font-size:11px;font-weight:600;margin-left:auto;"></span>
           </label>
           <div class="field-row">
             <div class="field">
@@ -1141,10 +1142,22 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label style="font-size:10px;">Chave de API</label><input id="ia-apikey" type="password" placeholder="cole a chave aqui"/></div>
           </div>
           <div class="field-row">
-            <div class="field"><label style="font-size:10px;">Modelo (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: openai/gpt-oss-120b"/></div>
+            <div class="field"><label style="font-size:10px;">Modelo de texto (opcional — deixe em branco pro padrão)</label><input id="ia-modelo" placeholder="ex: openai/gpt-oss-120b"/></div>
+            <div class="field"><label style="font-size:10px;">Modelo de visão/fotos — só Groq (opcional)</label><input id="ia-modelo-visao" placeholder="ex: qwen/qwen3.6-27b"/></div>
           </div>
           <div id="ia-provider-dica" style="font-size:11px;color:var(--muted);margin:4px 0 10px;"></div>
           <div id="ia-key-status" style="font-size:11px;color:var(--muted);margin:6px 0 10px;"></div>
+
+          <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">🧭 AI Router (v98)</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;">
+              <input type="checkbox" id="ia-fallback"/> Fallback automático (se o modelo/provedor principal atingir limite ou ficar indisponível, tenta outro sozinho)
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;">
+              <input type="checkbox" id="ia-modo-basico"/> Modo básico (se nenhuma IA estiver disponível, responde o cliente com orientação simples em vez de deixar sem resposta nenhuma)
+            </label>
+            <div id="ia-gemini-env-status" style="font-size:11px;color:var(--muted);margin-top:8px;"></div>
+          </div>
 
           <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;">
             <label style="font-size:11px;font-weight:600;display:block;margin-bottom:8px;">Perguntas frequentes pré-definidas</label>
@@ -8028,9 +8041,11 @@ function loadSettings(){
 // Atendimento — IA multi-provedor, FAQ e conversas com clientes (v57)
 // ═══════════════════════════════════════════
 const IA_DICAS_PROVEDOR = {
-  groq: 'Grátis. Crie a chave em console.groq.com/keys. Modelo padrão: openai/gpt-oss-120b.',
-  openrouter: 'Grátis (nos modelos marcados ":free"). Crie a chave em openrouter.ai/keys.',
-  huggingface: 'Grátis. Crie a chave (token de leitura) em huggingface.co/settings/tokens.',
+  // v98: Groq agora lê foto também (nota fiscal/catálogo), usando qwen/qwen3.6-27b sozinho quando
+  // detecta imagem — não precisa configurar nada a mais pra isso.
+  groq: 'Grátis. Crie a chave em console.groq.com/keys. Texto: openai/gpt-oss-120b · Fotos: qwen/qwen3.6-27b (escolhido automaticamente).',
+  openrouter: 'Grátis (nos modelos marcados ":free"). Crie a chave em openrouter.ai/keys. Não lê fotos.',
+  huggingface: 'Grátis. Crie a chave (token de leitura) em huggingface.co/settings/tokens. Não lê fotos.',
   gemini: 'Grátis. Crie a chave em aistudio.google.com/apikey. Modelo padrão: gemini-2.0-flash.',
   anthropic: 'Pago, cobrado por uso. Crie a chave em console.anthropic.com.'
 };
@@ -8136,11 +8151,22 @@ async function loadIaSettings(){
   const providerEl=document.getElementById('ia-provider'); if(providerEl) providerEl.value = res?.provider || 'groq';
   const modeloEl=document.getElementById('ia-modelo'); if(modeloEl) modeloEl.value = res?.modelo || '';
   const badgesAutoEl=document.getElementById('ia-badges-auto'); if(badgesAutoEl) badgesAutoEl.checked = !!res?.badgesAutoAprovar;
+  // v98 — AI ROUTER: modelo de visão (Groq), fallback automático e modo básico
+  const modeloVisaoEl=document.getElementById('ia-modelo-visao'); if(modeloVisaoEl) modeloVisaoEl.value = res?.modeloVisao || '';
+  const fallbackEl=document.getElementById('ia-fallback'); if(fallbackEl) fallbackEl.checked = res?.fallbackAutomatico !== false;
+  const modoBasicoEl=document.getElementById('ia-modo-basico'); if(modoBasicoEl) modoBasicoEl.checked = res?.modoBasico !== false;
   iaFaqAtual = Array.isArray(res?.faq) ? res.faq : [];
   renderFaqIaLista();
   atualizarDicaProvedorIa();
   const statusEl=document.getElementById('ia-key-status');
   if(statusEl) statusEl.textContent = res?.hasKey ? '🔑 Já existe uma chave cadastrada. Deixe o campo em branco pra manter a atual.' : 'Nenhuma chave cadastrada ainda.';
+  // v98 — status real da IA (online / com fallback / limitada / desativada)
+  const statusIaEl=document.getElementById('ia-status-badge');
+  if(statusIaEl) statusIaEl.textContent = res?.status?.label || '';
+  const geminiEnvEl=document.getElementById('ia-gemini-env-status');
+  if(geminiEnvEl) geminiEnvEl.textContent = res?.hasGeminiEnvKey
+    ? '🔑 GEMINI_API_KEY configurada no servidor — entra como fallback de visão automático se o Groq falhar.'
+    : 'Sem GEMINI_API_KEY no servidor — opcional, o sistema funciona normalmente só com Groq.';
 }
 async function saveIaSettings(){
   const statusEl=document.getElementById('ia-save-status');
@@ -8149,8 +8175,12 @@ async function saveIaSettings(){
   const apiKey = document.getElementById('ia-apikey').value.trim();
   const modelo = document.getElementById('ia-modelo').value.trim();
   const badgesAutoAprovar = document.getElementById('ia-badges-auto').checked;
+  // v98 — AI ROUTER
+  const modeloVisao = document.getElementById('ia-modelo-visao')?.value.trim() || '';
+  const fallbackAutomatico = document.getElementById('ia-fallback')?.checked !== false;
+  const modoBasico = document.getElementById('ia-modo-basico')?.checked !== false;
   statusEl.style.color='var(--muted)'; statusEl.textContent='Salvando...';
-  const res = await apiPost('/api/ia/settings', { enabled, provider, apiKey, modelo, faq: iaFaqAtual, badgesAutoAprovar });
+  const res = await apiPost('/api/ia/settings', { enabled, provider, apiKey, modelo, faq: iaFaqAtual, badgesAutoAprovar, modeloVisao, fallbackAutomatico, modoBasico });
   if(!res.ok){ statusEl.style.color='var(--red-lt)'; statusEl.textContent=res.data?.error||'Erro ao salvar.'; return; }
   document.getElementById('ia-apikey').value='';
   statusEl.style.color='#50c878'; statusEl.textContent='✅ Salvo!';
