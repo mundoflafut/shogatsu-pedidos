@@ -2887,6 +2887,30 @@ function updatePrintTerminalHeartbeat(){
 // de teste só CONSULTA o status (pra mostrar o indicador 🟢/🔴), nunca disputa a estação. Fica
 // salvo em localStorage, por navegador — assim uma máquina só de teste pode manter isso sempre
 // ligado, sem afetar o comportamento normal de nenhuma outra estação.
+let printTestModeStatusInterval = null;
+// v103 — BUG CORRIGIDO: com o Modo Teste (v102) ligado, o Painel de teste parava de consultar o
+// servidor por completo (nunca chamava register/heartbeat), então `activeStationInfo` ficava
+// travado no último valor conhecido (às vezes `null`, "ainda não sei"). O disparo de impressão no
+// modo Navegador (ver 'print-order-remote' abaixo) só CANCELA a impressão quando sabe com certeza
+// que este computador não é a Estação Ativa (`activeStationInfo.active === false`) — com o valor
+// travado em `null`/desatualizado, ele deixava passar e imprimia na máquina de teste mesmo assim.
+// Agora, em Modo Teste, o Painel consulta periodicamente o status por GET (só leitura, nunca
+// reivindica — ver /api/print-station/status) pra manter `activeStationInfo` sempre correto.
+function startPrintTestModeStatusPolling(){
+  if(printTestModeStatusInterval || !token) return;
+  const poll = ()=>{
+    apiGet('/api/print-station/status').then(r=>{
+      if(r && r.error) return; // sem permissão/erro — mantém o último valor conhecido
+      activeStationInfo = { active: r.activeStationId === PRINT_STATION_ID, label: r.activeLabel };
+      updatePrintStationIndicator();
+    }).catch(()=>{});
+  };
+  poll();
+  printTestModeStatusInterval = setInterval(poll, 15000);
+}
+function stopPrintTestModeStatusPolling(){
+  if(printTestModeStatusInterval){ clearInterval(printTestModeStatusInterval); printTestModeStatusInterval = null; }
+}
 function isPrintTestMode(){ return localStorage.getItem('shogatsu_print_test_mode') === '1'; }
 function setPrintTestMode(on){
   localStorage.setItem('shogatsu_print_test_mode', on ? '1' : '0');
@@ -2896,8 +2920,11 @@ function setPrintTestMode(on){
   if(note) note.style.display = on ? 'block' : 'none';
   if(on){
     if(printStationHeartbeatInterval){ clearInterval(printStationHeartbeatInterval); printStationHeartbeatInterval = null; }
+    activeStationInfo = { active: null, label: null }; // força reconsulta real, não fica com valor antigo
+    startPrintTestModeStatusPolling();
     showToast('🧪 Modo Teste ativado', 'Este computador nunca vai assumir a Estação Ativa de Impressão — a loja continua livre pra imprimir.', 5000);
   } else {
+    stopPrintTestModeStatusPolling();
     registerPrintStation();
     startPrintStationHeartbeat();
   }
@@ -2927,6 +2954,7 @@ try{
   const on0 = isPrintTestMode();
   if(chk0) chk0.checked = on0;
   if(note0) note0.style.display = on0 ? 'block' : 'none';
+  if(on0) startPrintTestModeStatusPolling();
 }catch(e){}
 function renameStationId(){
   const inp = document.getElementById('print-station-id-input');
@@ -3119,6 +3147,7 @@ async function boot(){
   updatePrintTerminalHeartbeat();
   registerPrintStation();
   startPrintStationHeartbeat();
+  if(isPrintTestMode()) startPrintTestModeStatusPolling();
   updatePrintStationIndicator();
   loadReservations();
   setInterval(loadReservations, 30000);
@@ -9164,8 +9193,12 @@ async function loadPrintFailureLog(){
   box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Carregando...</div>';
   try{
     const res = await apiGet('/api/print-log');
-    if(!res.ok){ box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Não consegui carregar.</div>'; return; }
-    const log = res.data.log || [];
+    // v104 — BUG CORRIGIDO: esse quadro sempre mostrava "Não consegui carregar." mesmo quando
+    // tudo estava certo. apiGet() devolve o JSON puro da resposta (ver definição de apiGet mais
+    // acima), não um envelope {ok, data} como apiPost/apiPatch — e GET /api/print-log devolve só
+    // { log: [...] }, sem nenhum campo "ok". A checagem `!res.ok` e a leitura `res.data.log`
+    // nunca bateram com o formato real da resposta.
+    const log = (res && Array.isArray(res.log)) ? res.log : [];
     if(!log.length){ box.innerHTML = '<div style="font-size:11px;color:var(--muted);">Nenhuma falha registrada. 🎉</div>'; return; }
     const stationLabels = { caixa:'Caixa', cozinha:'Cozinha', sushibar:'Sushibar', bar:'Bar' };
     box.innerHTML = log.slice(0,20).map(l => `
