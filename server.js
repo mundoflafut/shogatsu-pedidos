@@ -1792,7 +1792,33 @@ function serveStatic(req, res, pathname) {
 // ═══════════════════════════════════════════════════════════
 // SERVIDOR
 // ═══════════════════════════════════════════════════════════
+// v105 — BUG CORRIGIDO ("leitor de nota fiscal: Unexpected token '<' ... is not valid JSON"):
+// o handler principal abaixo é uma função async gigante SEM try/catch global. Qualquer exceção
+// síncrona não prevista em qualquer rota (ex.: acessar campo de um objeto inesperado) virava uma
+// Promise rejeitada sem handler — no Node 15+ isso DERRUBA O PROCESSO INTEIRO (unhandled
+// rejection = crash por padrão). Quando o processo cai/reinicia no meio de um deploy, a
+// plataforma (Render) responde com uma página HTML de erro em vez de JSON — e é essa página HTML
+// que o navegador tentava interpretar como JSON (daqui vinha o "Unexpected token '<'"), não um
+// problema específico da nota fiscal. Correção aditiva, não muda nenhuma rota existente: agora
+// qualquer erro não previsto responde com um JSON de erro normal (500) em vez de derrubar o
+// servidor — nenhum outro dispositivo/estação/impressão é afetado.
 const server = http.createServer(async (req, res) => {
+  try {
+    await handleRequest(req, res);
+  } catch (e) {
+    console.error('⚠️  Erro não tratado numa rota:', e && e.stack || e);
+    try { if (!res.headersSent) sendJSON(res, 500, { error: 'Erro interno no servidor. Tente novamente.' }); } catch (e2) {}
+  }
+});
+// v105: mesma proteção pra qualquer promise que escape sem handler fora do request (ex.: dentro
+// de setInterval/checkScheduledPush já tem seu próprio try/catch — isso aqui é só a rede de
+// segurança final, nunca deveria disparar em uso normal). NUNCA derruba o processo sozinho —
+// antes disso existir, um erro raro em QUALQUER rota podia tirar CAIXA+COZINHA+SUSHIBAR do ar
+// ao mesmo tempo, o que é muito pior do que logar e continuar rodando.
+process.on('unhandledRejection', (reason) => { console.error('⚠️  unhandledRejection:', reason && reason.stack || reason); });
+process.on('uncaughtException', (err) => { console.error('⚠️  uncaughtException:', err && err.stack || err); });
+
+async function handleRequest(req, res) {
   // v39: `url.parse()` está deprecated no Node (DEP0169) — trocado pela WHATWG URL API.
   // `query` continua sendo um objeto simples { chave: valor }, igual antes, pra não precisar
   // mexer em nenhum lugar do código que já usa `query.algumaCoisa`.
@@ -5277,7 +5303,7 @@ function estimateDeliveryWindow(order, cfg) {
   if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, pathname);
 
   res.writeHead(404); res.end('Not found');
-});
+}
 
 // v79: calcula a PRÓXIMA data de envio de uma campanha recorrente, a partir da última data
 // programada (não da hora atual) — assim o horário do dia sempre fica igual ao que foi
