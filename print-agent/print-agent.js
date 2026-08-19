@@ -37,7 +37,21 @@ if (!fs.existsSync(CONFIG_PATH)) {
   console.error('❌ Não encontrei config.json. Copie config.example.json pra config.json e preencha os dados antes de rodar.');
   process.exit(1);
 }
-const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+// v100: strip do BOM (﻿) no início do arquivo — o Bloco de Notas do Windows às vezes grava
+// esse caracter invisível ao salvar "UTF-8" (só o "UTF-8" puro não grava; o BOM some se salvar
+// como "UTF-8 (sem BOM)"), e isso quebrava JSON.parse com "Unexpected token" mesmo com o JSON
+// em si perfeitamente válido. Editar config.json num editor comum de texto é o fluxo normal
+// pra configurar impressoras/stationId — não faz sentido travar o agente por causa disso.
+let rawConfig = fs.readFileSync(CONFIG_PATH, 'utf8');
+if (rawConfig.charCodeAt(0) === 0xFEFF) rawConfig = rawConfig.slice(1);
+let cfg;
+try {
+  cfg = JSON.parse(rawConfig);
+} catch (e) {
+  console.error('❌ config.json tem um erro de formatação (JSON inválido): ' + e.message);
+  console.error('   Confira se não sobrou/faltou vírgula, aspas ou chave { } ao editar o arquivo.');
+  process.exit(1);
+}
 
 function log(line) {
   const stamp = new Date().toISOString();
@@ -291,8 +305,16 @@ function printReservationTicket(printer, reservation, storeName) {
   printer.println('Reservado em ' + new Date(reservation.createdAt).toLocaleString('pt-BR'));
 }
 async function printReservation(reservation) {
-  if (!isAuthorizedToPrint()) {
-    log(`⛔ Impressão da reserva ${reservation.id} BLOQUEADA — o Painel não está aberto/conectado agora (ou este não é o computador ativo).`);
+  // v106 — REMOVIDA a checagem isAuthorizedToPrint() daqui: ela dependia de algum PAINEL estar
+  // aberto/conectado em QUALQUER computador do sistema pra autorizar a impressão — em uma loja
+  // com várias estações/computadores rodando ao mesmo tempo, isso bloqueava reservas sem motivo
+  // real. A proteção contra duplicidade (2 Agentes cobrindo "caixa" ao mesmo tempo, ambos
+  // recebendo o mesmo evento automático) agora é feita de forma correta logo abaixo, com
+  // POST /api/print-agent/claim (idempotente, por reserva, gravado em disco — sobrevive a F5,
+  // reconexão e restart do servidor/Agent).
+  const claimed = await claimPrintJob({ kind: 'reservation', id: reservation.id });
+  if (!claimed) {
+    log(`⏭️  Reserva ${reservation.id} já foi reclamada/impressa por outro Agente antes — pulando (evita duplicidade).`);
     return;
   }
   const printerCfg = printerForStation('caixa');
@@ -327,6 +349,29 @@ async function reportPrintResult(order, station, ok, error) {
   try {
     await request('POST', `${cfg.serverUrl}/api/print-ack`, { orderId: order.id, station, ok, error: error || null });
   } catch (e) { log(`⚠️  Não consegui avisar o servidor sobre o resultado da via "${station}" (${ok ? 'sucesso' : 'falha'}): ${e.message}`); }
+}
+
+// v106 — NOVO: reclama (de forma idempotente, persistida em disco no servidor) o direito de
+// imprimir automaticamente UM pedido+via (ou UMA reserva) específico, ANTES de mandar pra
+// impressora física. Substitui a antiga trava isAuthorizedToPrint()/"Estação Ativa" (que
+// dependia de um painel aberto em algum computador e bloqueava estações/dispositivos
+// diferentes sem necessidade — ver server.js). Continua garantindo o que a trava antiga também
+// tentava garantir (2 Agentes cobrindo a MESMA via não imprimem o mesmo trabalho 2x), só que
+// isolado por pedido+via — não afeta outras vias/estações, e não exige NENHUM painel aberto em
+// lugar nenhum, o que também corrige uma limitação real: antes, com todos os painéis fechados,
+// a impressão automática simplesmente nunca acontecia, mesmo com o Agente rodando sozinho.
+// Se o servidor não responder (sem internet, servidor fora do ar), assume "reclamado" (imprime
+// mesmo assim) — entre imprimir uma via a mais por engano e PERDER um pedido de verdade, perder
+// um pedido é muito pior num restaurante; fica tudo registrado no log local de qualquer forma.
+async function claimPrintJob({ kind, id, station }) {
+  try {
+    const r = await request('POST', `${cfg.serverUrl}/api/print-agent/claim?token=${encodeURIComponent(token)}`, { kind, id, station });
+    if (r.status === 200 && r.data) return !!r.data.claimed;
+    return true; // resposta inesperada do servidor — não bloqueia a impressão por causa disso
+  } catch (e) {
+    log(`⚠️  Não consegui confirmar com o servidor se ${kind === 'reservation' ? 'a reserva' : 'o pedido'} ${id} já foi impresso — imprimindo mesmo assim (prioridade: nunca perder um pedido).`);
+    return true;
+  }
 }
 
 async function printSingleStation(order, station) {
@@ -379,17 +424,6 @@ async function printOrder(order) {
     log(`🧪 [TEST_MODE] Imprimiria agora o pedido ${order.id} nas vias: ${MY_STATIONS.join(', ')}`);
     return true;
   }
-  // v90: só imprime automaticamente se este computador for a Estação Ativa de Impressão
-  // agora (quando "stationId" está configurado — ver isAuthorizedToPrint() acima). Evita
-  // duplicar comanda quando existe mais de um Agente instalado (ex.: PC principal + PC
-  // reserva) rodando ao mesmo tempo.
-  if (!isAuthorizedToPrint()) {
-    const motivo = !stationStatus || !stationStatus.active
-      ? 'o Painel não está aberto/conectado em NENHUM computador agora'
-      : `este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora (o Painel está aberto/conectado em outro computador)`;
-    log(`⛔ Impressão automática do pedido ${order.id} BLOQUEADA — ${motivo}.`);
-    return false;
-  }
   // v92 — BUG CORRIGIDO ("não deve imprimir se o botão de aceite automático estiver
   // desligado"): a impressão automática nasceu pensada pra andar junto do aceite automático
   // (ver v55 no server.js) — sem isso ligado, o pedido fica pendente aguardando alguém aceitar
@@ -400,6 +434,15 @@ async function printOrder(order) {
   }
   let anyPrinted = false;
   for (const station of MY_STATIONS) {
+    // v106 — cada via é reclamada (claim) individualmente, por pedido+via — ver
+    // claimPrintJob() acima. Isso é o que garante que 2 Agentes cobrindo a MESMA via não
+    // imprimem o mesmo pedido 2x, sem depender de nenhum painel estar aberto em lugar nenhum
+    // e sem bloquear vias/estações diferentes entre si.
+    const claimed = await claimPrintJob({ kind: 'order', id: order.id, station });
+    if (!claimed) {
+      log(`⏭️  Pedido ${order.id} — via "${station}" já foi reclamada/impressa por outro Agente antes — pulando (evita duplicidade).`);
+      continue;
+    }
     const r = await printSingleStation(order, station);
     if (r.ok && !r.skipped) anyPrinted = true;
     if (!r.skipped) await reportPrintResult(order, station, r.ok, r.error);
@@ -417,17 +460,14 @@ async function printOrder(order) {
 // (ou o erro) volta pra tela de quem clicou, em tempo real.
 async function printOnDemand(order, station) {
   if (!MY_STATIONS.includes(station)) return;
-  // v90: mesma trava da impressão automática (ver printOrder acima) — um clique manual de
-  // "Imprimir"/"Reimprimir" partido de qualquer aparelho só é executado por este Agente se
-  // este computador for a Estação Ativa agora.
-  if (!isAuthorizedToPrint()) {
-    const motivo = !stationStatus || !stationStatus.active
-      ? 'o Painel não está aberto/conectado em NENHUM computador agora'
-      : `este computador (estação "${STATION_ID}") não é a Estação Ativa de Impressão agora`;
-    log(`⛔ Impressão sob demanda da via "${station}" BLOQUEADA — ${motivo}.`);
-    await reportPrintResult(order, station, false, 'Estação não autorizada a imprimir agora (o Painel ativo está em outro computador).');
-    return;
-  }
+  // v106 — REMOVIDA a checagem isAuthorizedToPrint() daqui (era a mesma trava de "Estação
+  // Ativa" removida de printOrder acima). Impressão MANUAL/reimpressão (clique explícito em
+  // "Imprimir", de qualquer aparelho — PC ou celular) SEMPRE deve funcionar quando pedida de
+  // propósito, sem depender de qual painel está "ativo" em outro computador — é exatamente o
+  // comportamento pedido no v106 (#8: "Desligar a impressão automática NÃO pode desativar a
+  // impressão manual" — o mesmo vale pra travas de estação). Sem checagem extra de duplicidade
+  // aqui de propósito: reimprimir a pedido do usuário sempre deve sair, mesmo que já tenha
+  // impresso antes.
   log(`🖨️  Impressão sob demanda pedida pra via "${station}" — pedido ${order.id} (${order.name || 'sem nome'}).`);
   const r = await printSingleStation(order, station);
   await reportPrintResult(order, station, r.ok, r.error);
@@ -520,7 +560,8 @@ async function announcePresence() {
   try {
     await request('POST', `${cfg.serverUrl}/api/print-agent/announce?token=${encodeURIComponent(token)}`, {
       agentId: AGENT_ID,
-      printers: PRINTERS.map(p => ({ label: p.label, stations: p.stations }))
+      printers: PRINTERS.map(p => ({ label: p.label, stations: p.stations })),
+      build: AGENT_BUILD, // v95: mostra no painel qual versão do código está rodando de fato agora
     });
   } catch (e) { /* se falhar, o painel simplesmente mostra "offline" até o próximo aviso — não trava nada aqui */ }
   clearTimeout(announceTimer);
@@ -649,8 +690,16 @@ function scheduleReconnect() {
   retryDelay = Math.min(retryDelay * 1.5, 60000); // backoff até no máx. 1 minuto entre tentativas
 }
 
+// v95 — marcador de versão/build, impresso sempre no início do log. IMPORTANTE: o Agente Local
+// roda como processo persistente em segundo plano (Tarefa Agendada do Windows) — trocar os
+// arquivos em disco (print-agent.js) NÃO reinicia esse processo sozinho, então qualquer correção
+// aqui (como a de tamanho de fonte) só passa a valer de verdade depois de rodar
+// REINICIAR-AGENTE.bat. Esse marcador serve pra conferir, olhando o log, se o processo rodando
+// agora é realmente a versão mais nova dos arquivos.
+const AGENT_BUILD = 'v95';
 async function start() {
-  log(`🍣 Agente de impressão iniciando${TEST_MODE ? ' (TEST_MODE — não vai imprimir de verdade)' : ''}...`);
+  log(`🍣 Agente de impressão iniciando (build ${AGENT_BUILD})${TEST_MODE ? ' (TEST_MODE — não vai imprimir de verdade)' : ''}...`);
+  log(`ℹ️  Se você acabou de atualizar os arquivos do sistema, confirme que esse número de build bate com o mais recente — senão, rode REINICIAR-AGENTE.bat pra esse processo carregar o código novo (trocar o arquivo no disco sozinho não reinicia quem já está rodando).`);
   log(`🖨️  ${PRINTERS.length} impressora(s) configurada(s):`);
   PRINTERS.forEach(p => log(`   • ${p.label} → vias: ${p.stations.join(', ')} (${p.interface})`));
   try {
