@@ -1,3 +1,75 @@
+# v104 — BUG CORRIGIDO: quadro "⚠️ Últimas falhas de impressão" sempre dizia "Não consegui carregar."
+
+**Achado enquanto conferíamos o v103, não relacionado a ele.** `apiGet()` devolve o JSON puro da
+resposta do servidor, mas o código desse quadro esperava um envelope `{ok, data}` (formato usado
+só em `apiPost`/`apiPatch`) — e `GET /api/print-log` devolve `{ log: [...] }`, sem nenhum campo
+`ok`. Resultado: `res.ok` era sempre `undefined` (falso), então a mensagem de erro aparecia
+sempre, mesmo quando o log carregava certinho (ou estava vazio, "🎉").
+
+**Correção em `public/painel.html`:** lê `res.log` diretamente, com uma checagem simples de que é
+uma lista válida. Nenhuma mudança em `server.js` — o endpoint já estava certo, só quem lia a
+resposta é que esperava o formato errado.
+
+---
+
+# v103 — BUG CORRIGIDO: "Modo Teste" (v102) não impedia a impressão local no modo Navegador
+
+**Problema relatado:** mesmo com "🧪 Modo Teste" marcado, o pedido continuava imprimindo na
+máquina de teste (em casa) em vez de só na loja.
+
+**Causa raiz:** o Modo Teste (v102) parou de chamar `register`/`heartbeat` de propósito — mas
+isso também parou de atualizar `activeStationInfo` (a variável que guarda "este computador é a
+Estação Ativa?"). O código do modo Navegador (impressão sem Agente Local, via
+`print-order-remote`) só CANCELA a impressão quando tem certeza de que este computador não é a
+Estação Ativa; sem nunca consultar nada, `activeStationInfo` ficava travado num valor antigo (às
+vezes nem sabia ainda), e a impressão passava direto na máquina de teste mesmo assim.
+
+**Correção em `public/painel.html`:** em Modo Teste, o Painel agora consulta periodicamente (a
+cada 15s, mesmo intervalo do heartbeat normal) o endpoint `GET /api/print-station/status` — que é
+**somente leitura, nunca reivindica nada** — só pra manter `activeStationInfo` sempre correto e
+atualizado. Assim o modo Navegador sabe com certeza que não deve imprimir ali. Nenhuma mudança em
+`server.js` ou `print-agent.js`.
+
+---
+
+# v102 — NOVO: "Modo Teste" no Painel — testar em outro computador sem roubar a Estação Ativa de Impressão da loja
+
+**Problema relatado:** abrir o Painel numa máquina só de teste (em casa, via AnyDesk) sempre
+assumia a Estação Ativa de Impressão sozinho — mesmo depois de renomear a estação (v100) — porque
+a regra "o mais recente a abrir o Painel assume" vale pra QUALQUER nome de estação, não só pra
+"PC-CAIXA". Resultado: testar em casa deixava a loja bloqueada de imprimir de verdade, e vice-versa.
+
+**Correção em `public/painel.html`:** novo checkbox "🧪 Modo Teste" na Central de Impressão
+(Configurações → 🔔 Impressão Automática). Quando ligado, **este navegador específico nunca chama
+`register`/`heartbeat` de Estação Ativa** — só consulta o status pra mostrar o indicador 🟢/🔴,
+nunca disputa a estação com ninguém. Fica salvo em `localStorage` daquele computador
+(`shogatsu_print_test_mode`), então uma máquina só de teste pode deixar isso sempre ligado. Não
+mexe em nada mais: se o checkbox estiver desligado (padrão, comportamento de sempre), tudo
+funciona exatamente como antes — nenhuma outra estação é afetada.
+
+**Nenhuma mudança em `server.js` ou `print-agent.js`** — a trava e `isAuthorizedToPrint()`
+continuam intactas; o Modo Teste só evita que o Painel de teste ENTRE na disputa pela estação.
+
+---
+
+# v101 — BUG CORRIGIDO: Agente Local travava com "Unexpected token" ao editar config.json no Bloco de Notas (BOM invisível)
+
+**Corrigido só isso.** Nenhuma outra função do sistema foi tocada.
+
+**Causa raiz:** ao salvar `config.json` num editor de texto comum (ex.: Bloco de Notas do
+Windows salvando como "UTF-8" em vez de "UTF-8 sem BOM"), o Windows às vezes grava um caracter
+invisível (BOM, `\uFEFF`) bem no início do arquivo. Esse caracter não aparece na tela, mas
+quebrava `JSON.parse()` com `SyntaxError: Unexpected token '﻿'` mesmo com o JSON em si
+perfeitamente correto — e a janela do Agente Local fechava sozinha (`.bat` fecha ao terminar o
+processo), dando a impressão de "abre e fecha" sem explicação.
+
+**Correção em `print-agent/print-agent.js`:** a leitura do `config.json` agora remove esse
+caracter automaticamente antes de interpretar o arquivo, se ele existir. Também passou a mostrar
+uma mensagem de erro clara (em vez do stack trace cru do Node) se o JSON estiver mesmo inválido
+por outro motivo (vírgula/chave faltando), facilitando o diagnóstico da próxima vez.
+
+---
+
 # v100 — BUG CORRIGIDO: "PC-CAIXA não é a Estação Ativa de Impressão" (sincronização Painel → servidor → Print Agent)
 
 **Corrigido só o bug pedido, nada mais.** Estoque, cardápio, pedidos, reservas, motoboys, IA,

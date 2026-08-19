@@ -1430,6 +1430,34 @@ function perguntarIA(historicoMensagens, iaCfg, cfg, menu) {
 // lista de itens em JSON — usada em Custos & Ficha Técnica pra sugerir ingredientes sem digitar.
 // v98: passa a usar cache por hash da imagem (evita reanalisar a mesma foto) — resultado idêntico
 // de antes pra quem chama esta função, só mais rápido/barato na segunda vez.
+// v106 — BUG CORRIGIDO ("Unexpected token '<', \"<think> Th\"... is not valid JSON" ao ler foto de
+// nota fiscal/catálogo): alguns modelos de IA com "raciocínio" (ex.: modelos que expõem
+// chain-of-thought, como o modelo de visão padrão configurado) respondem com um bloco
+// `<think>...</think>` de raciocínio ANTES do JSON pedido — mesmo quando o prompt pede
+// explicitamente "sem texto antes ou depois". Antes, a limpeza da resposta só removia as cercas
+// de markdown (```json ```), então esse `<think>` sobrava e quebrava o JSON.parse logo na
+// primeira tentativa de leitura — em TODAS as ferramentas que leem foto/pedem JSON da IA (Ler
+// Nota Fiscal, Ler Imagem de Custos, sugestão de ficha técnica, sugestão de prato novo). Extraído
+// aqui numa função só, reaproveitada nas 4 (evita repetir a mesma correção 4 vezes e esquecer
+// alguma). Continua funcionando exatamente igual quando a IA responde limpa (comportamento mais
+// comum) — só entra em ação a mais quando sobra alguma coisa around o JSON.
+function extrairJSONdaIA(texto) {
+  let limpo = String(texto || '')
+    .replace(/```json|```/gi, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '') // bloco de raciocínio fechado corretamente
+    .replace(/<think>[\s\S]*$/gi, '') // bloco de raciocínio que ficou aberto (sem fechar) — remove até o fim
+    .trim();
+  try { return JSON.parse(limpo); } catch (e) { /* tenta o plano B abaixo antes de desistir */ }
+  // Plano B: se ainda sobrou algum texto antes/depois do JSON de verdade, pega só do primeiro
+  // "{" ou "[" até o "}" ou "]" que fecha ele (o maior trecho válido dentro da resposta).
+  const inicio = limpo.search(/[{[]/);
+  if (inicio === -1) throw new Error('A IA não respondeu com um JSON válido.');
+  const abre = limpo[inicio], fecha = abre === '{' ? '}' : ']';
+  const fim = limpo.lastIndexOf(fecha);
+  if (fim === -1 || fim <= inicio) throw new Error('A IA não respondeu com um JSON válido.');
+  return JSON.parse(limpo.slice(inicio, fim + 1));
+}
+
 function lerImagemIA(base64, mediaType, tipo, iaCfg) {
   const hash = hashImagemIA(base64) + ':' + tipo;
   const doCache = cacheImagemIA_ler(hash);
@@ -1439,8 +1467,7 @@ function lerImagemIA(base64, mediaType, tipo, iaCfg) {
     : 'Leia esta imagem de uma nota fiscal de compra. Extraia cada item comprado, a quantidade e o valor total pago por ele. Responda APENAS com um JSON array no formato [{"nome":"...","quantidade":0,"valorTotal":0.0}], sem texto antes ou depois, sem markdown.';
   const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
   return chamarIA([{ role: 'user', content }], iaCfg, 1500).then(texto => {
-    const limpo = texto.replace(/```json|```/g, '').trim();
-    const resultado = JSON.parse(limpo);
+    const resultado = extrairJSONdaIA(texto);
     cacheImagemIA_salvar(hash, resultado);
     return resultado;
   });
@@ -1471,8 +1498,7 @@ function lerNotaFiscalEstruturadaIA(base64, mediaType, iaCfg) {
     'Se algum campo não estiver legível ou não existir na nota, use null nesse campo específico — nunca invente um valor.';
   const content = [{ type: 'text', text: instrucao }, { type: 'image', mediaType: mediaType || 'image/jpeg', data: base64 }];
   return chamarIA([{ role: 'user', content }], iaCfg, 2200).then(texto => {
-    const limpo = texto.replace(/```json|```/g, '').trim();
-    const resultado = JSON.parse(limpo);
+    const resultado = extrairJSONdaIA(texto);
     cacheImagemIA_salvar(hash, resultado);
     return resultado;
   });
@@ -1492,8 +1518,7 @@ function estimarFichaParaProdutoExistente(iaCfg, item, categoria, ingredientes) 
     `(sem markdown, sem texto antes/depois) no formato exato:\n` +
     `{"rendimento":1,"ingredientes":[{"nome":"...","quantidade":0,"unidade":"g|kg|ml|l|un"}],"custoEstimado":0.0,"observacao":"o que te fez estimar assim"}`;
   return chamarIA([{ role: 'user', content: instrucao }], iaCfg, 900).then(texto => {
-    const limpo = texto.replace(/```json|```/g, '').trim();
-    const obj = JSON.parse(limpo);
+    const obj = extrairJSONdaIA(texto);
     if (!Array.isArray(obj.ingredientes) || !obj.ingredientes.length) throw new Error('A IA não retornou ingredientes válidos.');
     return obj;
   });
@@ -1516,8 +1541,7 @@ function sugerirNovoProdutoIA(iaCfg, cfg, menu, ingredientes, tema) {
     `"custoEstimado":0.0,"precoSugerido":0.0,"margemEstimadaPercentual":0,"justificativa":"por que esse prato pode vender bem aqui"}\n` +
     `As quantidades de ingredientes e o custo são uma ESTIMATIVA sua (não pesquisa real na internet) — deixe claro no campo "justificativa" que são valores de referência a conferir.`;
   return chamarIA([{ role: 'user', content: instrucao }], iaCfg, 1200).then(texto => {
-    const limpo = texto.replace(/```json|```/g, '').trim();
-    const obj = JSON.parse(limpo);
+    const obj = extrairJSONdaIA(texto);
     if (!obj.nome) throw new Error('A IA não retornou um nome de prato válido.');
     return obj;
   });
@@ -3211,6 +3235,48 @@ function estimateDeliveryWindow(order, cfg) {
     catch (e) { return sendJSON(res, 200, { log: [] }); }
   }
 
+  // ── POST /api/print-agent/claim — v106: RECLAMA (reserva) o direito de imprimir UMA via
+  // automática de UM pedido/reserva específico, de forma idempotente e persistida em disco.
+  // Substitui, pro caminho de impressão AUTOMÁTICA do Agente Local (método "automatica" —
+  // evento 'new-order'/'new-reservation-print' via SSE), a antiga trava de "Estação Ativa"
+  // (v90, baseada em qual PAINEL/navegador estava aberto por último) — que tinha um problema
+  // real: bloqueava QUALQUER outro computador/celular de imprimir (mesmo estações diferentes,
+  // ex.: COZINHA sendo bloqueada só porque o painel do CAIXA foi aberto por último em outro
+  // PC), o oposto do que o v106 pede (várias estações/dispositivos simultâneos, cada um com
+  // sua própria impressora). A proteção de verdade contra duplicidade não precisa saber QUAL
+  // painel está aberto — só precisa garantir que aquele PEDIDO+VIA específico (ou aquela
+  // RESERVA) só seja "reclamado" (impresso automaticamente) UMA vez, não importa quantos
+  // Agentes/painéis estejam online ao mesmo tempo. Reaproveita o campo `order.autoPrinted`
+  // que já existia (v86, usado pelo caminho "navegador") — sem criar arquivo/estrutura nova.
+  // Idempotente: F5, reconexão do WebSocket/SSE, retry, reinício do Agent ou do servidor nunca
+  // duplicam, porque o estado fica gravado no próprio pedido/reserva em disco (ORDERS_FILE/
+  // RESERVATIONS_FILE), não em memória.
+  if (pathname === '/api/print-agent/claim' && req.method === 'POST') {
+    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    try {
+      const { kind, id, station } = await readBody(req);
+      if (kind === 'reservation') {
+        const list = readJSON(RESERVATIONS_FILE);
+        const idx = list.findIndex(r => r.id === id);
+        if (idx === -1) return sendJSON(res, 404, { error: 'Reserva não encontrada.', claimed: false });
+        if (list[idx].autoPrinted) return sendJSON(res, 200, { claimed: false, alreadyClaimed: true });
+        list[idx].autoPrinted = true;
+        writeJSON(RESERVATIONS_FILE, list);
+        return sendJSON(res, 200, { claimed: true });
+      }
+      // kind === 'order' (padrão)
+      if (!station) return sendJSON(res, 400, { error: 'station obrigatório.', claimed: false });
+      const orders = readJSON(ORDERS_FILE);
+      const idx = orders.findIndex(o => o.id === id);
+      if (idx === -1) return sendJSON(res, 404, { error: 'Pedido não encontrado.', claimed: false });
+      if (!orders[idx].autoPrinted) orders[idx].autoPrinted = {};
+      if (orders[idx].autoPrinted[station]) return sendJSON(res, 200, { claimed: false, alreadyClaimed: true });
+      orders[idx].autoPrinted[station] = true;
+      writeJSON(ORDERS_FILE, orders);
+      return sendJSON(res, 200, { claimed: true });
+    } catch (e) { return sendJSON(res, 400, { error: 'invalid body', claimed: false }); }
+  }
+
   // ── POST /api/print-agent/announce — o Agente Local avisa "estou vivo" (v82) ──
   // Chamado pelo print-agent.js logo após conectar e depois a cada ~45s. Não precisa de nenhum
   // dado sensível: só label/vias de cada impressora configurada nele, pra o painel poder
@@ -3323,22 +3389,20 @@ function estimateDeliveryWindow(order, cfg) {
       const order = orders.find(o => o.id === orderId);
       if (!order) return sendJSON(res, 404, { error: 'Pedido não encontrado.' });
 
-      // v90: só a Estação Ativa de Impressão (o Painel aberto/conectado autorizado no momento)
-      // pode disparar impressão — evita 2 computadores imprimindo o mesmo pedido ao mesmo
-      // tempo quando há mais de um Painel/Agente instalado. Se nenhuma estação nunca foi
-      // reivindicada (sistema recém-atualizado, ou loja com um Painel só), libera geral — ver
-      // isStationAuthorized() acima. Não é erro (sendJSON 200), só "não imprimiu desta vez":
-      // fica registrado no log de impressão pra dar pra conferir depois.
-      if (!isStationAuthorized(stationId)) {
-        try {
-          const log = readJSON(PRINT_LOG_FILE);
-          log.unshift({ orderId, station: st, error: `Estação "${stationId || 'desconhecida'}" não autorizada a imprimir (estação ativa agora: ${activeStation ? activeStation.label : '-'}).`, ts: new Date().toISOString() });
-          fs.writeFileSync(PRINT_LOG_FILE, JSON.stringify(log.slice(0, 500), null, 2));
-        } catch (e) { console.error('⚠️  Não consegui gravar print-log.json:', e.message); }
-        return sendJSON(res, 200, { ok: true, printed: false, skipped: true, unauthorized: true, activeStationId: activeStation ? activeStation.stationId : null, activeLabel: activeStation ? activeStation.label : null, order, station: st });
-      }
-
       const isCaixa = st === 'caixa';
+
+      // v106 — REMOVIDO: a trava "só a Estação Ativa pode imprimir" (v90) que existia aqui.
+      // Motivo: ela bloqueava IMPRESSÃO MANUAL (clique em Imprimir/Reimprimir, inclusive do
+      // celular) sempre que o dispositivo que clicou não era o "painel mais recentemente
+      // aberto" em QUALQUER computador do sistema — mesmo pra uma via de uma estação
+      // totalmente diferente. Isso contraria diretamente o pedido de várias estações/
+      // dispositivos simultâneos (v106 #1/#7/#8: impressão manual sempre deve funcionar). A
+      // proteção contra duplicidade que essa trava também tentava dar pro caminho automático
+      // já é feita corretamente logo abaixo (order.autoPrinted, por pedido+via, não por
+      // dispositivo) — e o caminho automático do Agente Local (método "automatica") agora usa
+      // POST /api/print-agent/claim, com a mesma garantia. O conceito de "Estação Ativa"
+      // (GET /api/print-station/status, indicador 🟢/🔴) continua existindo normalmente pro
+      // painel mostrar status — só não bloqueia mais impressão.
 
       // v50: via desativada (Configurações → 📠 Impressoras por Estação → impressora
       // temporariamente fora do ar) — pula de propósito, sem tentar imprimir e sem erro. Igual
