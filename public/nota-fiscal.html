@@ -219,7 +219,15 @@ async function nfEnviarParaLeitura(){
       headers: { 'Authorization':'Bearer '+nfToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ imagemBase64: nfImagemBase64, mediaType: nfImagemMediaType })
     });
-    const data = await r.json();
+    // v105 — BUG CORRIGIDO ("Unexpected token '<' ... is not valid JSON"): antes chamava
+    // r.json() direto, sem checar se a resposta era mesmo JSON. Se o servidor caísse/reiniciasse
+    // no meio da requisição, a hospedagem responde com uma página HTML de erro — e o r.json()
+    // quebrava com esse erro confuso em vez de mostrar uma mensagem entendível. Agora lê como
+    // texto primeiro e só tenta interpretar como JSON depois, com uma mensagem clara se falhar.
+    const textoResposta = await r.text();
+    let data;
+    try { data = JSON.parse(textoResposta); }
+    catch (e) { throw new Error('O servidor não respondeu corretamente (pode ter reiniciado). Tente novamente em alguns segundos.'); }
     if (!r.ok) throw new Error(data.error || 'Não consegui ler essa nota.');
     nfDadosLidos = data.nota || {};
     nfPreencherConferencia(nfDadosLidos);
