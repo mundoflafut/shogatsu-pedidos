@@ -444,7 +444,12 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
 const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia' };
 
-function supabaseRequest(method, subpath, body) {
+// v-bugfix (timeout Supabase): timeout de 8s era curto demais pra rede do Render free tier, gerando
+// "timeout" repetido em quase toda tabela no boot. Subimos pra 20s e adicionamos tratamento explícito
+// de timeout / erro de conexão / socket fechado / conexão abortada, com RETRY CONTROLADO (máx. 2
+// tentativas extras, backoff progressivo) só pra falhas transitórias — nunca pra HTTP 400/401/403/404
+// (erro de configuração/permissão, repetir não resolve) e nunca infinito.
+function supabaseRequest(method, subpath, body, attempt = 0) {
   return new Promise((resolve, reject) => {
     if (!SUPABASE_URL || !SUPABASE_KEY) return reject(new Error('Supabase não configurado'));
     const payload = body ? JSON.stringify(body) : null;
@@ -458,28 +463,63 @@ function supabaseRequest(method, subpath, body) {
         'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=representation',
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
       },
-      timeout: 8000
+      timeout: 20000 // era 8000 — insuficiente, causava os timeouts em cascata no boot
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try { resolve(data ? JSON.parse(data) : null); } catch (e) { resolve(null); }
-        } else reject(new Error(`Supabase HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
+        } else {
+          const err = new Error(`Supabase HTTP ${res.statusCode}: ${data.slice(0, 300)}`);
+          err.statusCode = res.statusCode; // usado abaixo pra decidir se vale a pena tentar de novo
+          reject(err);
+        }
       });
     });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    // erro de conexão (DNS, recusada, socket fechado no meio) — transitório, elegível a retry
+    req.on('error', (e) => { e.transient = true; reject(e); });
+    req.on('timeout', () => { req.destroy(); const e = new Error('timeout'); e.transient = true; reject(e); });
+    // conexão abortada pelo outro lado no meio da requisição — também transitório
+    req.on('aborted', () => { const e = new Error('conexão abortada'); e.transient = true; reject(e); });
     if (payload) req.write(payload);
     req.end();
+  }).catch(err => {
+    const isPermanentHttp = typeof err.statusCode === 'number' && [400, 401, 403, 404].includes(err.statusCode);
+    const isTransient = !isPermanentHttp; // timeout, erro de conexão, socket fechado, abortada, ou HTTP 5xx
+    if (isTransient && attempt < 2) {
+      const wait = 500 * Math.pow(2, attempt); // backoff progressivo: 500ms, depois 1000ms
+      console.log(`   ☁️  Supabase lento — tentando novamente ${attempt + 1}/2...`);
+      return new Promise(resolve => setTimeout(resolve, wait))
+        .then(() => supabaseRequest(method, subpath, body, attempt + 1));
+    }
+    throw err; // esgotou as tentativas (ou é erro permanente) — desiste sem loop infinito
   });
 }
 
+// v-bugfix: evita disparar 2+ POSTs simultâneos pra mesma chave (ex: dois pedidos salvos em
+// sequência rápida). Se já existe uma sincronização dessa chave em andamento, guarda só o dado
+// mais recente e dispara UMA sincronização extra assim que a atual terminar — nunca acumula fila
+// nem cria loop (no máximo 1 rodada pendente por vez).
+const syncEmAndamento = new Map();
 function syncToSupabase(file, data) {
   const key = FILE_TO_KEY[file];
   if (!key || !SUPABASE_URL || !SUPABASE_KEY) return;
-  supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: data, updated_at: new Date().toISOString() })
-    .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message));
+  if (syncEmAndamento.has(key)) {
+    syncEmAndamento.set(key, { pendente: true, data });
+    return;
+  }
+  const enviar = (payload) => {
+    syncEmAndamento.set(key, { pendente: false });
+    supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: payload, updated_at: new Date().toISOString() })
+      .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message)) // falha temporária não derruba o sistema
+      .finally(() => {
+        const estado = syncEmAndamento.get(key);
+        syncEmAndamento.delete(key);
+        if (estado && estado.pendente) enviar(estado.data); // só reenvia se algo mudou enquanto sincronizava
+      });
+  };
+  enviar(data);
 }
 
 // Roda uma vez, ao ligar o servidor: se tiver Supabase configurado, traz de volta o último
@@ -487,17 +527,27 @@ function syncToSupabase(file, data) {
 async function restoreFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
   console.log('☁️  Verificando backup no Supabase...');
-  await Promise.allSettled(Object.entries(FILE_TO_KEY).map(async ([file, key]) => {
+  // v-bugfix: antes disparava as ~14 tabelas TODAS ao mesmo tempo (Promise.allSettled), o que
+  // sobrecarregava o Supabase e fazia vários timeouts em paralelo. Agora processa uma tabela por
+  // vez — se uma falhar, segue pra próxima; o arquivo local (já criado no boot com valor padrão,
+  // ou já existente em disco) só é substituído quando chega uma resposta válida do Supabase, nunca
+  // é apagado por causa de falha.
+  let restaurados = 0, falharam = 0;
+  for (const [file, key] of Object.entries(FILE_TO_KEY)) {
     try {
       const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=eq.${key}&select=value`);
       if (rows && rows[0] && rows[0].value !== undefined) {
         fs.writeFileSync(file, JSON.stringify(rows[0].value, null, 2));
-        console.log(`   ✓ "${key}" restaurado do Supabase`);
+        console.log(`   ✓ ${key} restaurado`);
+        restaurados++;
       }
+      // se o Supabase não tiver nada salvo pra essa chave, o arquivo local não é tocado
     } catch (err) {
-      console.error(`   ⚠️  Não consegui restaurar "${key}" do Supabase:`, err.message);
+      console.error(`   ⚠️  ${key} não restaurado — sistema continuará funcionando (${err.message})`);
+      falharam++;
     }
-  }));
+  }
+  console.log(`☁️  Restauração Supabase concluída: ${restaurados} restaurados / ${falharam} falharam`);
 }
 
 // v60 — BUG REAL INVESTIGADO ("fotos que não carregam/desaparecem"): a causa raiz é a mesma dos
@@ -517,19 +567,25 @@ function syncUploadToSupabase(filename, buffer, ext) {
   supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: { ext, b64: buffer.toString('base64') }, updated_at: new Date().toISOString() })
     .catch(err => console.error(`⚠️  Falha ao fazer backup da foto "${filename}" no Supabase:`, err.message));
 }
+// v-bugfix: já herda o timeout de 20s + retry controlado de supabaseRequest() acima. Se a busca
+// falhar (mesmo depois das tentativas), a função só loga e retorna — nunca apaga nenhuma foto
+// local, e o "await" dela no boot está dentro de withDeadline() (ver final do arquivo), então uma
+// falha ou demora aqui nunca impede o servidor de subir.
 async function restoreUploadsFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
   try {
     const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key,value`);
-    let restauradas = 0;
+    let restauradas = 0, falharam = 0;
     for (const row of (rows || [])) {
       const filename = String(row.key || '').replace(/^upload_/, '');
       const dest = path.join(UPLOADS_DIR, filename);
       if (!filename || fs.existsSync(dest) || !row.value || !row.value.b64) continue; // já existe local — não sobrescreve
-      try { fs.writeFileSync(dest, Buffer.from(row.value.b64, 'base64')); restauradas++; } catch (e) { /* ignora essa e segue as outras */ }
+      try { fs.writeFileSync(dest, Buffer.from(row.value.b64, 'base64')); restauradas++; } catch (e) { falharam++; /* ignora essa e segue as outras */ }
     }
-    if (restauradas) console.log(`   ✓ ${restauradas} foto(s) restaurada(s) do Supabase pra uploads/`);
-  } catch (err) { console.error('   ⚠️  Não consegui restaurar fotos do Supabase:', err.message); }
+    console.log(`   ☁️  Fotos: ${restauradas} restaurada(s)${falharam ? `, ${falharam} falharam ao gravar` : ''}`);
+  } catch (err) {
+    console.error('   ⚠️  Não consegui restaurar fotos do Supabase — fotos locais preservadas, sistema continuará funcionando:', err.message);
+  }
 }
 // v67 — Fundo do Chat: lê largura/altura da imagem direto dos bytes (sem depender de nenhuma
 // biblioteca externa — o projeto é 100% vanilla Node). Cobre PNG, JPEG e WEBP (os 3 formatos
@@ -5430,9 +5486,25 @@ async function checkScheduledPush() {
 }
 setInterval(checkScheduledPush, 60 * 1000);
 
-restoreFromSupabase().finally(() => {
+// v-bugfix: como restoreFromSupabase() agora processa as tabelas uma por vez (item 4 da correção)
+// e cada uma pode levar até ~60s se o Supabase estiver realmente fora do ar (20s de timeout x até
+// 3 tentativas), o pior caso somado de todas as tabelas ficaria longo demais pro boot. withDeadline
+// dá um prazo máximo pro servidor esperar; se estourar, o servidor sobe mesmo assim e a restauração
+// que ainda estiver rodando continua em segundo plano (vai gravando os arquivos conforme cada
+// tabela responder) — ela nunca é cancelada, só deixa de ser esperada.
+function withDeadline(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => {
+      console.log(`   ⏱️  ${label} está demorando — servidor vai iniciar agora; restauração continua em segundo plano`);
+      resolve();
+    }, ms))
+  ]);
+}
+
+withDeadline(restoreFromSupabase(), 15000, 'Restauração do Supabase').finally(() => {
   loadSessionsFromDisk(); // v60: depois de restaurar do Supabase (se configurado), carrega sessões válidas pra memória
-  restoreUploadsFromSupabase().finally(() => {
+  withDeadline(restoreUploadsFromSupabase(), 15000, 'Restauração de fotos').finally(() => {
     server.listen(PORT, () => {
       console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
       console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
