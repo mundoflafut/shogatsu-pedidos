@@ -53,12 +53,6 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 // v60: log de falhas de impressão (impressão remota/automática) — fica em disco pra dar pra
 // conferir depois o que falhou e por quê, além do aviso mostrado na hora pra quem clicou em imprimir.
 const PRINT_LOG_FILE = path.join(DATA_DIR, 'print-log.json');
-// v-cloudinary: mapa { "nomeDoArquivo.ext": "https://res.cloudinary.com/.../secure_url" } das fotos
-// já migradas do backup base64 (shogatsu_kv) pro Cloudinary. Entra no mesmo mecanismo de
-// backup/restauração automática do Supabase que os outros arquivos de dados já usam (ver
-// FILE_TO_KEY mais abaixo) — não precisou de nenhuma infraestrutura nova. Nunca é apagado nem
-// perde entradas sozinho; só cresce, uma migração de cada vez, sempre disparada manualmente.
-const CLOUDINARY_MAP_FILE = path.join(DATA_DIR, 'cloudinary-map.json');
 // v98 — AI ROUTER: cache de leitura de imagem (evita reanalisar a mesma foto de nota fiscal/
 // catálogo duas vezes) e log de uso da IA (provedor, modelo, tempo, erro, fallback usado — NUNCA
 // a chave de API). Ver seção "AI ROUTER" mais abaixo, perto de chamarIA().
@@ -412,7 +406,6 @@ if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '{}');
 if (!fs.existsSync(PRINT_LOG_FILE)) fs.writeFileSync(PRINT_LOG_FILE, '[]');
 if (!fs.existsSync(IA_CACHE_FILE)) fs.writeFileSync(IA_CACHE_FILE, '{}'); // v98
 if (!fs.existsSync(IA_LOG_FILE)) fs.writeFileSync(IA_LOG_FILE, '[]');     // v98
-if (!fs.existsSync(CLOUDINARY_MAP_FILE)) fs.writeFileSync(CLOUDINARY_MAP_FILE, '{}'); // v-cloudinary
 
 // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
 // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
@@ -449,79 +442,9 @@ function writeJSON(file, data) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia', [CLOUDINARY_MAP_FILE]: 'cloudinary_map' };
+const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia' };
 
-// ═══════════════════════════════════════════════════════════
-// CLOUDINARY — migração das fotos do backup base64 (shogatsu_kv) pra um storage de imagens de
-// verdade. NUNCA colocamos o API Secret em código — vem só de variável de ambiente. Sem essas 3
-// variáveis configuradas, a rota de migração responde com erro claro e o resto do sistema
-// continua funcionando 100% igual a antes (nenhuma outra função depende disso).
-// Configure em Environment: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
-const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
-const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || '';
-const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
-const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER || 'shogatsu_cardapio';
-
-function readCloudinaryMap() {
-  try { return readJSON(CLOUDINARY_MAP_FILE); } catch (e) { return {}; }
-}
-
-// Sobe uma imagem (já em base64, vinda do backup no shogatsu_kv) pro Cloudinary via upload
-// ASSINADO (sem SDK — o projeto não usa dependências externas). public_id é derivado do nome do
-// arquivo original, então subir a MESMA foto de novo sobrescreve o mesmo recurso em vez de criar
-// duplicata (idempotente, resolve o requisito de "identificador estável").
-function cloudinaryUploadBase64(filename, b64, ext) {
-  return new Promise((resolve, reject) => {
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-      return reject(new Error('Cloudinary não configurado (faltam variáveis de ambiente)'));
-    }
-    const publicId = filename.replace(/\.[^.]+$/, ''); // nome sem extensão = identificador estável
-    const timestamp = Math.floor(Date.now() / 1000);
-    // Assinatura exigida pelo Cloudinary: SHA1 dos parâmetros (exceto file/api_key) + api_secret,
-    // em ordem alfabética — igual à doc oficial de "signed upload".
-    const paramsToSign = `folder=${CLOUDINARY_FOLDER}&public_id=${publicId}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`;
-    const signature = crypto.createHash('sha1').update(paramsToSign).digest('hex');
-    const dataUri = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${b64}`;
-
-    const boundary = '----shogatsuMigra' + crypto.randomBytes(8).toString('hex');
-    const fields = { file: dataUri, api_key: CLOUDINARY_API_KEY, timestamp: String(timestamp), signature, folder: CLOUDINARY_FOLDER, public_id: publicId };
-    let body = '';
-    for (const [k, v] of Object.entries(fields)) {
-      body += `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
-    }
-    body += `--${boundary}--\r\n`;
-    const bodyBuf = Buffer.from(body, 'utf8');
-
-    const req = https.request({
-      hostname: 'api.cloudinary.com',
-      path: `/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': bodyBuf.length },
-      timeout: 30000
-    }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (res.statusCode >= 200 && res.statusCode < 300 && json.secure_url) resolve(json.secure_url);
-          else reject(new Error(json.error && json.error.message ? json.error.message : `Cloudinary HTTP ${res.statusCode}`));
-        } catch (e) { reject(new Error('Resposta inválida do Cloudinary')); }
-      });
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout no upload pro Cloudinary')); });
-    req.write(bodyBuf);
-    req.end();
-  });
-}
-
-// v-bugfix (timeout Supabase): timeout de 8s era curto demais pra rede do Render free tier, gerando
-// "timeout" repetido em quase toda tabela no boot. Subimos pra 20s e adicionamos tratamento explícito
-// de timeout / erro de conexão / socket fechado / conexão abortada, com RETRY CONTROLADO (máx. 2
-// tentativas extras, backoff progressivo) só pra falhas transitórias — nunca pra HTTP 400/401/403/404
-// (erro de configuração/permissão, repetir não resolve) e nunca infinito.
-function supabaseRequest(method, subpath, body, attempt = 0) {
+function supabaseRequest(method, subpath, body) {
   return new Promise((resolve, reject) => {
     if (!SUPABASE_URL || !SUPABASE_KEY) return reject(new Error('Supabase não configurado'));
     const payload = body ? JSON.stringify(body) : null;
@@ -535,63 +458,39 @@ function supabaseRequest(method, subpath, body, attempt = 0) {
         'Prefer': method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=representation',
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
       },
-      timeout: 20000 // era 8000 — insuficiente, causava os timeouts em cascata no boot
+      timeout: 8000
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try { resolve(data ? JSON.parse(data) : null); } catch (e) { resolve(null); }
-        } else {
-          const err = new Error(`Supabase HTTP ${res.statusCode}: ${data.slice(0, 300)}`);
-          err.statusCode = res.statusCode; // usado abaixo pra decidir se vale a pena tentar de novo
-          reject(err);
-        }
+        } else reject(new Error(`Supabase HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
       });
     });
-    // erro de conexão (DNS, recusada, socket fechado no meio) — transitório, elegível a retry
-    req.on('error', (e) => { e.transient = true; reject(e); });
-    req.on('timeout', () => { req.destroy(); const e = new Error('timeout'); e.transient = true; reject(e); });
-    // conexão abortada pelo outro lado no meio da requisição — também transitório
-    req.on('aborted', () => { const e = new Error('conexão abortada'); e.transient = true; reject(e); });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
     if (payload) req.write(payload);
     req.end();
-  }).catch(err => {
-    const isPermanentHttp = typeof err.statusCode === 'number' && [400, 401, 403, 404].includes(err.statusCode);
-    const isTransient = !isPermanentHttp; // timeout, erro de conexão, socket fechado, abortada, ou HTTP 5xx
-    if (isTransient && attempt < 2) {
-      const wait = 500 * Math.pow(2, attempt); // backoff progressivo: 500ms, depois 1000ms
-      console.log(`   ☁️  Supabase lento — tentando novamente ${attempt + 1}/2...`);
-      return new Promise(resolve => setTimeout(resolve, wait))
-        .then(() => supabaseRequest(method, subpath, body, attempt + 1));
-    }
-    throw err; // esgotou as tentativas (ou é erro permanente) — desiste sem loop infinito
   });
 }
 
-// v-bugfix: evita disparar 2+ POSTs simultâneos pra mesma chave (ex: dois pedidos salvos em
-// sequência rápida). Se já existe uma sincronização dessa chave em andamento, guarda só o dado
-// mais recente e dispara UMA sincronização extra assim que a atual terminar — nunca acumula fila
-// nem cria loop (no máximo 1 rodada pendente por vez).
-const syncEmAndamento = new Map();
+// v107 — REDUÇÃO DE BANDWIDTH: antes, TODO writeJSON reenviava o arquivo inteiro pro Supabase,
+// mesmo quando o conteúdo era idêntico ao que já tinha sido mandado (ex: mesma config salva duas
+// vezes, ou um campo que voltou ao valor anterior). Agora guardamos em memória o último payload
+// enviado com sucesso por chave e pulamos o envio se for exatamente igual — sem nenhum atraso e
+// sem mudar o que o disco local grava (isso continua instantâneo, igual antes). Reduz tráfego
+// "Service-Initiated" sem tocar em nenhuma funcionalidade: se o conteúdo mudou de verdade, o
+// envio acontece normalmente, do mesmo jeito de sempre.
+const lastSyncedPayload = new Map(); // key (ex: "orders") -> JSON string do último envio bem-sucedido
 function syncToSupabase(file, data) {
   const key = FILE_TO_KEY[file];
   if (!key || !SUPABASE_URL || !SUPABASE_KEY) return;
-  if (syncEmAndamento.has(key)) {
-    syncEmAndamento.set(key, { pendente: true, data });
-    return;
-  }
-  const enviar = (payload) => {
-    syncEmAndamento.set(key, { pendente: false });
-    supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: payload, updated_at: new Date().toISOString() })
-      .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message)) // falha temporária não derruba o sistema
-      .finally(() => {
-        const estado = syncEmAndamento.get(key);
-        syncEmAndamento.delete(key);
-        if (estado && estado.pendente) enviar(estado.data); // só reenvia se algo mudou enquanto sincronizava
-      });
-  };
-  enviar(data);
+  const payloadStr = JSON.stringify(data);
+  if (lastSyncedPayload.get(key) === payloadStr) return; // idêntico ao último enviado — nada novo pra sincronizar
+  supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: data, updated_at: new Date().toISOString() })
+    .then(() => { lastSyncedPayload.set(key, payloadStr); })
+    .catch(err => console.error(`⚠️  Falha ao sincronizar "${key}" com o Supabase:`, err.message));
 }
 
 // Roda uma vez, ao ligar o servidor: se tiver Supabase configurado, traz de volta o último
@@ -599,27 +498,17 @@ function syncToSupabase(file, data) {
 async function restoreFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
   console.log('☁️  Verificando backup no Supabase...');
-  // v-bugfix: antes disparava as ~14 tabelas TODAS ao mesmo tempo (Promise.allSettled), o que
-  // sobrecarregava o Supabase e fazia vários timeouts em paralelo. Agora processa uma tabela por
-  // vez — se uma falhar, segue pra próxima; o arquivo local (já criado no boot com valor padrão,
-  // ou já existente em disco) só é substituído quando chega uma resposta válida do Supabase, nunca
-  // é apagado por causa de falha.
-  let restaurados = 0, falharam = 0;
-  for (const [file, key] of Object.entries(FILE_TO_KEY)) {
+  await Promise.allSettled(Object.entries(FILE_TO_KEY).map(async ([file, key]) => {
     try {
       const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=eq.${key}&select=value`);
       if (rows && rows[0] && rows[0].value !== undefined) {
         fs.writeFileSync(file, JSON.stringify(rows[0].value, null, 2));
-        console.log(`   ✓ ${key} restaurado`);
-        restaurados++;
+        console.log(`   ✓ "${key}" restaurado do Supabase`);
       }
-      // se o Supabase não tiver nada salvo pra essa chave, o arquivo local não é tocado
     } catch (err) {
-      console.error(`   ⚠️  ${key} não restaurado — sistema continuará funcionando (${err.message})`);
-      falharam++;
+      console.error(`   ⚠️  Não consegui restaurar "${key}" do Supabase:`, err.message);
     }
-  }
-  console.log(`☁️  Restauração Supabase concluída: ${restaurados} restaurados / ${falharam} falharam`);
+  }));
 }
 
 // v60 — BUG REAL INVESTIGADO ("fotos que não carregam/desaparecem"): a causa raiz é a mesma dos
@@ -639,25 +528,36 @@ function syncUploadToSupabase(filename, buffer, ext) {
   supabaseRequest('POST', `${SUPABASE_TABLE}?on_conflict=key`, { key, value: { ext, b64: buffer.toString('base64') }, updated_at: new Date().toISOString() })
     .catch(err => console.error(`⚠️  Falha ao fazer backup da foto "${filename}" no Supabase:`, err.message));
 }
-// v-bugfix: já herda o timeout de 20s + retry controlado de supabaseRequest() acima. Se a busca
-// falhar (mesmo depois das tentativas), a função só loga e retorna — nunca apaga nenhuma foto
-// local, e o "await" dela no boot está dentro de withDeadline() (ver final do arquivo), então uma
-// falha ou demora aqui nunca impede o servidor de subir.
+// v107 — REDUÇÃO DE BANDWIDTH (causa raiz do consumo alto de "Service-Initiated"): antes, essa
+// função baixava o CONTEÚDO (base64) de TODAS as fotos já enviadas de uma vez só — mesmo das que
+// já existiam certinho em UPLOADS_DIR — e ela roda em TODO restart do processo (todo deploy, todo
+// crash-restart, todo "acordar" de plano free/starter que dorme por inatividade). Com fotos de até
+// 4MB (~5,3MB em base64) e dezenas delas cadastradas, cada restart baixava dezenas/centenas de MB
+// do Supabase de novo, mesmo sem nenhuma foto nova. Agora o fluxo é em duas etapas: primeiro pede
+// só os NOMES (select=key, sem o base64 pesado — consulta minúscula), compara com o que já existe
+// em disco, e SÓ baixa o conteúdo (base64) de quem realmente falta. O resultado final é idêntico
+// (depois de um deploy que realmente apagou o disco, TODAS as fotos continuam sendo restauradas —
+// nenhuma foto deixa de ser recuperada), só que sem re-baixar o que já está lá.
 async function restoreUploadsFromSupabase() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
   try {
-    const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key,value`);
-    let restauradas = 0, falharam = 0;
-    for (const row of (rows || [])) {
-      const filename = String(row.key || '').replace(/^upload_/, '');
-      const dest = path.join(UPLOADS_DIR, filename);
-      if (!filename || fs.existsSync(dest) || !row.value || !row.value.b64) continue; // já existe local — não sobrescreve
-      try { fs.writeFileSync(dest, Buffer.from(row.value.b64, 'base64')); restauradas++; } catch (e) { falharam++; /* ignora essa e segue as outras */ }
+    const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key`);
+    const faltando = (rows || [])
+      .map(r => String(r.key || '').replace(/^upload_/, ''))
+      .filter(filename => filename && !fs.existsSync(path.join(UPLOADS_DIR, filename)));
+    let restauradas = 0;
+    for (const filename of faltando) {
+      try {
+        const linhas = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=eq.${encodeURIComponent('upload_' + filename)}&select=value`);
+        const row = linhas && linhas[0];
+        const dest = path.join(UPLOADS_DIR, filename);
+        if (!row || !row.value || !row.value.b64 || fs.existsSync(dest)) continue; // sem conteúdo salvo, ou já apareceu enquanto restaurava outras
+        fs.writeFileSync(dest, Buffer.from(row.value.b64, 'base64'));
+        restauradas++;
+      } catch (e) { /* ignora essa foto e segue restaurando as outras */ }
     }
-    console.log(`   ☁️  Fotos: ${restauradas} restaurada(s)${falharam ? `, ${falharam} falharam ao gravar` : ''}`);
-  } catch (err) {
-    console.error('   ⚠️  Não consegui restaurar fotos do Supabase — fotos locais preservadas, sistema continuará funcionando:', err.message);
-  }
+    if (restauradas) console.log(`   ✓ ${restauradas} foto(s) restaurada(s) do Supabase pra uploads/`);
+  } catch (err) { console.error('   ⚠️  Não consegui restaurar fotos do Supabase:', err.message); }
 }
 // v67 — Fundo do Chat: lê largura/altura da imagem direto dos bytes (sem depender de nenhuma
 // biblioteca externa — o projeto é 100% vanilla Node). Cobre PNG, JPEG e WEBP (os 3 formatos
@@ -1913,16 +1813,7 @@ function serveStatic(req, res, pathname) {
     const uploadPath = path.join(UPLOADS_DIR, pathname.slice('/uploads/'.length));
     if (!uploadPath.startsWith(UPLOADS_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
     return fs.readFile(uploadPath, (err, data) => {
-      if (err) {
-        // v-cloudinary: rede de segurança — se o arquivo sumiu do disco local (ex: deploy no
-        // Render que apagou o disco, antes da restauração automática do backup terminar) mas já
-        // foi migrado pro Cloudinary, redireciona pra lá em vez de devolver 404. Não muda em nada
-        // o caminho feliz (arquivo presente localmente continua sendo servido igual a sempre).
-        const filename = pathname.slice('/uploads/'.length);
-        const cloudUrl = readCloudinaryMap()[filename];
-        if (cloudUrl) { res.writeHead(302, { Location: cloudUrl }); return res.end(); }
-        res.writeHead(404); return res.end('Not found');
-      }
+      if (err) { res.writeHead(404); return res.end('Not found'); }
       const ext = path.extname(uploadPath);
       // v67: nome do arquivo é um hash aleatório (nunca reaproveitado numa troca de foto — ver
       // /api/chat/background), então dá pra cachear pesado no navegador sem risco de foto trocada
@@ -2664,85 +2555,6 @@ async function handleRequest(req, res) {
       if (mImg) syncUploadToSupabase(filename, buffer, ext); // v60: só imagens fazem backup (vídeo é grande demais)
       return sendJSON(res, 200, { url: '/uploads/' + filename });
     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // v-cloudinary — MIGRAÇÃO MANUAL das fotos do backup base64 (shogatsu_kv) pro Cloudinary.
-  // NÃO roda sozinha em nenhum momento (nem no boot, nem em nenhum outro fluxo) — só quando
-  // alguém autenticado como admin chama essa rota explicitamente, uma vez. Pode ser chamada de
-  // novo sem problema: fotos já migradas são puladas (idempotente). Não apaga nem altera nenhum
-  // registro do shogatsu_kv, não mexe em pedidos/clientes/impressão/login/layout — só lê o
-  // backup, sobe pro Cloudinary, e atualiza o campo `image` dos pratos do cardápio que apontavam
-  // pra fotos migradas.
-  // ═══════════════════════════════════════════════════════════════════════
-  if (pathname === '/api/admin/migrar-fotos-cloudinary' && req.method === 'POST') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-      return sendJSON(res, 400, { error: 'Cloudinary não configurado. Defina CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no Environment.' });
-    }
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return sendJSON(res, 400, { error: 'Supabase não configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY) — é de lá que vêm os backups em base64.' });
-    }
-    try {
-      // v-cloudinary-bugfix: buscar as ~162 fotos de uma vez só (base64 é "pesado" em texto)
-      // estava sobrecarregando um projeto Supabase no plano gratuito (erro 57014 - statement
-      // timeout). Agora busca em LOTES pequenos (paginação via limit/offset), com uma pequena
-      // pausa entre eles — bem mais leve pro banco, sem mudar nenhum resultado final.
-      const candidatos = [];
-      const TAMANHO_LOTE = 25;
-      let offset = 0;
-      while (true) {
-        const lote = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key,value&limit=${TAMANHO_LOTE}&offset=${offset}`);
-        const validos = (lote || []).filter(r => /^upload_.+\.(jpe?g|png)$/i.test(r.key || ''));
-        candidatos.push(...validos);
-        if (!lote || lote.length < TAMANHO_LOTE) break; // último lote — acabou
-        offset += TAMANHO_LOTE;
-        await new Promise(r => setTimeout(r, 300)); // respiro entre lotes pra não sobrecarregar o banco
-      }
-      const map = readCloudinaryMap();
-      let migradas = 0, jaExistiam = 0, falharam = 0;
-      const erros = [];
-      for (const row of candidatos) {
-        const filename = row.key.replace(/^upload_/, '');
-        if (map[filename]) { jaExistiam++; continue; } // já migrada — nunca reenviamos
-        const b64 = row.value && row.value.b64;
-        if (!b64) { falharam++; erros.push({ filename, erro: 'sem dado b64 no registro' }); continue; }
-        const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
-        try {
-          const secureUrl = await cloudinaryUploadBase64(filename, b64, ext);
-          map[filename] = secureUrl;
-          migradas++;
-        } catch (err) {
-          falharam++;
-          erros.push({ filename, erro: err.message });
-        }
-      }
-      writeJSON(CLOUDINARY_MAP_FILE, map); // grava local + sincroniza no Supabase automaticamente
-
-      // Atualiza só o campo `image` dos pratos do cardápio que apontavam pra fotos migradas —
-      // não muda estrutura nenhuma do cardápio, só o valor da URL de fotos já existentes.
-      let itensCardapioAtualizados = 0;
-      const data = readConfig();
-      for (const categoria of (data.menu || [])) {
-        for (const item of (categoria.items || [])) {
-          if (typeof item.image === 'string' && item.image.startsWith('/uploads/')) {
-            const filename = item.image.slice('/uploads/'.length);
-            if (map[filename]) { item.image = map[filename]; itensCardapioAtualizados++; }
-          }
-        }
-      }
-      if (itensCardapioAtualizados > 0) writeJSON(CONFIG_FILE, data);
-
-      return sendJSON(res, 200, {
-        ok: true,
-        totalEncontradas: candidatos.length,
-        migradas, jaExistiam, falharam,
-        itensCardapioAtualizados,
-        erros
-      });
-    } catch (e) {
-      return sendJSON(res, 500, { error: 'Falha ao consultar o shogatsu_kv no Supabase: ' + e.message });
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -5646,25 +5458,9 @@ async function checkScheduledPush() {
 }
 setInterval(checkScheduledPush, 60 * 1000);
 
-// v-bugfix: como restoreFromSupabase() agora processa as tabelas uma por vez (item 4 da correção)
-// e cada uma pode levar até ~60s se o Supabase estiver realmente fora do ar (20s de timeout x até
-// 3 tentativas), o pior caso somado de todas as tabelas ficaria longo demais pro boot. withDeadline
-// dá um prazo máximo pro servidor esperar; se estourar, o servidor sobe mesmo assim e a restauração
-// que ainda estiver rodando continua em segundo plano (vai gravando os arquivos conforme cada
-// tabela responder) — ela nunca é cancelada, só deixa de ser esperada.
-function withDeadline(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise(resolve => setTimeout(() => {
-      console.log(`   ⏱️  ${label} está demorando — servidor vai iniciar agora; restauração continua em segundo plano`);
-      resolve();
-    }, ms))
-  ]);
-}
-
-withDeadline(restoreFromSupabase(), 15000, 'Restauração do Supabase').finally(() => {
+restoreFromSupabase().finally(() => {
   loadSessionsFromDisk(); // v60: depois de restaurar do Supabase (se configurado), carrega sessões válidas pra memória
-  withDeadline(restoreUploadsFromSupabase(), 15000, 'Restauração de fotos').finally(() => {
+  restoreUploadsFromSupabase().finally(() => {
     server.listen(PORT, () => {
       console.log(`🍣 Shogatsu rodando em http://localhost:${PORT}`);
       console.log(`   Painel da cozinha: http://localhost:${PORT}/painel.html`);
