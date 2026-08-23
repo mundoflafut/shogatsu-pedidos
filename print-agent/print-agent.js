@@ -516,6 +516,15 @@ async function printTestTicket(payload) {
 
 // ─── Conexão com o servidor (login + escuta de eventos em tempo real) ───
 let token = null;
+// v-bugfix (sessões acumulando sem parar): cada reconexão chamava login() de novo, mesmo com um
+// token ainda válido — como o servidor mantém a sessão válida por 12h, isso criava uma sessão
+// NOVA no servidor a cada queda de conexão (comum: rede instável, deploy, cold start do
+// hospedeiro), sem nunca reaproveitar a anterior. Com o tempo, acumulou dezenas de milhares de
+// sessões no backup do servidor, deixando o arquivo pesado demais e contribuindo pra lentidão no
+// boot. Agora guardamos até quando ESTE token deve durar (com margem de segurança abaixo das 12h
+// reais) e só pedimos login novo quando de fato não temos mais um token utilizável.
+let tokenExpiresAt = 0;
+const TOKEN_LIFETIME_MS = 1000 * 60 * 60 * 11; // 11h — 1h de margem abaixo das 12h do servidor
 let retryDelay = 2000; // cresce com backoff até um teto, evita martelar o servidor se ele cair
 
 function request(method, urlStr, body) {
@@ -546,6 +555,7 @@ async function login() {
   const r = await request('POST', `${cfg.serverUrl}/api/login`, { username: cfg.username, password: cfg.password });
   if (r.status !== 200 || !r.data || !r.data.token) throw new Error('Login falhou — confira usuário/senha no config.json.');
   token = r.data.token;
+  tokenExpiresAt = Date.now() + TOKEN_LIFETIME_MS;
   log(`🔑 Login OK (${cfg.username}).`);
   announcePresence();
   startStationStatusPolling();
@@ -626,6 +636,11 @@ function connectStream() {
 
   const req = lib.get(u, (res) => {
     if (res.statusCode !== 200) {
+      // v-bugfix: só derruba o token guardado se o servidor disse explicitamente "não
+      // autorizado" (401) — qualquer outro status (ex: 502/503 de um deploy em andamento) é
+      // problema passageiro do servidor, não do login, então o token continua valendo e a
+      // próxima tentativa NÃO precisa logar de novo.
+      if (res.statusCode === 401) { token = null; tokenExpiresAt = 0; }
       log(`⚠️  Conexão recusada (status ${res.statusCode}). Tentando de novo em ${retryDelay / 1000}s...`);
       scheduleReconnect();
       return;
@@ -684,7 +699,18 @@ function connectStream() {
 
 function scheduleReconnect() {
   setTimeout(async () => {
-    try { await login(); connectStream(); }
+    try {
+      // v-bugfix: reaproveita o token atual enquanto ele ainda estiver dentro da validade —
+      // só faz login de novo quando realmente não tem mais um token utilizável (nunca logou,
+      // ou o servidor recusou com 401, ou passou da validade). Isso é o que impede uma sessão
+      // nova a cada queda de conexão comum (rede, deploy, cold start).
+      if (!token || Date.now() >= tokenExpiresAt) {
+        await login();
+      } else {
+        log('🔁 Reconectando com o login já existente (ainda válido) — sem criar sessão nova.');
+      }
+      connectStream();
+    }
     catch (e) { log(`⚠️  ${e.message}`); scheduleReconnect(); }
   }, retryDelay);
   retryDelay = Math.min(retryDelay * 1.5, 60000); // backoff até no máx. 1 minuto entre tentativas
@@ -696,7 +722,7 @@ function scheduleReconnect() {
 // aqui (como a de tamanho de fonte) só passa a valer de verdade depois de rodar
 // REINICIAR-AGENTE.bat. Esse marcador serve pra conferir, olhando o log, se o processo rodando
 // agora é realmente a versão mais nova dos arquivos.
-const AGENT_BUILD = 'v95';
+const AGENT_BUILD = 'v96 (correção: reconexão não cria sessão nova)';
 async function start() {
   log(`🍣 Agente de impressão iniciando (build ${AGENT_BUILD})${TEST_MODE ? ' (TEST_MODE — não vai imprimir de verdade)' : ''}...`);
   log(`ℹ️  Se você acabou de atualizar os arquivos do sistema, confirme que esse número de build bate com o mais recente — senão, rode REINICIAR-AGENTE.bat pra esse processo carregar o código novo (trocar o arquivo no disco sozinho não reinicia quem já está rodando).`);
