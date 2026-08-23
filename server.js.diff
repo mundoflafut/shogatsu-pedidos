@@ -1,0 +1,190 @@
+diff --git a/server.js b/server.js
+index b4bf1ce..74a869b 100644
+--- a/server.js
++++ b/server.js
+@@ -53,6 +53,12 @@ const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+ // v60: log de falhas de impressão (impressão remota/automática) — fica em disco pra dar pra
+ // conferir depois o que falhou e por quê, além do aviso mostrado na hora pra quem clicou em imprimir.
+ const PRINT_LOG_FILE = path.join(DATA_DIR, 'print-log.json');
++// v-cloudinary: mapa { "nomeDoArquivo.ext": "https://res.cloudinary.com/.../secure_url" } das fotos
++// já migradas do backup base64 (shogatsu_kv) pro Cloudinary. Entra no mesmo mecanismo de
++// backup/restauração automática do Supabase que os outros arquivos de dados já usam (ver
++// FILE_TO_KEY mais abaixo) — não precisou de nenhuma infraestrutura nova. Nunca é apagado nem
++// perde entradas sozinho; só cresce, uma migração de cada vez, sempre disparada manualmente.
++const CLOUDINARY_MAP_FILE = path.join(DATA_DIR, 'cloudinary-map.json');
+ // v98 — AI ROUTER: cache de leitura de imagem (evita reanalisar a mesma foto de nota fiscal/
+ // catálogo duas vezes) e log de uso da IA (provedor, modelo, tempo, erro, fallback usado — NUNCA
+ // a chave de API). Ver seção "AI ROUTER" mais abaixo, perto de chamarIA().
+@@ -406,6 +412,7 @@ if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, '{}');
+ if (!fs.existsSync(PRINT_LOG_FILE)) fs.writeFileSync(PRINT_LOG_FILE, '[]');
+ if (!fs.existsSync(IA_CACHE_FILE)) fs.writeFileSync(IA_CACHE_FILE, '{}'); // v98
+ if (!fs.existsSync(IA_LOG_FILE)) fs.writeFileSync(IA_LOG_FILE, '[]');     // v98
++if (!fs.existsSync(CLOUDINARY_MAP_FILE)) fs.writeFileSync(CLOUDINARY_MAP_FILE, '{}'); // v-cloudinary
+ 
+ // Gera as chaves VAPID (necessárias pra notificação push) na primeira vez que o servidor liga,
+ // e salva no config.json — depois disso nunca mais muda (senão as inscrições dos clientes quebram).
+@@ -442,7 +449,72 @@ function writeJSON(file, data) {
+ const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+ const SUPABASE_TABLE = process.env.SUPABASE_TABLE || 'shogatsu_kv';
+-const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia' };
++const FILE_TO_KEY = { [ORDERS_FILE]: 'orders', [CONFIG_FILE]: 'config', [CUSTOMERS_FILE]: 'customers', [RESERVATIONS_FILE]: 'reservations', [PUSH_SUBS_FILE]: 'push_subs', [ADMIN_PUSH_SUBS_FILE]: 'admin_push_subs', [SCHEDULED_PUSH_FILE]: 'scheduled_push', [COURIERS_FILE]: 'couriers', [DELETE_LOG_FILE]: 'delete_log', [INGREDIENTES_FILE]: 'ingredientes', [FICHAS_TECNICAS_FILE]: 'fichas_tecnicas', [CUSTOS_CONFIG_FILE]: 'custos_config', [SESSIONS_FILE]: 'sessions', [APROVACOES_IA_FILE]: 'aprovacoes_ia', [CLOUDINARY_MAP_FILE]: 'cloudinary_map' };
++
++// ═══════════════════════════════════════════════════════════
++// CLOUDINARY — migração das fotos do backup base64 (shogatsu_kv) pra um storage de imagens de
++// verdade. NUNCA colocamos o API Secret em código — vem só de variável de ambiente. Sem essas 3
++// variáveis configuradas, a rota de migração responde com erro claro e o resto do sistema
++// continua funcionando 100% igual a antes (nenhuma outra função depende disso).
++// Configure em Environment: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.
++const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME || '';
++const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY || '';
++const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET || '';
++const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER || 'shogatsu_cardapio';
++
++function readCloudinaryMap() {
++  try { return readJSON(CLOUDINARY_MAP_FILE); } catch (e) { return {}; }
++}
++
++// Sobe uma imagem (já em base64, vinda do backup no shogatsu_kv) pro Cloudinary via upload
++// ASSINADO (sem SDK — o projeto não usa dependências externas). public_id é derivado do nome do
++// arquivo original, então subir a MESMA foto de novo sobrescreve o mesmo recurso em vez de criar
++// duplicata (idempotente, resolve o requisito de "identificador estável").
++function cloudinaryUploadBase64(filename, b64, ext) {
++  return new Promise((resolve, reject) => {
++    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
++      return reject(new Error('Cloudinary não configurado (faltam variáveis de ambiente)'));
++    }
++    const publicId = filename.replace(/\.[^.]+$/, ''); // nome sem extensão = identificador estável
++    const timestamp = Math.floor(Date.now() / 1000);
++    // Assinatura exigida pelo Cloudinary: SHA1 dos parâmetros (exceto file/api_key) + api_secret,
++    // em ordem alfabética — igual à doc oficial de "signed upload".
++    const paramsToSign = `folder=${CLOUDINARY_FOLDER}&public_id=${publicId}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`;
++    const signature = crypto.createHash('sha1').update(paramsToSign).digest('hex');
++    const dataUri = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${b64}`;
++
++    const boundary = '----shogatsuMigra' + crypto.randomBytes(8).toString('hex');
++    const fields = { file: dataUri, api_key: CLOUDINARY_API_KEY, timestamp: String(timestamp), signature, folder: CLOUDINARY_FOLDER, public_id: publicId };
++    let body = '';
++    for (const [k, v] of Object.entries(fields)) {
++      body += `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`;
++    }
++    body += `--${boundary}--\r\n`;
++    const bodyBuf = Buffer.from(body, 'utf8');
++
++    const req = https.request({
++      hostname: 'api.cloudinary.com',
++      path: `/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
++      method: 'POST',
++      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': bodyBuf.length },
++      timeout: 30000
++    }, (res) => {
++      let data = '';
++      res.on('data', c => data += c);
++      res.on('end', () => {
++        try {
++          const json = JSON.parse(data);
++          if (res.statusCode >= 200 && res.statusCode < 300 && json.secure_url) resolve(json.secure_url);
++          else reject(new Error(json.error && json.error.message ? json.error.message : `Cloudinary HTTP ${res.statusCode}`));
++        } catch (e) { reject(new Error('Resposta inválida do Cloudinary')); }
++      });
++    });
++    req.on('error', reject);
++    req.on('timeout', () => { req.destroy(); reject(new Error('timeout no upload pro Cloudinary')); });
++    req.write(bodyBuf);
++    req.end();
++  });
++}
+ 
+ // v-bugfix (timeout Supabase): timeout de 8s era curto demais pra rede do Render free tier, gerando
+ // "timeout" repetido em quase toda tabela no boot. Subimos pra 20s e adicionamos tratamento explícito
+@@ -1841,7 +1913,16 @@ function serveStatic(req, res, pathname) {
+     const uploadPath = path.join(UPLOADS_DIR, pathname.slice('/uploads/'.length));
+     if (!uploadPath.startsWith(UPLOADS_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
+     return fs.readFile(uploadPath, (err, data) => {
+-      if (err) { res.writeHead(404); return res.end('Not found'); }
++      if (err) {
++        // v-cloudinary: rede de segurança — se o arquivo sumiu do disco local (ex: deploy no
++        // Render que apagou o disco, antes da restauração automática do backup terminar) mas já
++        // foi migrado pro Cloudinary, redireciona pra lá em vez de devolver 404. Não muda em nada
++        // o caminho feliz (arquivo presente localmente continua sendo servido igual a sempre).
++        const filename = pathname.slice('/uploads/'.length);
++        const cloudUrl = readCloudinaryMap()[filename];
++        if (cloudUrl) { res.writeHead(302, { Location: cloudUrl }); return res.end(); }
++        res.writeHead(404); return res.end('Not found');
++      }
+       const ext = path.extname(uploadPath);
+       // v67: nome do arquivo é um hash aleatório (nunca reaproveitado numa troca de foto — ver
+       // /api/chat/background), então dá pra cachear pesado no navegador sem risco de foto trocada
+@@ -2585,6 +2666,72 @@ async function handleRequest(req, res) {
+     } catch (e) { return sendJSON(res, 400, { error: 'invalid body' }); }
+   }
+ 
++  // ═══════════════════════════════════════════════════════════════════════
++  // v-cloudinary — MIGRAÇÃO MANUAL das fotos do backup base64 (shogatsu_kv) pro Cloudinary.
++  // NÃO roda sozinha em nenhum momento (nem no boot, nem em nenhum outro fluxo) — só quando
++  // alguém autenticado como admin chama essa rota explicitamente, uma vez. Pode ser chamada de
++  // novo sem problema: fotos já migradas são puladas (idempotente). Não apaga nem altera nenhum
++  // registro do shogatsu_kv, não mexe em pedidos/clientes/impressão/login/layout — só lê o
++  // backup, sobe pro Cloudinary, e atualiza o campo `image` dos pratos do cardápio que apontavam
++  // pra fotos migradas.
++  // ═══════════════════════════════════════════════════════════════════════
++  if (pathname === '/api/admin/migrar-fotos-cloudinary' && req.method === 'POST') {
++    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
++    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
++      return sendJSON(res, 400, { error: 'Cloudinary não configurado. Defina CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no Environment.' });
++    }
++    if (!SUPABASE_URL || !SUPABASE_KEY) {
++      return sendJSON(res, 400, { error: 'Supabase não configurado (SUPABASE_URL/SUPABASE_SERVICE_KEY) — é de lá que vêm os backups em base64.' });
++    }
++    try {
++      const rows = await supabaseRequest('GET', `${SUPABASE_TABLE}?key=ilike.upload_*&select=key,value`);
++      const candidatos = (rows || []).filter(r => /^upload_.+\.(jpe?g|png)$/i.test(r.key || ''));
++      const map = readCloudinaryMap();
++      let migradas = 0, jaExistiam = 0, falharam = 0;
++      const erros = [];
++      for (const row of candidatos) {
++        const filename = row.key.replace(/^upload_/, '');
++        if (map[filename]) { jaExistiam++; continue; } // já migrada — nunca reenviamos
++        const b64 = row.value && row.value.b64;
++        if (!b64) { falharam++; erros.push({ filename, erro: 'sem dado b64 no registro' }); continue; }
++        const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
++        try {
++          const secureUrl = await cloudinaryUploadBase64(filename, b64, ext);
++          map[filename] = secureUrl;
++          migradas++;
++        } catch (err) {
++          falharam++;
++          erros.push({ filename, erro: err.message });
++        }
++      }
++      writeJSON(CLOUDINARY_MAP_FILE, map); // grava local + sincroniza no Supabase automaticamente
++
++      // Atualiza só o campo `image` dos pratos do cardápio que apontavam pra fotos migradas —
++      // não muda estrutura nenhuma do cardápio, só o valor da URL de fotos já existentes.
++      let itensCardapioAtualizados = 0;
++      const data = readConfig();
++      for (const categoria of (data.menu || [])) {
++        for (const item of (categoria.items || [])) {
++          if (typeof item.image === 'string' && item.image.startsWith('/uploads/')) {
++            const filename = item.image.slice('/uploads/'.length);
++            if (map[filename]) { item.image = map[filename]; itensCardapioAtualizados++; }
++          }
++        }
++      }
++      if (itensCardapioAtualizados > 0) writeJSON(CONFIG_FILE, data);
++
++      return sendJSON(res, 200, {
++        ok: true,
++        totalEncontradas: candidatos.length,
++        migradas, jaExistiam, falharam,
++        itensCardapioAtualizados,
++        erros
++      });
++    } catch (e) {
++      return sendJSON(res, 500, { error: 'Falha ao consultar o shogatsu_kv no Supabase: ' + e.message });
++    }
++  }
++
+   // ═══════════════════════════════════════════════════════════════════════
+   // v67 — FUNDO DO CHAT (Chat Express): Configurações → Aparência → Fundo do Chat.
+   // Deixa o restaurante colocar uma foto de fundo nas conversas do chat que o cliente vê
