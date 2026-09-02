@@ -711,12 +711,43 @@ function getSession(token) {
   return s;
 }
 function checkAuth(token) { return !!getSession(token); }
-// master > admin > vendas — checa se a sessão tem o nível mínimo pedido
+// master > admin > vendas — checa se a sessão tem o nível mínimo pedido. Papéis operacionais
+// (caixa/cozinha/entrega, v107) ficam de propósito FORA dessa escada — não são "menos que
+// vendas", são um tipo de acesso diferente (só o que a função precisa, sem hierarquia
+// administrativa nenhuma) — por isso não entram no ROLE_RANK: qualquer requireRole(token,
+// 'vendas'/'admin'/'master') já bloqueia esses três papéis automaticamente (rank padrão 0),
+// e o que eles PODEM fazer é liberado à parte, função por função, abaixo.
 const ROLE_RANK = { vendas: 1, admin: 2, master: 3 };
 function requireRole(token, minRole) {
   const s = getSession(token);
   if (!s) return false;
   return (ROLE_RANK[s.role] || 0) >= (ROLE_RANK[minRole] || 99);
+}
+const OPERATIONAL_ROLES = ['caixa', 'cozinha', 'entrega'];
+const ALL_ROLES = ['master', 'admin', 'vendas', ...OPERATIONAL_ROLES];
+// v107 — SISTEMA DE PERMISSÕES: quem pode mudar um pedido de qual status pra qual. master,
+// admin e vendas mantêm o comportamento de sempre (podem tudo em pedidos — nunca tiveram
+// restrição nenhuma aqui, e mudar isso agora quebraria o uso normal da loja). Os 3 papéis
+// operacionais novos só podem fazer exatamente a transição da função deles — verificado aqui
+// no backend, nunca só na interface (o painel também esconde os botões que a função não usa,
+// mas quem manda é este check; ver "não confiar apenas no frontend" no pedido de auditoria).
+function canChangeOrderStatus(session, fromStatus, toStatus) {
+  if (!session) return false;
+  if (ROLE_RANK[session.role]) return true; // master/admin/vendas — sem restrição, como sempre
+  if (session.role === 'cozinha') {
+    return (fromStatus === 'novo' && toStatus === 'preparando') || (fromStatus === 'preparando' && toStatus === 'saiu');
+  }
+  if (session.role === 'entrega') {
+    return fromStatus === 'saiu' && toStatus === 'entregue';
+  }
+  if (session.role === 'caixa') {
+    // Caixa recebe, aceita e finaliza — inclusive retirada (preparando → entregue direto,
+    // sem etapa de entrega) — mas não é quem decide "saiu pra entrega" fisicamente nem cancela
+    // sozinho sem motivo (cancelamento passa por 'cancelado', liberado aqui também: caixa lida
+    // com o cliente na hora, é quem normalmente cancela um pedido a pedido do cliente).
+    return ['preparando', 'saiu', 'entregue', 'cancelado'].includes(toStatus);
+  }
+  return false;
 }
 
 // ─── Contas de cliente (telefone + senha de 4 dígitos) ───
@@ -725,6 +756,23 @@ function normalizePhone(phone) { return String(phone || '').replace(/\D/g, ''); 
 
 function hashPin(phone, pin) {
   return crypto.createHash('sha256').update(normalizePhone(phone) + ':' + String(pin) + ':shogatsu-salt').digest('hex');
+}
+
+// v106 — BUG DE SEGURANÇA CORRIGIDO: senha dos usuários do painel (/api/admin/users) era
+// gravada em `config.json` em TEXTO PURO (campo `password`). Quem tivesse acesso de leitura ao
+// arquivo (backup, export, Supabase) via a senha de qualquer usuário direto. Os PINs de cliente
+// já eram hasheados (hashPin, acima) — os logins do painel não. Corrigido pra usar hash
+// (sha256 + salt fixo do app, mesmo padrão do hashPin) num novo campo `passwordHash`; contas
+// antigas que ainda só têm `password` em texto puro são migradas automaticamente pro hash no
+// primeiro login que der certo (silencioso, sem pedir nada de novo pro usuário).
+function hashUserPassword(username, password) {
+  return crypto.createHash('sha256').update(String(username || '').toLowerCase() + ':' + String(password) + ':shogatsu-user-salt').digest('hex');
+}
+function verifyUserPassword(user, password) {
+  if (user.passwordHash) return user.passwordHash === hashUserPassword(user.username, password);
+  // conta antiga, ainda sem hash — compara texto puro (só existe em bases já em produção
+  // antes desta correção; some assim que alguém logar com sucesso, ver POST /api/login)
+  return !!user.password && password === user.password;
 }
 
 function findCustomer(customers, phone) {
@@ -2437,15 +2485,15 @@ async function handleRequest(req, res) {
       const { username, password, role } = await readBody(req);
       const uname = String(username || '').trim().toLowerCase();
       if (!uname || uname.length < 3) return sendJSON(res, 400, { error: 'Usuário precisa ter pelo menos 3 caracteres.' });
-      if (!['master', 'admin', 'vendas'].includes(role)) return sendJSON(res, 400, { error: 'Nível de acesso inválido.' });
+      if (!ALL_ROLES.includes(role)) return sendJSON(res, 400, { error: 'Nível de acesso inválido.' });
       const data = readConfig();
       const existing = data.cfg.users.find(u => String(u.username || '').toLowerCase() === uname);
       if (existing) {
         existing.role = role;
-        if (password) existing.password = password; // só troca a senha se veio uma nova
+        if (password) { existing.passwordHash = hashUserPassword(uname, password); delete existing.password; } // só troca a senha se veio uma nova; nunca mais grava texto puro
       } else {
         if (!password || password.length < 4) return sendJSON(res, 400, { error: 'Senha precisa ter pelo menos 4 caracteres.' });
-        data.cfg.users.push({ username: uname, password, role });
+        data.cfg.users.push({ username: uname, passwordHash: hashUserPassword(uname, password), role });
       }
       writeJSON(CONFIG_FILE, data);
       return sendJSON(res, 200, { ok: true, users: data.cfg.users.map(u => ({ username: u.username, role: u.role })) });
@@ -2819,7 +2867,14 @@ async function handleRequest(req, res) {
 
       if (uname) {
         const user = (cfg.users || []).find(u => String(u.username || '').toLowerCase() === uname);
-        if (user && password === user.password) {
+        if (user && verifyUserPassword(user, password)) {
+          // Migração silenciosa: conta antiga só com senha em texto puro vira hash agora que
+          // provou saber a senha certa — nenhuma ação extra pedida ao usuário.
+          if (!user.passwordHash) {
+            const data = readConfig();
+            const u2 = (data.cfg.users || []).find(u => String(u.username || '').toLowerCase() === uname);
+            if (u2) { u2.passwordHash = hashUserPassword(u2.username, password); delete u2.password; writeJSON(CONFIG_FILE, data); }
+          }
           return sendJSON(res, 200, { token: newSession(user.role, user.username), role: user.role, username: user.username });
         }
         return sendJSON(res, 401, { error: 'Usuário ou senha incorretos.' });
@@ -4817,6 +4872,19 @@ function estimateDeliveryWindow(order, cfg) {
       if (!Number(cfg.open)) return sendJSON(res, 400, { error: 'Restaurante fechado no momento.' });
       if (!body.items || !body.items.length) return sendJSON(res, 400, { error: 'Carrinho vazio.' });
 
+      // v105 — AUDITORIA — IDEMPOTÊNCIA (evita pedido duplicado em clique duplo/retry após
+      // queda de conexão): o cliente manda uma "idempotencyKey" única gerada por tentativa de
+      // checkout. Se essa chave já corresponder a um pedido existente, devolve o pedido já
+      // criado em vez de criar outro — cobre exatamente o caso "servidor salvou mas a resposta
+      // não chegou ao cliente, que tenta de novo". Checagem cedo (best-effort) aqui; a checagem
+      // que realmente decide é a repetida logo antes de gravar (mais abaixo), sem nenhum
+      // "await" entre ela e a gravação, pra fechar a janela de corrida.
+      const idempotencyKey = String(body.idempotencyKey || '').slice(0, 80) || null;
+      if (idempotencyKey) {
+        const early = readJSON(ORDERS_FILE).find(o => o.idempotencyKey === idempotencyKey);
+        if (early) return sendJSON(res, 200, { ok: true, order: early, duplicate: true });
+      }
+
       // BUG DE SEGURANÇA CORRIGIDO: o servidor aceitava sem checar nenhuma o preço de cada item
       // exatamente como o navegador do cliente mandava — bastava editar a requisição (ex: pelo
       // DevTools) pra "pagar" qualquer prato a R$0,01. Agora todo preço é comparado contra o menor
@@ -4867,9 +4935,39 @@ function estimateDeliveryWindow(order, cfg) {
       const totalNum = Math.max(0, subtotalNum + feeNum - discount - pointsDiscount);
       const pointsEarned = loyaltyCfg.enabled ? Math.floor(totalNum * (Number(loyaltyCfg.pointsPerReal) || 0)) : 0;
 
+      // v105 — AUDITORIA — BUG CRÍTICO ENCONTRADO E CORRIGIDO ("pedidos reais somem"): o pedido
+      // era montado a partir de `orders = readJSON(ORDERS_FILE)` lido AQUI, mas logo abaixo
+      // havia um `await geocodeAddress(...)` (chamada de rede pra achar as coordenadas do
+      // endereço) ANTES de `orders.unshift(order); writeJSON(ORDERS_FILE, orders)`. Nesse
+      // intervalo (rede lenta, Wi-Fi instável, geocoding demorando), o event loop do Node fica
+      // livre pra atender OUTRA requisição de pedido em paralelo — que lê o mesmo orders.json
+      // (ainda sem o pedido A), grava o pedido B normalmente e responde "sucesso" ao cliente B.
+      // Quando o pedido A termina o geocode e finalmente grava, ele grava a SUA cópia em
+      // memória do array (que não tem o pedido B) — sobrescrevendo o arquivo e apagando o
+      // pedido B, que o cliente B já tinha certeza de ter feito. Dois pedidos reais chegando
+      // perto um do outro, com pelo menos um em modo delivery (dispara geocode), bastava pra
+      // sumir um pedido de verdade. CORREÇÃO: geocodificar o endereço ANTES de tocar no
+      // orders.json, e fazer a leitura+gravação do arquivo como um bloco síncrono sem nenhum
+      // "await" no meio — o Node nunca interrompe um trecho síncrono pra atender outra
+      // requisição, então essa janela de corrida deixa de existir.
+      let geoResult = null;
+      if ((body.mode === 'retirada' ? 'retirada' : 'delivery') === 'delivery' && String(body.address || '').trim()) {
+        try { geoResult = await geocodeAddress(String(body.address).slice(0, 200) + ', Brasil'); }
+        catch (e) { /* mapa fica sem o marcador do cliente, sem afetar o pedido */ }
+      }
+
+      // Leitura "fresca" do arquivo, feita o mais perto possível da gravação (sem nenhum
+      // await entre esta linha e o writeJSON lá embaixo) — fecha a janela de corrida descrita
+      // acima. Idempotência checada de novo aqui por segurança (a checagem "early" lá em cima
+      // não cobre uma tentativa concorrente que só grava exatamente entre as duas leituras).
       const orders = readJSON(ORDERS_FILE);
+      if (idempotencyKey) {
+        const dupNow = orders.find(o => o.idempotencyKey === idempotencyKey);
+        if (dupNow) return sendJSON(res, 200, { ok: true, order: dupNow, duplicate: true });
+      }
       const order = {
-        id: 'SG' + Date.now().toString(36).toUpperCase(),
+        id: 'SG' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase(),
+        idempotencyKey,
         ticketNumber: null, // só é atribuído quando a loja ACEITA o pedido (veja PATCH /api/orders/:id)
         createdAt: new Date().toISOString(),
         status: 'novo',
@@ -4931,20 +5029,17 @@ function estimateDeliveryWindow(order, cfg) {
         // v27: coordenadas do endereço de entrega, pra mostrar no mapa da tela de acompanhamento.
         // Busca melhor-esforço — se a geocodificação falhar (endereço incompleto, serviço fora do ar),
         // o pedido segue normal, só sem o marcador do cliente no mapa.
-        customerLat: null,
-        customerLng: null,
+        // v105 — AUDITORIA: geocodificado ANTES deste bloco (variável `geoResult`), não mais
+        // aqui — ver o comentário grande logo acima de "const orders = readJSON(ORDERS_FILE)"
+        // sobre por que isso precisou sair do meio do read-modify-write do orders.json.
+        customerLat: geoResult ? geoResult.lat : null,
+        customerLng: geoResult ? geoResult.lng : null,
         // v34: localização ao vivo do motoboy durante a entrega (rastreamento pro cliente).
         // Só é preenchida enquanto status === 'saiu' — ver /api/courier/location e /api/track.
         courierLat: null,
         courierLng: null,
         courierLocationAt: null
       };
-      if (order.mode === 'delivery' && order.address) {
-        try {
-          const geo = await geocodeAddress(order.address + ', Brasil');
-          if (geo) { order.customerLat = geo.lat; order.customerLng = geo.lng; }
-        } catch (e) { /* mapa fica sem o marcador do cliente, sem afetar o pedido */ }
-      }
       // v55: aceite automático de pedidos — se a chave estiver ligada (Configurações →
       // aceite automático, ou o interruptor na barra lateral do painel), o pedido já nasce
       // ACEITO (status "preparando"), com número de ficha já atribuído — igual ao que
@@ -5021,7 +5116,8 @@ function estimateDeliveryWindow(order, cfg) {
 
   // ── PATCH /api/orders/:id — atualiza status (painel) ──
   if (pathname.startsWith('/api/orders/') && req.method === 'PATCH') {
-    if (!checkAuth(getToken(req, query))) return sendJSON(res, 401, { error: 'unauthorized' });
+    const session = getSession(getToken(req, query));
+    if (!session) return sendJSON(res, 401, { error: 'unauthorized' });
     const id = pathname.split('/').pop();
     try {
       const { status, fee, cancelReason, cancelledBy, ticketNumber, courierName } = await readBody(req);
@@ -5030,6 +5126,11 @@ function estimateDeliveryWindow(order, cfg) {
       const orders = readJSON(ORDERS_FILE);
       const order = orders.find(o => o.id === id);
       if (!order) return sendJSON(res, 404, { error: 'pedido não encontrado' });
+      // v107 — checagem de permissão AQUI no backend (nunca só na interface): confere se o
+      // papel da sessão pode mesmo fazer ESSA transição de status específica para ESTE pedido.
+      if (!canChangeOrderStatus(session, order.status, status)) {
+        return sendJSON(res, 403, { error: 'Seu usuário não tem permissão pra mudar esse pedido de status.' });
+      }
       const statusChanged = order.status !== status;
       order.status = status;
       // v27: nome do entregador (opcional) — aparece pro cliente na tela de acompanhamento quando o pedido sai.

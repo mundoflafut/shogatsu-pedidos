@@ -1,3 +1,158 @@
+# v108 — Notificação de pedido "estilo iFood/99Food": toque contínuo até aceitar + varredura de bugs
+
+**Pedido:** notificação de pedido novo parecida com iFood/99Food (5 tipos de alerta, som alto,
+tocando ao mesmo tempo em todos os aparelhos conectados) + varredura geral de bugs.
+
+**O que já existia (v106) e foi conferido, não recriado:** os 5 sons de alerta sintetizados
+(Configurações → 🔊 Alertas), volume ajustável, e o fato de **todo** Painel aberto (qualquer
+computador/celular, ao mesmo tempo) já recebe o pedido novo pelo mesmo evento em tempo real
+(SSE `new-order`, `server.js`) e toca o som sozinho — ou seja, o "toca simultâneo em todos os
+app conectados" pedido já acontecia de verdade nessa parte; só era testado e confirmado agora.
+
+**NOVO: toque contínuo até alguém aceitar (o que faltava pra ficar igual iFood/99Food).** Antes,
+o alerta sonoro de pedido novo tocava **uma única vez** no instante em que ele chegava — se
+ninguém estivesse olhando a tela naquele segundo exato, o pedido podia passar despercebido até
+alguém notar visualmente. Agora, em Configurações → 🚨 Toque contínuo (estilo iFood/99Food): com
+a opção ligada (padrão), **enquanto o pedido continuar na coluna "Novos"** (não aceito), o alerta
+repete sozinho a cada 3/5/8/12 segundos (configurável), no volume e som já escolhidos em 🔊
+Alertas — e para automaticamente assim que o pedido é aceito. O card do pedido no Kanban mostra
+"🚨 Tocando até aceitar…" pulsando enquanto isso, com um botão 🔕 pra silenciar só aquele pedido
+específico (sem afetar os outros), igual ao padrão já usado no alerta de atraso.
+
+**Por que isso conta como "simultâneo em todos os apps":** como o toque contínuo é reavaliado a
+cada segundo em cada Painel aberto, com a mesma configuração (salva pra loja toda) e a mesma
+lista de pedidos (sincronizada em tempo real), todo computador/celular com o Painel aberto toca
+junto, de forma independente — não existe um "aparelho mestre" enviando o toque pros outros, e
+por isso nenhum aparelho pode travar ou atrasar o alerta dos demais.
+
+**Varredura de bugs feita nesta rodada:** checagem de sintaxe de `server.js`, `webpush.js`,
+`print-agent/print-agent.js` e de todo bloco `<script>` de `public/*.html` (painel, cardápio,
+entregador, nota fiscal, pedir agora, divulgação/avaliação/cardápio do rodízio) — todos sem erro
+de sintaxe. Servidor testado de ponta a ponta depois da mudança: sobe normal, `/`, `/painel.html`
+e `/api/orders` respondem com os códigos esperados (200, 200 e 401 sem token, respectivamente).
+Nenhum bug novo encontrado nesta varredura além do que já foi corrigido nas rodadas anteriores
+(v100–v107).
+
+**Arquivo alterado:** só `public/painel.html` (novo bloco de configuração, 3 funções novas,
+um `@keyframes pulse` e o indicador no card do Kanban). `server.js` e o restante do sistema não
+foram tocados.
+
+---
+
+# v107 — Sistema de permissões por função: Caixa, Cozinha e Entrega
+
+**Terceira rodada da auditoria**, item de usuários/permissões pedido nos prompts. A base de
+autenticação (sessão com token, hash de senha desde a v106) já existia com 3 níveis
+administrativos (master/admin/vendas) — esta rodada adiciona os **3 papéis operacionais**
+pedidos, cada um só com acesso ao que a função precisa, com a permissão checada no
+**backend** (não só escondendo botão na tela).
+
+**Papéis novos:**
+- **🧑‍🍳 Cozinha** — só pode mudar pedido de NOVO → EM PREPARO e de EM PREPARO → PRONTO (saiu). Não cancela, não mexe em cardápio/preço/configuração/usuários.
+- **🛵 Entrega** — só pode mudar pedido de SAIU → ENTREGUE. Mesmas restrições de resto.
+- **🧾 Caixa** — recebe, aceita e finaliza pedidos (inclusive retirada, sem etapa de entrega) e cancela a pedido do cliente; não mexe em cardápio, preço, configuração nem usuários.
+- master/admin/vendas continuam exatamente como sempre — sem nenhuma restrição nova nesses três, pra não quebrar o uso normal de quem já usa o sistema.
+
+**Onde a permissão é checada de verdade:** `canChangeOrderStatus()` em `server.js`, chamada
+dentro do `PATCH /api/orders/:id` — quem não tem permissão pra aquela transição específica
+recebe `403` e uma mensagem clara, mesmo que chame a API direto sem passar pela tela. O painel
+(`public/painel.html`) também: esconde da navegação tudo que exige `admin`/`master` (Cardápio,
+Configurações, Relatórios, Usuários etc. — os 3 papéis novos entram com nível 0, abaixo de
+"vendas", então tudo isso já fica escondido de graça) e some com o botão "Cancelar" pra
+Cozinha/Entrega. A tela de Pedidos (Kanban + lista) continua visível — é o que essas 3 funções
+precisam ver.
+
+**Criação de usuário:** Configurações → 👥 Usuários (só Master acessa) agora tem os 3 papéis
+novos no seletor, com uma explicação curta do que cada um pode fazer.
+
+**Ainda pendente:** celular pareado como dispositivo de alerta separado (QR code/pareamento) —
+segue de fora, é infraestrutura nova (registro de dispositivo + push dirigido por aparelho) que
+não existe nada parecido ainda no projeto.
+
+---
+
+# v106 — Segurança de login do painel + 5 sons de alerta + alerta de pedido atrasado
+
+**Continuação da auditoria v105**, itens seguintes da lista pedida (sons, atraso e um problema
+de segurança encontrado no caminho — usuários e permissões completas ficam pra próxima rodada,
+ver nota no fim).
+
+**1) BUG DE SEGURANÇA CORRIGIDO — senha de usuário do painel em texto puro.** `POST
+/api/admin/users` (server.js) gravava a senha dos usuários (master/admin/vendas) direto em
+`config.json`, sem nenhum hash — diferente dos PINs de cliente, que já usavam hash desde sempre.
+Quem tivesse acesso ao arquivo de configuração (backup, export, cópia no Supabase) via a senha
+de qualquer usuário do painel diretamente. **Correção:** novo campo `passwordHash` (sha256 +
+salt do app, mesmo padrão do hash de PIN), usado em toda criação/alteração de usuário daqui pra
+frente; contas antigas que só têm a senha em texto puro são migradas pro hash automaticamente no
+próximo login bem-sucedido, sem pedir nada a mais do usuário.
+
+**2) 5 sons de alerta originais, com seletor e "Testar som" (`public/painel.html`).**
+Sintetizados na hora via Web Audio (nenhum áudio de terceiros envolvido, então nada de risco de
+usar som de app de delivery de verdade): Som 1 curto/chamativo, Som 2 dois tons, Som 3 urgente
+(repetição rápida), Som 4 três notas em arpejo, Som 5 duplo/contínuo. Escolha salva por
+aparelho/navegador (localStorage), igual ao volume que já existia — cada computador da loja pode
+preferir um som diferente. Configurações → 🔊 Alertas.
+
+**3) Alerta de pedido atrasado.** Configurável em Configurações → ⏱️ Alerta de pedido atrasado:
+tempo pra considerar atrasado (10/15/20/30 min ou desativado) e intervalo de repetição (1/3/5/10
+min), salvos no `config.json` (vale pra loja toda). Pedido "novo" ou "preparando" que passa do
+tempo fica destacado em vermelho no card do Kanban com o tempo de espera, toca o Som 3 (urgente)
+e repete no intervalo configurado até ser resolvido. Botão 🔕 no próprio card silencia só aquele
+pedido (não silencia os outros, e volta ao normal se a página for recarregada).
+
+**Ainda pendente da lista original** (fica pra próxima rodada, avisar quando quiser seguir):
+sistema completo de usuários/permissões por função (a base já existe — 3 níveis master/admin/
+vendas com sessão e `requireRole` — mas não os 5 papéis granulares pedidos: caixa/cozinha/
+entrega separados, nem a lista de permissões individuais) e o celular pareado como dispositivo
+de alerta (QR code/pareamento — infraestrutura nova, ainda não existe nada parecido no projeto).
+
+---
+
+# v105 — AUDITORIA CRÍTICA: pedido podia SUMIR de verdade (race condition), duplicar em retry, e painel não recuperava pedido perdido por queda de conexão
+
+**Pedido de auditoria completo do fluxo de pedidos** (cliente → checkout → API → banco →
+painel). Três bugs reais confirmados no código (não apenas hipóteses da lista de verificação
+pedida):
+
+**1) BUG CRÍTICO — pedido real podia desaparecer de verdade.** Em `POST /api/orders`
+(server.js), o array de pedidos era lido de `orders.json` (`readJSON`) e só era regravado
+(`writeJSON`) bem mais abaixo, com um `await geocodeAddress(...)` (chamada de rede) NO MEIO dos
+dois. Nessa janela, o Node fica livre pra atender outra requisição de pedido em paralelo, que lê
+o mesmo arquivo (ainda sem o primeiro pedido), grava o SEU pedido normalmente e responde
+"sucesso" ao cliente. Quando a primeira requisição termina o geocode e grava sua cópia antiga do
+array, ela sobrescreve o arquivo inteiro — apagando o segundo pedido, que o cliente já tinha
+certeza de ter feito. Bastava dois pedidos reais chegando perto um do outro, com pelo menos um
+em modo delivery. **Correção:** geocodificar o endereço ANTES de tocar em `orders.json`, e fazer
+a leitura + gravação do arquivo como um bloco 100% síncrono, sem nenhum `await` no meio — o Node
+nunca troca de requisição no meio de um trecho síncrono, então essa corrida deixou de existir.
+
+**2) Pedido podia duplicar em clique duplo ou retry após queda de conexão.** Não havia nenhuma
+chave de idempotência — se a resposta do servidor se perdesse (internet caiu logo depois do
+envio) e o cliente tentasse de novo, nascia um SEGUNDO pedido idêntico. **Correção:** o
+front (`public/index.html`) gera um `idempotencyKey` único por tentativa de checkout (mantido
+entre retries, descartado quando o carrinho muda de verdade); o backend reconhece a chave já
+usada e devolve o pedido existente em vez de criar outro, checado duas vezes (assim que a
+requisição chega e de novo, sem nenhum `await` no meio, bem antes da gravação final).
+
+**3) Painel não recuperava pedido sozinho depois de perder a conexão em tempo real.** O SSE
+(`/api/stream`) já tinha indicador visual de conexão perdida (evento anterior), mas nenhum
+código buscava a lista de pedidos de novo ao reconectar — um pedido criado durante a queda
+nunca chegava ao painel até alguém dar F5 por conta própria. **Correção** (`public/painel.html`):
+nova função `resyncOrders()`, chamada (a) sempre que o SSE reconecta (`evtSource.onopen`) e (b)
+a cada 45s como rede de segurança independente do tempo real — busca `GET /api/orders`, compara
+com o que o painel já conhece e dispara o alerta sonoro/visual normal de "novo pedido" pra
+qualquer pedido "novo" que tinha ficado de fora.
+
+**Não confirmado no código:** a suspeita de "pedido novo pulando automaticamente pra PRONTO" —
+o fluxo de status (`novo → preparando → saiu → entregue`, com "pronto" sendo só o nome que o
+painel dá visualmente ao status "saiu") já exige uma chamada autenticada e explícita em
+`PATCH /api/orders/:id` pra qualquer mudança; não há nenhum caminho no código que pule etapa
+sozinho. Se isso ainda acontecer na prática, precisamos do passo a passo exato de quando
+acontece pra investigar further (pode ser confusão visual entre "aceite automático" que já
+nasce como "preparando" e o rótulo "Prontos" da coluna).
+
+---
+
 # v104 — BUG CORRIGIDO: quadro "⚠️ Últimas falhas de impressão" sempre dizia "Não consegui carregar."
 
 **Achado enquanto conferíamos o v103, não relacionado a ele.** `apiGet()` devolve o JSON puro da
