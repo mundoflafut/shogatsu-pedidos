@@ -3271,6 +3271,10 @@ function cartTotal() { return Object.values(cart).reduce((s, c) => s + c.price *
 function cartCount() { return Object.values(cart).reduce((s, c) => s + c.qty, 0); }
 
 function updateCartUI() {
+  // v105 — AUDITORIA: o carrinho mudou (item adicionado/removido/qtd alterada) — se havia uma
+  // chave de idempotência de uma tentativa de pedido anterior, ela não serve mais pro pedido
+  // que vai ser enviado agora (o conteúdo é outro). Descarta pra gerar uma nova na próxima vez.
+  window._placeOrderIdemKey = null;
   const count = cartCount(), total = cartTotal();
   const fee = getFee();
   const hb = document.getElementById('cart-count-header');
@@ -3555,19 +3559,35 @@ async function placeOrder() {
   const troco = payMethod === 'dinheiro' ? (document.getElementById('f-troco').value || '') : '';
   const scheduledFor = getScheduledForValue();
 
+  // v105 — AUDITORIA — IDEMPOTÊNCIA: gera (ou reaproveita) uma chave única pra ESTA tentativa de
+  // pedido. Se a internet cair depois que o servidor já salvou mas antes da resposta chegar
+  // (ou se o cliente clicar "Finalizar Pedido" de novo em seguida), a chave garante que o
+  // backend devolva o pedido já existente em vez de criar um segundo. Só gera uma chave nova
+  // quando o carrinho muda de verdade (currentPlaceOrderKey some quando a compra é concluída
+  // ou o carrinho é editado) — enquanto isso, tentativas repetidas reusam a MESMA chave.
+  if (!window._placeOrderIdemKey) {
+    window._placeOrderIdemKey = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : ('idem-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  }
+  const idempotencyKey = window._placeOrderIdemKey;
+
   setPlaceBtnState('loading');
 
   let order;
   try {
     const r = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, name, phone, address, hood, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points, scheduledFor })
+      body: JSON.stringify({ mode, name, phone, address, hood, items, obs, payMethod, troco, subtotal, fee, total, couponCode: appliedCoupon ? appliedCoupon.code : '', redeemPoints: pointsDiscountValue().points, scheduledFor, idempotencyKey })
     });
     const data = await r.json();
     if (!r.ok) { alert(data.error || 'Não foi possível enviar o pedido.'); setPlaceBtnState('idle'); return; }
     order = data.order;
+    // Pedido confirmado (novo ou recuperado via idempotência) — libera a chave pra próxima compra.
+    window._placeOrderIdemKey = null;
   } catch (e) {
-    alert('Erro de conexão. Verifique sua internet e tente novamente.');
+    // Erro de rede: NÃO libera a chave. Se o cliente tentar de novo (ou o app tentar sozinho),
+    // a mesma chave é reenviada — se o pedido já tinha sido salvo no servidor antes da conexão
+    // cair, o backend reconhece a chave e devolve o pedido existente em vez de duplicar.
+    alert('Erro de conexão. Verifique sua internet e tente novamente. Se o pedido já tiver sido registrado, ele não será duplicado.');
     setPlaceBtnState('idle');
     return;
   }

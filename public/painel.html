@@ -117,6 +117,7 @@ input,select,textarea{font-family:'Inter',sans-serif;}
   }
 }
 @keyframes fadeInBackdrop{from{opacity:0;}to{opacity:1;}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
 /* v36: tabelas/kanban/linhas de item nunca cortam — rolam na horizontal se precisar */
 .kanban-board,#page-pedidos .kanban-board,[id^="kanban"]{overflow-x:auto;}
 .menu-item-row{overflow-x:auto;}
@@ -698,8 +699,8 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
   <nav class="sidebar-nav">
     <div class="nav-section">Principal</div>
     <button class="nav-item active" data-page="pedidos" onclick="goPage('pedidos')"><span class="ni">📊</span> Pedidos <span class="nb" id="nb-pedidos" style="display:none">0</span></button>
-    <button class="nav-item" data-page="reservas" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
-    <button class="nav-item" data-page="mensagens" onclick="goPage('mensagens')"><span class="ni">💬</span> Mensagens <span class="nb" id="nb-mensagens" style="display:none">0</span></button>
+    <button class="nav-item" data-page="reservas" data-min-role="vendas" onclick="goPage('reservas')"><span class="ni">📅</span> Reservas <span class="nb" id="nb-reservas" style="display:none">0</span></button>
+    <button class="nav-item" data-page="mensagens" data-min-role="vendas" onclick="goPage('mensagens')"><span class="ni">💬</span> Mensagens <span class="nb" id="nb-mensagens" style="display:none">0</span></button>
     <div class="nav-section" data-min-role="admin">Gestão</div>
     <button class="nav-item" data-page="motoboys" data-min-role="admin" onclick="goPage('motoboys')"><span class="ni">🛵</span> Motoboys</button>
     <button class="nav-item" data-page="cardapio" data-min-role="admin" onclick="goPage('cardapio')"><span class="ni">🍱</span> Cardápio</button>
@@ -2179,11 +2180,60 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
           <div class="field"><label>Alerta Sonoro (pedido novo)</label>
             <select id="cfg-sound"><option value="1">✅ Ativado</option><option value="0">❌ Desativado</option></select>
           </div>
-          <div class="field"><label>🔉 Volume do alerta <span id="cfg-alert-volume-val" style="font-weight:400;color:var(--muted);">100%</span></label>
+          <div class="field"><label>🎵 Som do alerta</label>
+            <select id="cfg-sound-choice" onchange="onAlertSoundChoiceInput(this.value)">
+              <option value="1">Som 1 — Curto e chamativo</option>
+              <option value="2">Som 2 — Dois tons</option>
+              <option value="3">Som 3 — Urgente</option>
+              <option value="4">Som 4 — Três notas</option>
+              <option value="5">Som 5 — Duplo/contínuo</option>
+            </select>
+          </div>
+          <button type="button" class="btn secondary sm" onclick="testSelectedSound()" style="margin-top:6px;">▶ Testar som</button>
+          <div class="field" style="margin-top:10px;"><label>🔉 Volume do alerta <span id="cfg-alert-volume-val" style="font-weight:400;color:var(--muted);">100%</span></label>
             <input type="range" id="cfg-alert-volume" min="0" max="1" step="0.05" value="1" oninput="onAlertVolumeInput(this.value)"/>
           </div>
           <button type="button" class="btn secondary sm" onclick="playBeep()" style="margin-top:6px;">▶ Testar volume</button>
-          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Vale só neste aparelho/navegador — cada computador da loja pode ter seu próprio volume. Esse é o mesmo volume usado pelo alerta push da loja (Configurações → 🔔 Notificações Push) quando o painel está aberto neste aparelho.</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Som e volume valem só neste aparelho/navegador — cada computador da loja pode ter sua própria escolha. É o mesmo som/volume usado pelo alerta push da loja (Configurações → 🔔 Notificações Push) quando o painel está aberto neste aparelho.</div>
+        </div>
+<div class="settings-card">
+          <div class="settings-card-title">🚨 Toque contínuo (estilo iFood / 99Food)</div>
+          <div class="field"><label>Repetir o alerta enquanto o pedido estiver "Novo" (ainda não aceito)</label>
+            <select id="cfg-ring-enabled" onchange="onNewOrderRingInput()">
+              <option value="1">✅ Ativado</option>
+              <option value="0">❌ Desativado</option>
+            </select>
+          </div>
+          <div class="field"><label>Repetir a cada</label>
+            <select id="cfg-ring-seconds" onchange="onNewOrderRingInput()">
+              <option value="3">3 segundos</option>
+              <option value="5" selected>5 segundos</option>
+              <option value="8">8 segundos</option>
+              <option value="12">12 segundos</option>
+            </select>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Enquanto o pedido estiver parado na coluna "Novos", o alerta sonoro escolhido acima toca sem parar — em TODOS os computadores/celulares com o Painel aberto ao mesmo tempo (cada aparelho recebe o pedido pelo mesmo tempo real e toca por conta própria, então tocam juntos). Some sozinho assim que o pedido é aceito; o botão 🔕 no card silencia só aquele pedido. Vale pra loja toda (salvo aqui, junto do resto de Configurações).</div>
+        </div>
+<div class="settings-card">
+          <div class="settings-card-title">⏱️ Alerta de pedido atrasado</div>
+          <div class="field"><label>Alertar pedido parado (NOVO ou EM PREPARO) após</label>
+            <select id="cfg-late-minutes" onchange="onLateAlertInput()">
+              <option value="0">Desativado</option>
+              <option value="10">10 minutos</option>
+              <option value="15">15 minutos</option>
+              <option value="20">20 minutos</option>
+              <option value="30">30 minutos</option>
+            </select>
+          </div>
+          <div class="field"><label>Repetir alerta a cada</label>
+            <select id="cfg-late-repeat" onchange="onLateAlertInput()">
+              <option value="1">1 minuto</option>
+              <option value="3" selected>3 minutos</option>
+              <option value="5">5 minutos</option>
+              <option value="10">10 minutos</option>
+            </select>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;">Pedido atrasado fica destacado no quadro com o tempo de espera, toca o Som 3 (urgente) e repete enquanto continuar atrasado. Dá pra silenciar um pedido específico direto no card dele. Vale pra loja toda (salvo nas Configurações do restaurante).</div>
         </div>
 <div class="settings-card">
           <div class="settings-card-title">🔐 Segurança</div>
@@ -2279,10 +2329,14 @@ button:active, .btn:active, [role="button"]:active { filter: brightness(1.25) sa
             <div class="field"><label style="font-size:10px;">Senha</label><input id="nu-password" type="password" placeholder="mín. 4 caracteres"/></div>
             <div class="field"><label style="font-size:10px;">Nível de acesso</label>
               <select id="nu-role">
-                <option value="vendas">Vendas</option>
-                <option value="admin">Admin</option>
-                <option value="master">Master</option>
+                <option value="cozinha">🧑‍🍳 Cozinha (só pedidos: aceitar → pronto)</option>
+                <option value="entrega">🛵 Entrega (só pedidos: saiu → entregue)</option>
+                <option value="caixa">🧾 Caixa (recebe, aceita, finaliza pedidos)</option>
+                <option value="vendas">🛒 Vendas</option>
+                <option value="admin">🛠 Admin</option>
+                <option value="master">👑 Master</option>
               </select>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px;">Cozinha/Entrega/Caixa só acessam a tela de Pedidos — sem cardápio, preços, configurações ou outros usuários.</div>
             </div>
           </div>
           <button class="btn success" onclick="createUser()">+ Adicionar Usuário</button>
@@ -3520,12 +3574,16 @@ function restoreAllCards(){
 
 
 function hasRole(minRole){ return (ROLE_RANK_CLIENT[userRole]||0) >= (ROLE_RANK_CLIENT[minRole]||99); }
+// v107 — quem pode cancelar pedido no card (Cozinha/Entrega não cancelam — só recebem/avançam
+// a própria etapa; o backend também recusa a mudança de status pra 'cancelado' vindo desses
+// dois papéis, ver canChangeOrderStatus em server.js — isto aqui é só pra nem mostrar o botão).
+function canCancelOrders(){ return !['cozinha','entrega'].includes(userRole); }
 function applyRoleUI(){
   document.querySelectorAll('[data-min-role]').forEach(el=>{
     el.style.display = hasRole(el.dataset.minRole) ? '' : 'none';
   });
   const badge=document.getElementById('sidebar-user-badge');
-  if(badge) badge.textContent = `${userName||'admin'} · ${({master:'Master',admin:'Admin',vendas:'Vendas'})[userRole]||userRole}`;
+  if(badge) badge.textContent = `${userName||'admin'} · ${({master:'Master',admin:'Admin',vendas:'Vendas',caixa:'Caixa',cozinha:'Cozinha',entrega:'Entrega'})[userRole]||userRole}`;
 }
 
 async function loadConfigAndMenu(){
@@ -3564,6 +3622,36 @@ async function loadOrders(){
   orders = await apiGet('/api/orders');
 }
 
+// v105 — AUDITORIA — BUG ENCONTRADO ("pedido não aparece até recarregar a página"): o painel só
+// ficava sabendo de pedido novo por um evento SSE ('new-order') disparado UMA vez, no
+// instante em que o pedido é criado. Se o painel estivesse com a conexão em tempo real caída
+// nesse exato momento (Wi-Fi instável, aba em segundo plano, notebook suspenso, servidor
+// reiniciando), esse evento se perde pra sempre — não existe fila/replay no SSE nativo — e o
+// pedido só voltava a aparecer se alguém desse F5 por conta própria. O pedido nunca esteve
+// "perdido" de verdade (estava salvo e visível em GET /api/orders o tempo todo), mas o painel
+// não tinha nenhum mecanismo de buscar de novo sozinho. CORREÇÃO: toda vez que a conexão em
+// tempo real é (re)estabelecida, busca a lista completa do servidor e dispara o alerta de
+// "novo pedido" pra qualquer pedido "novo" que o painel ainda não conhecia — cobre exatamente
+// a reconexão depois de queda de internet, F5 do navegador, ou reinício do servidor.
+async function resyncOrders(){
+  try {
+    const fresh = await apiGet('/api/orders');
+    const knownIds = new Set(orders.map(o => o.id));
+    const missing = fresh.filter(o => !knownIds.has(o.id) && o.status === 'novo');
+    orders = fresh;
+    updateNewBadge();
+    refreshCurrentPage();
+    missing.forEach(o => {
+      if (Number(cfg.sound) !== 0) playBeep();
+      showToast('🔔 Novo Pedido!', `${o.id} — ${o.name} — R$ ${Number(o.total).toFixed(2).replace('.', ',')}`, 6000);
+    });
+  } catch (e) { /* sem internet agora — tenta de novo na próxima reconexão/poll */ }
+}
+// Rede de segurança independente do SSE: nunca depender só de evento em tempo real — se o
+// SSE ficar "conectado" mas silenciosamente travado (proxy/celular que mata streams ociosos),
+// essa rechecagem periódica ainda pega qualquer pedido perdido.
+setInterval(resyncOrders, 45000);
+
 function setConnStatus(state){
   const el = document.getElementById('conn-status');
   if (!el) return;
@@ -3579,7 +3667,7 @@ function connectSSE(){
   setConnStatus('connecting');
   evtSource = new EventSource('/api/stream?token='+encodeURIComponent(token));
 
-  evtSource.onopen = () => { sseErrorSince = null; setConnStatus('connected'); };
+  evtSource.onopen = () => { sseErrorSince = null; setConnStatus('connected'); resyncOrders(); };
 
   // C2 (relatório de auditoria): antes, uma conexão perdida (reinício do servidor, sessão
   // expirada, queda de internet) falhava em silêncio — o navegador tentava reconectar sozinho
@@ -3857,18 +3945,150 @@ function loadAlertVolumeUI(){
   const el = document.getElementById('cfg-alert-volume');
   if(el){ el.value = v; document.getElementById('cfg-alert-volume-val').textContent = Math.round(v*100)+'%'; }
 }
-function playBeep(){
+// v106 — 5 sons de alerta originais (sintetizados aqui mesmo via Web Audio, nenhum áudio de
+// terceiros envolvido). Escolha salva por aparelho (localStorage), igual ao volume — cada
+// computador da loja pode preferir um som diferente.
+function alertSoundChoice(){
+  const v = parseInt(localStorage.getItem('shogatsu_alert_sound'));
+  return (v >= 1 && v <= 5) ? v : 1;
+}
+function onAlertSoundChoiceInput(value){
+  localStorage.setItem('shogatsu_alert_sound', value);
+}
+function loadAlertSoundChoiceUI(){
+  const el = document.getElementById('cfg-sound-choice');
+  if(el) el.value = String(alertSoundChoice());
+}
+function _tone(ctx, master, freq, startAt, dur, gain){
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.connect(g); g.connect(master);
+  o.frequency.value=freq;
+  g.gain.setValueAtTime(gain==null?.3:gain, ctx.currentTime+startAt);
+  g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+startAt+dur);
+  o.start(ctx.currentTime+startAt); o.stop(ctx.currentTime+startAt+dur);
+}
+function playAlertSound(soundId, ctxOverride){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();const _mg=ctx.createGain();_mg.gain.value=alertVolume();_mg.connect(ctx.destination);
-    [880,1100,880].forEach((f,i)=>{
-      const o=ctx.createOscillator(),g=ctx.createGain();
-      o.connect(g);g.connect(_mg);
-      o.frequency.value=f;g.gain.setValueAtTime(.3,ctx.currentTime+i*.15);
-      g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+i*.15+.12);
-      o.start(ctx.currentTime+i*.15);o.stop(ctx.currentTime+i*.15+.12);
-    });
+    const ctx = ctxOverride || new(window.AudioContext||window.webkitAudioContext)();
+    const master = ctx.createGain(); master.gain.value = alertVolume(); master.connect(ctx.destination);
+    switch(Number(soundId)||1){
+      case 1: // curto e chamativo — 3 notas subindo, rápido
+        [880,1100,880].forEach((f,i)=>_tone(ctx, master, f, i*.15, .12));
+        break;
+      case 2: // sequência de dois tons (tipo "campainha")
+        _tone(ctx, master, 700, 0, .18);
+        _tone(ctx, master, 1000, .22, .22);
+        break;
+      case 3: // alerta mais urgente — repetição rápida de um tom agudo
+        [0,.13,.26,.39].forEach(t=>_tone(ctx, master, 1200, t, .1, .28));
+        break;
+      case 4: // três notas em arpejo descendente
+        [1046,880,660].forEach((f,i)=>_tone(ctx, master, f, i*.18, .16));
+        break;
+      case 5: // contínuo/duplo, pra chamar bastante atenção
+        [0,.5].forEach(t0=>{ [880,1100,880,1100].forEach((f,i)=>_tone(ctx, master, f, t0+i*.12, .1)); });
+        break;
+    }
   }catch(e){}
 }
+function playBeep(){ playAlertSound(alertSoundChoice()); }
+function testSelectedSound(){
+  const el = document.getElementById('cfg-sound-choice');
+  playAlertSound(el ? el.value : alertSoundChoice());
+}
+
+// v106 — Alerta de pedido atrasado. Config vale pra loja toda (cfg.lateAlert, salva no
+// servidor junto com o resto de Configurações — ver saveConfig), pra todo mundo que olha o
+// painel enxergar o mesmo limite. "Silenciar este pedido" é por sessão de navegador (Set em
+// memória) — some se recarregar a página, o que é o esperado: um pedido silenciado não deve
+// ficar silenciado pra sempre "escondido" sem ninguém perceber.
+function loadLateAlertUI(){
+  const la = cfg.lateAlert || {};
+  const mEl = document.getElementById('cfg-late-minutes'), rEl = document.getElementById('cfg-late-repeat');
+  if (mEl) mEl.value = String(la.minutes || 0);
+  if (rEl) rEl.value = String(la.repeatMinutes || 3);
+}
+function onLateAlertInput(){
+  const mEl = document.getElementById('cfg-late-minutes'), rEl = document.getElementById('cfg-late-repeat');
+  cfg.lateAlert = { minutes: parseInt(mEl?.value)||0, repeatMinutes: parseInt(rEl?.value)||3 };
+}
+const silencedLateOrders = new Set();
+function silenceLateOrder(orderId){
+  silencedLateOrders.add(orderId);
+  refreshCurrentPage();
+}
+const lateOrderLastAlertAt = {};
+function checkLateOrders(){
+  const la = cfg.lateAlert || {};
+  const minutes = Number(la.minutes) || 0;
+  if (!minutes) return; // desativado
+  const repeatMs = (Number(la.repeatMinutes) || 3) * 60000;
+  const now = Date.now();
+  orders.filter(o => ['novo', 'preparando'].includes(o.status) && !silencedLateOrders.has(o.id)).forEach(o => {
+    const ageMs = now - new Date(o.createdAt).getTime();
+    if (ageMs < minutes * 60000) return;
+    const lastAlert = lateOrderLastAlertAt[o.id] || 0;
+    if (now - lastAlert < repeatMs) return;
+    lateOrderLastAlertAt[o.id] = now;
+    if (Number(cfg.sound) !== 0) playAlertSound(3); // Som 3 (urgente) pra atraso, sempre — não depende da escolha de som de pedido novo
+    showToast('⚠️ PEDIDO ATRASADO', `${o.id} — aguardando há ${Math.round(ageMs/60000)} min.`, 8000);
+  });
+  refreshCurrentPage(); // pra re-renderizar o destaque visual de quem passou a estar atrasado agora
+}
+setInterval(checkLateOrders, 30000);
+// Pedido de tempo decorrido (usado pelo destaque visual dos cards — ver orderTime/renderização do Kanban)
+function isOrderLate(o){
+  const minutes = Number((cfg.lateAlert||{}).minutes) || 0;
+  if (!minutes || !['novo','preparando'].includes(o.status) || silencedLateOrders.has(o.id)) return false;
+  return (Date.now() - new Date(o.createdAt).getTime()) >= minutes * 60000;
+}
+
+// v108 — Toque contínuo estilo iFood/99Food: enquanto um pedido continuar na coluna "Novos"
+// (ainda não aceito por ninguém), o alerta sonoro repete sozinho, sem precisar de F5 nem de
+// ninguém ficar olhando a tela. cfg.newOrderRing vale pra loja toda (igual cfg.lateAlert),
+// salvo junto do resto de Configurações — assim todo computador/celular com o Painel aberto
+// usa a mesma regra de repetição, e como cada um recebe o pedido pelo mesmo evento em tempo
+// real (SSE/broadcast), todos tocam juntos, ao mesmo tempo, de forma independente.
+function newOrderRingCfg(){
+  const c = cfg.newOrderRing || {};
+  return { enabled: c.enabled===undefined?1:Number(c.enabled), seconds: Number(c.seconds)||5 };
+}
+function loadNewOrderRingUI(){
+  const c = newOrderRingCfg();
+  const eEl = document.getElementById('cfg-ring-enabled'), sEl = document.getElementById('cfg-ring-seconds');
+  if(eEl) eEl.value = String(c.enabled);
+  if(sEl) sEl.value = String(c.seconds);
+}
+function onNewOrderRingInput(){
+  const eEl = document.getElementById('cfg-ring-enabled'), sEl = document.getElementById('cfg-ring-seconds');
+  cfg.newOrderRing = { enabled: parseInt(eEl?.value)||0, seconds: parseInt(sEl?.value)||5 };
+}
+// Silenciar é por sessão de navegador (igual silencedLateOrders) — some se recarregar a
+// página, de propósito, pra um pedido silenciado não ficar "escondido" pra sempre sem ninguém
+// perceber caso a página seja aberta de novo depois.
+const silencedRingOrders = new Set();
+function silenceRingOrder(orderId){
+  silencedRingOrders.add(orderId);
+  refreshCurrentPage();
+}
+const ringLastAlertAt = {};
+function checkNewOrderRing(){
+  const c = newOrderRingCfg();
+  const stillNovoIds = new Set(orders.filter(o=>(STATUS_FROM_SERVER[o.status]||'novo')==='novo').map(o=>o.id));
+  // limpa marcações de pedidos que já saíram de "Novo" (aceitos/cancelados), pra não acumular
+  // memória à toa numa loja com muito movimento.
+  Object.keys(ringLastAlertAt).forEach(id=>{ if(!stillNovoIds.has(id)) delete ringLastAlertAt[id]; });
+  if(!c.enabled || Number(cfg.sound)===0) return; // toque contínuo desligado, ou alerta sonoro geral desligado
+  const intervalMs = Math.max(2, c.seconds) * 1000;
+  const now = Date.now();
+  orders.filter(o => (STATUS_FROM_SERVER[o.status]||'novo')==='novo' && !silencedRingOrders.has(o.id)).forEach(o=>{
+    const last = ringLastAlertAt[o.id] || 0;
+    if (now - last < intervalMs) return;
+    ringLastAlertAt[o.id] = now;
+    playAlertSound(alertSoundChoice());
+  });
+}
+setInterval(checkNewOrderRing, 1000);
 
 // ═══════════════════════════════════════════
 // v79: ALERTA PUSH DA LOJA — PC + celular simultâneo (funciona com o painel fechado).
@@ -6014,7 +6234,7 @@ function renderOrdersList(){
       <div class="order-actions">
         ${(o.shortStatus!=='entregue'&&o.shortStatus!=='cancelado')?`
         <button class="oa-btn accept" onclick="advanceStatus('${o.id}')">→ ${actionLabel(o.shortStatus)||'Avançar'}</button>
-        <button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}
+        ${canCancelOrders()?`<button class="oa-btn cancel"  onclick="cancelOrder('${o.id}')">✕ ${cancelLabel()}</button>`:''}`:''}
         <div class="oa-print-group">
           <button class="oa-btn print" onclick="printOrder('${o.id}', event)" title="Imprimir vias (Caixa/Cozinha/Sushibar/Bar)">🖨 ${printLabel()}</button>
           <button class="oa-btn print-more" onclick="openPrintStationPicker('${o.id}', event)" title="Escolher manualmente quais vias imprimir">▾</button>
@@ -6129,7 +6349,18 @@ function renderKanban(){
       </div>
       <div class="kanban-body">
         ${colOrders.length===0?'<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">Vazio</div>'
-        :colOrders.map(o=>`<div class="k-card">
+        :colOrders.map(o=>{
+          const late = isOrderLate(o);
+          const ringing = col.id==='novo' && newOrderRingCfg().enabled && Number(cfg.sound)!==0 && !silencedRingOrders.has(o.id);
+          return`<div class="k-card"${late?' style="border-color:var(--red);box-shadow:0 0 0 1px var(--red);"':''}>
+          ${late?`<div style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:3px 7px;border-radius:5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>⚠️ ATRASADO · ${orderTime(o.createdAt)}</span>
+            <span onclick="silenceLateOrder('${o.id}')" style="cursor:pointer;opacity:.85;" title="Silenciar este pedido">🔕</span>
+          </div>`:''}
+          ${(!late && ringing)?`<div style="background:var(--red-lt,#d33);color:#fff;font-size:11px;font-weight:700;padding:3px 7px;border-radius:5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;animation:pulse 1.2s infinite;">
+            <span>🚨 Tocando até aceitar…</span>
+            <span onclick="silenceRingOrder('${o.id}')" style="cursor:pointer;opacity:.85;" title="Silenciar este pedido">🔕</span>
+          </div>`:''}
           <div class="k-card-id">${o.ticketNumber?'#'+o.ticketNumber+' · ':''}${o.id} · ${orderTime(o.createdAt)}</div>
           <div class="k-card-name">${esc(o.name)}</div>
           <div class="k-card-items">${itemsText(o)}</div>
@@ -6139,7 +6370,7 @@ function renderKanban(){
             <button onclick="printOrder('${o.id}', event)" title="Imprimir vias" style="border:1px solid var(--blue);background:var(--blue-bg);color:var(--blue);font-size:13px;padding:4px 8px;border-radius:5px;cursor:pointer;">🖨</button>
           </div>
           ${col.btn?`<button class="k-btn ${col.btnClass}" onclick="advanceStatus('${o.id}')">${col.btn}</button>`:''}
-        </div>`).join('')}
+        </div>`;}).join('')}
       </div>
     </div>`;
   }).join('');
@@ -8134,6 +8365,9 @@ function loadSettings(){
   loadFeeSettings();
   loadCourierPaySettings();
   loadAlertVolumeUI();
+  loadAlertSoundChoiceUI();
+  loadNewOrderRingUI();
+  loadLateAlertUI();
   updateAdminPushButtonState();
   loadAdminPushDevices();
 }
@@ -9398,7 +9632,7 @@ async function loadUsersPage(){
   renderUsersList(res.users);
 }
 function renderUsersList(users){
-  const roleLabel={master:'👑 Master',admin:'🛠 Admin',vendas:'🛒 Vendas'};
+  const roleLabel={master:'👑 Master',admin:'🛠 Admin',vendas:'🛒 Vendas',caixa:'🧾 Caixa',cozinha:'👨‍🍳 Cozinha',entrega:'🛵 Entrega'};
   document.getElementById('users-list').innerHTML = users.map(u=>`
     <div class="vgroup" style="display:flex;align-items:center;gap:12px;">
       <div style="flex:1;">
@@ -9568,6 +9802,8 @@ async function saveAllSettings(){
   cfg.reviewPhrases = reviewPhrasesState.map(p=>p.trim()).filter(Boolean);
   const soundEl=document.getElementById('cfg-sound');
   if(soundEl) cfg.sound = parseInt(soundEl.value)||0;
+  onLateAlertInput(); // grava cfg.lateAlert a partir dos selects de Configurações antes de salvar
+  onNewOrderRingInput(); // grava cfg.newOrderRing (toque contínuo) a partir dos selects antes de salvar
 
   // Taxa de entrega
   const feeMode = document.getElementById('fee-mode').value;
